@@ -1,0 +1,5 @@
+target/
+ui/node_modules/
+StockMate.exe
+stockmate.db
+build-release.bat

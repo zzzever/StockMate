@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "crates/domain",
+    "crates/storage",
+    "crates/data_fetcher",
+    "crates/screener",
+    "crates/backtest",
+    "src-tauri",
+]
+resolver = "2"
