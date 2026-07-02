@@ -5,6 +5,7 @@ members = [
     "crates/data_fetcher",
     "crates/screener",
     "crates/backtest",
+    "crates/deepseek",
     "src-tauri",
 ]
 resolver = "2"

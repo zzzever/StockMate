@@ -1,0 +1,327 @@
+//! East Money (东方财富) — primary market data provider for A-shares & boards.
+//!
+//! Stock APIs:
+//!   Real-time:  push2.eastmoney.com/api/qt/stock/get?secid={mkt}.{code}&fields=...
+//!   K-line:     push2his.eastmoney.com/api/qt/stock/kline/get?secid=...&klt=...
+//!   Intraday:   same K-line endpoint with klt=5 (5-min)
+//! Board APIs:
+//!   Industry:   push2.eastmoney.com/api/qt/clist/get?fs=m:90+t2
+//!   Concept:    push2.eastmoney.com/api/qt/clist/get?fs=m:90+t3
+
+use chrono::NaiveDate;
+use reqwest::Client;
+use serde::Deserialize;
+use std::sync::Arc;
+use tokio::sync::Semaphore;
+
+use super::{HistoryQuote, PriceData};
+
+// ── secid helpers ──
+
+/// Convert "600519.SH" → "1.600519", "000001.SZ" → "0.000001"
+fn to_secid(ticker: &str) -> Option<String> {
+    let t = ticker.to_ascii_uppercase();
+    let parts: Vec<&str> = t.split('.').collect();
+    if parts.len() != 2 { return None; }
+    let mkt = match parts[1] { "SH" | "BJ" => "1", "SZ" => "0", _ => return None };
+    Some(format!("{}.{}", mkt, parts[0]))
+}
+
+/// Convert kline period string to East Money klt code
+fn period_to_klt(period: &str) -> &str {
+    match period { "week" => "102", "month" => "103", _ => "101" }
+}
+
+/// East Money returns prices in 分 (cents); divide by 100 for yuan
+const PRICE_DIV: f64 = 100.0;
+
+// ── API response structs ──
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmQuoteItem {
+    #[serde(rename = "f43", default)] price: Option<f64>,       // latest price (分)
+    #[serde(rename = "f44", default)] high: Option<f64>,
+    #[serde(rename = "f45", default)] low: Option<f64>,
+    #[serde(rename = "f46", default)] open: Option<f64>,
+    #[serde(rename = "f60", default)] prev_close: Option<f64>,
+    #[serde(rename = "f47", default)] volume: Option<u64>,      // in 手 (100 shares)
+    #[serde(rename = "f48", default)] amount: Option<f64>,      // in 元
+    #[serde(rename = "f57", default)] ticker: Option<String>,
+    #[serde(rename = "f58", default)] name: Option<String>,
+    #[serde(rename = "f168", default)] change_pct: Option<f64>, // /100
+    #[serde(rename = "f169", default)] change: Option<f64>,     // /100
+    #[serde(rename = "f170", default)] turnover: Option<f64>,   // /100
+    #[serde(rename = "f50", default)] ratio: Option<f64>,       // /100
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmQuoteWrap { data: Option<EmQuoteItem> }
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmKlineWrap {
+    data: Option<EmKlineData>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmKlineData {
+    #[serde(default)]
+    klines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmBoardItem {
+    #[serde(rename = "f12")] code: String,
+    #[serde(rename = "f14")] name: String,
+    #[serde(rename = "f2", default)] price: Option<f64>,
+    #[serde(rename = "f3", default)] change_percent: Option<f64>,
+    #[serde(rename = "f5", default)] volume: Option<u64>,
+    #[serde(rename = "f20", default)] market_cap: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmDiffResponse { #[serde(default)] diff: Vec<EmBoardItem> }
+
+#[derive(Debug, Clone, Deserialize)]
+struct EmDataResponse { #[serde(default)] data: Option<EmDiffResponse> }
+
+/// Normalized board data.
+#[derive(Debug, Clone)]
+pub struct BoardData {
+    pub name: String,
+    pub change_percent: f64,
+    pub volume: u64,
+    pub code: String,
+}
+
+// ── HTTP client ──
+
+fn build_client() -> Option<Client> {
+    Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .timeout(std::time::Duration::from_secs(10))
+        .no_proxy()
+        .build()
+        .ok()
+}
+
+// ═══════════════════════════════════════════════════════
+//  STOCK REAL-TIME QUOTE
+// ═══════════════════════════════════════════════════════
+
+pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
+    let secid = to_secid(ticker)?;
+    let client = build_client()?;
+    let url = format!(
+        "http://push2.eastmoney.com/api/qt/stock/get?secid={}&fields=f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f168,f169,f170",
+        secid
+    );
+    let resp = client.get(&url).send().await.ok()?;
+    let json: EmQuoteWrap = resp.json().await.ok()?;
+    let q = json.data?;
+
+    let price = q.price? / PRICE_DIV;
+    let prev = q.prev_close? / PRICE_DIV;
+    let chg = q.change.map(|c| c / PRICE_DIV).unwrap_or(price - prev);
+    let chg_pct = q.change_pct.map(|c| c / PRICE_DIV).unwrap_or(if prev > 0.0 { (price - prev) / prev * 100.0 } else { 0.0 });
+
+    Some(PriceData {
+        ticker: q.ticker.unwrap_or_default(),
+        name: q.name.unwrap_or_default(),
+        current_price: price,
+        open: q.open.map(|o| o / PRICE_DIV).unwrap_or(price),
+        high: q.high.map(|h| h / PRICE_DIV).unwrap_or(price),
+        low: q.low.map(|l| l / PRICE_DIV).unwrap_or(price),
+        prev_close: prev,
+        change: chg,
+        change_percent: chg_pct,
+        volume: q.volume.unwrap_or(0) * 100, // 手→股
+        amount: q.amount.unwrap_or(0.0),
+        ratio: q.ratio.map(|r| r / PRICE_DIV).unwrap_or(0.0),
+        turnover_rate: q.turnover.map(|t| t / PRICE_DIV).unwrap_or(0.0),
+    })
+}
+
+/// Batch fetch via concurrent individual requests (East Money has no native batch endpoint).
+pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
+    let sem = Arc::new(Semaphore::new(10));
+    let mut handles = Vec::new();
+    for t in tickers {
+        let t = t.to_string();
+        let s = sem.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = s.acquire().await.ok();
+            let r = fetch_realtime_price(&t).await;
+            r
+        }));
+    }
+    let mut results = Vec::new();
+    for h in handles {
+        if let Ok(Some(data)) = h.await { results.push(data); }
+    }
+    results
+}
+
+// ═══════════════════════════════════════════════════════
+//  K-LINE (HISTORY + INTRADAY)
+// ═══════════════════════════════════════════════════════
+
+pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<HistoryQuote> {
+    let secid = match to_secid(ticker) { Some(s) => s, None => return vec![] };
+    let client = match build_client() { Some(c) => c, None => return vec![] };
+    let klt = period_to_klt(period);
+    let url = format!(
+        "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt={}&fqt=1&end=20500101&lmt={}",
+        secid, klt, days
+    );
+    let resp = match client.get(&url).send().await { Ok(r) => r, Err(_) => return vec![] };
+    let json: EmKlineWrap = match resp.json().await { Ok(j) => j, Err(_) => return vec![] };
+    let klines = match json.data { Some(d) => d.klines, None => return vec![] };
+
+    let mut quotes = Vec::new();
+    for line in klines.iter().rev().take(days as usize) {
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() < 6 { continue; }
+        let date = NaiveDate::parse_from_str(parts[0], "%Y-%m-%d").unwrap_or_default();
+        let p = |i: usize| parts[i].parse::<f64>().unwrap_or(0.0);
+        quotes.push(HistoryQuote {
+            date, time: String::new(),
+            open: p(1), high: p(3), low: p(4), close: p(2), volume: p(5) as u64,
+        });
+    }
+    quotes.reverse();
+    quotes
+}
+
+pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
+    let secid = match to_secid(ticker) { Some(s) => s, None => return vec![] };
+    let client = match build_client() { Some(c) => c, None => return vec![] };
+    let url = format!(
+        "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=5&fqt=0&end=20500101&lmt=48",
+        secid
+    );
+    let resp = match client.get(&url).send().await { Ok(r) => r, Err(_) => return vec![] };
+    let json: EmKlineWrap = match resp.json().await { Ok(j) => j, Err(_) => return vec![] };
+    let klines = match json.data { Some(d) => d.klines, None => return vec![] };
+
+    let mut quotes = Vec::new();
+    for line in &klines {
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() < 6 { continue; }
+        // parts[0] = "2026-07-01 09:35"
+        let date = NaiveDate::parse_from_str(&parts[0][..10.min(parts[0].len())], "%Y-%m-%d").unwrap_or_default();
+        let time_str = if parts[0].len() >= 16 { parts[0][11..16].to_string() } else { String::new() };
+        let p = |i: usize| parts[i].parse::<f64>().unwrap_or(0.0);
+        // East Money kline: date, open, close, high, low, volume, amount
+        quotes.push(HistoryQuote {
+            date, time: time_str,
+            open: p(1), high: p(3), low: p(4), close: p(2), volume: p(5) as u64,
+        });
+    }
+    // Filter to latest trading day only
+    if !quotes.is_empty() {
+        let latest = quotes.iter().map(|q| q.date).max().unwrap_or_default();
+        quotes.retain(|q| q.date == latest);
+        quotes.sort_by(|a, b| a.time.cmp(&b.time));
+    }
+    eprintln!("[eastmoney intraday] {} bars for {}", quotes.len(), ticker);
+    quotes
+}
+
+/// Fetch all boards of a given type from East Money.
+/// board_type: "t2" = industry boards (行业板块), "t3" = concept boards (概念板块)
+async fn fetch_boards(board_type: &str) -> Vec<BoardData> {
+    let client = match build_client() {
+        Some(c) => c,
+        None => return vec![],
+    };
+
+    let url = format!(
+        "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=300&np=1&fltt=2&fid=f3&fs=m:90+{}&fields=f2,f3,f5,f12,f14,f20",
+        board_type
+    );
+
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("East Money board API request failed ({}): {}", board_type, e);
+            return vec![];
+        }
+    };
+
+    let json: EmDataResponse = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("East Money board API parse failed ({}): {}", board_type, e);
+            return vec![];
+        }
+    };
+
+    let items = match json.data {
+        Some(d) => d.diff,
+        None => {
+            tracing::warn!("East Money board API empty data ({})", board_type);
+            return vec![];
+        }
+    };
+
+    items.into_iter().map(|item| BoardData {
+        name: item.name,
+        change_percent: item.change_percent.unwrap_or(0.0),
+        volume: item.volume.unwrap_or(0),
+        code: item.code,
+    }).collect()
+}
+
+/// Fetch ALL industry + concept boards and return a name→BoardData lookup map.
+/// This is the main entry point used by the sector refresh loop.
+pub async fn fetch_all_board_indices() -> std::collections::HashMap<String, BoardData> {
+    let mut map: std::collections::HashMap<String, BoardData> = std::collections::HashMap::new();
+
+    // Fetch both industry and concept boards in parallel
+    let (industry, concept) = tokio::join!(
+        fetch_boards("t2"),
+        fetch_boards("t3"),
+    );
+
+    for board in industry.into_iter().chain(concept) {
+        // Multiple boards may have the same name — keep the one with larger abs(change)
+        let key = board.name.clone();
+        if let Some(existing) = map.get(&key) {
+            if board.change_percent.abs() > existing.change_percent.abs() {
+                map.insert(key, board);
+            }
+        } else {
+            map.insert(key, board);
+        }
+    }
+
+    eprintln!("East Money: {} unique board indices loaded", map.len());
+    map
+}
+
+/// Map our internal sector names → East Money board names.
+/// Some of our sector names don't exactly match East Money's naming convention.
+/// Returns None if no mapping exists (caller should fall back to stock averages).
+pub fn get_board_name_for_sector(our_name: &'static str) -> Option<&'static str> {
+    // Manual overrides for sectors where names differ
+    let mapped = match our_name {
+        "AI算力" => "算力概念",
+        "CXO" => "CRO",
+        "5G" => "5G概念",
+        "锂电池" => "锂离子电池",
+        "风电" => "风力发电",
+        "水电" => "水力发电",
+        "核电" => "核能核电",
+        "储能" => "储能",
+        "光伏" => "太阳能",
+        "新材料" => "新材料",
+        "创新药" => "创新药",
+        "医疗器械" => "医疗器械",
+        "云计算" => "云计算",
+        "黄金" => "黄金概念",
+        // For these, East Money uses the same name
+        _ => our_name,
+    };
+
+    Some(mapped)
+}

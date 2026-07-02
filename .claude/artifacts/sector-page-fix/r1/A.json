@@ -1,0 +1,63 @@
+{
+  "agent": "A",
+  "round": 1,
+  "items": [
+    {
+      "id": 1,
+      "verdict": "PASS",
+      "summary": "新增 get_all_sector_stocks() 函数，覆盖全部 47 个板块 × 15-20 只真实 A 股，get_sector_stocks() 改为查表并移除 default fallback",
+      "files_touched": ["crates/data_fetcher/src/lib.rs:390-448"]
+    },
+    {
+      "id": 2,
+      "verdict": "PASS",
+      "summary": "重写 start_realtime_refresh()：收集全部板块所有成分股（去重后 ~500 只），分批每 60 只请求腾讯 API，按板块聚合计算 average(change_percent)、total(volume)、max(change) 领涨股",
+      "files_touched": ["crates/data_fetcher/src/lib.rs:300-387"]
+    },
+    {
+      "id": 3,
+      "verdict": "PASS",
+      "summary": "消除 sector_top 单一映射：不再使用 1 板块→1 股票代理，改为 1 板块→15-20 股票聚合，每个板块有独立唯一股票列表无 dropped sectors",
+      "files_touched": ["crates/data_fetcher/src/lib.rs:300-387"]
+    },
+    {
+      "id": 4,
+      "verdict": "PASS",
+      "summary": "stock_count 从 watchlist.len() 动态计算填入 HotSector，不再是硬编码 None",
+      "files_touched": ["crates/data_fetcher/src/lib.rs:373"]
+    },
+    {
+      "id": 5,
+      "verdict": "PASS",
+      "summary": "get_sector_stocks() 未知板块返回空 Vec 并 warn 日志，不再返回 20 只通用混杂股票",
+      "files_touched": ["crates/data_fetcher/src/lib.rs:560-567"]
+    },
+    {
+      "id": 6,
+      "verdict": "PASS",
+      "summary": "SectorRankPage.tsx 两处 stock_count 显示改为 null-safe：grid 视图显示'成分股数量获取中'，list 视图显示'--'",
+      "files_touched": ["ui/src/pages/SectorRankPage.tsx:140", "ui/src/pages/SectorRankPage.tsx:240"]
+    },
+    {
+      "id": 7,
+      "verdict": "SKIP",
+      "summary": "fund_flow 需要东方财富资金流向 API（与腾讯 API 不同），当前标注为 Requires separate API (East Money fund flow)，后续可单独接入",
+      "files_touched": []
+    },
+    {
+      "id": 8,
+      "verdict": "PASS",
+      "summary": "前后端类型对齐：Rust HotSector 字段与 TS HotSector 接口一致，Decimal 序列化为 number，cargo check + tsc --noEmit 均通过",
+      "files_touched": []
+    }
+  ],
+  "modified_files": [
+    "crates/data_fetcher/src/lib.rs",
+    "ui/src/pages/SectorRankPage.tsx"
+  ],
+  "build": { "frontend": "PASS", "backend": "PASS" },
+  "risks": [
+    "get_all_sector_stocks() 的 47 个板块股票列表基于公开分类手动编制，部分股票可能已被调出指数成分",
+    "start_realtime_refresh() 从单次 47 只增加到 ~500 只（分 ~9 批），刷新间隔从 1s 延长到 3s，腾讯 API 可能偶发限流"
+  ]
+}

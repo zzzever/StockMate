@@ -1,37 +1,213 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html.dark {
+/* ═══════════════════════════════════════════════════════
+   日台紙媒設計系統 — 日本経済新聞 / 工商時報 風格
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  --ink: 0 0% 12%;
+  --ink-light: 0 0% 28%;
+  --red: 350 75% 38%;           /* 日本紅 #c41e3a */
+  --red-bright: 350 85% 48%;
+  --red-dark: 350 70% 22%;
+  --gold: 42 75% 35%;           /* 金色 */
+  --gold-light: 42 70% 55%;
+  --paper: 36 33% 97%;          /* 新聞紙奶油色 */
+  --paper-dark: 36 20% 92%;
+  --white: 0 0% 100%;
+  --black: 0 0% 5%;
+
+  --bg-root: 36 33% 97%;
+  --bg-sidebar: 0 0% 100%;
+  --bg-topbar: 0 0% 100%;
+  --bg-card: 0 0% 100%;
+  --bg-input: 0 0% 100%;
+
+  --text-primary: 0 0% 12%;
+  --text-secondary: 0 0% 35%;
+  --text-tertiary: 0 0% 55%;
+  --text-inverse: 0 0% 100%;
+
+  --border-default: 36 20% 82%;
+  --border-subtle: 36 20% 88%;
+  --border-strong: 0 0% 25%;
+  --border-red: 350 75% 38%;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-md: 0 4px 8px rgb(0 0 0 / 0.08);
+
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+
+  --price-up: 350 75% 38%;
+  --price-down: 195 75% 22%;
+  --price-up-bg: 350 75% 95%;
+  --price-down-bg: 195 75% 94%;
+
+  --sidebar-width: 220px;
+  --sidebar-collapsed: 56px;
+  --sidebar-blur: none;
+  --chart-grid: 36 20% 82%;
+  --chart-text: 0 0% 28%;
+  --chart-border: 0 0% 20%;
+
+  color-scheme: light;
+}
+
+/* ── Dark: 深夜報紙風格 ── */
+.dark {
+  --ink: 36 20% 92%;
+  --ink-light: 36 20% 78%;
+  --paper: 0 0% 8%;
+  --paper-dark: 0 0% 6%;
+
+  --bg-root: 0 0% 5%;
+  --bg-sidebar: 0 0% 8%;
+  --bg-topbar: 0 0% 10%;
+  --bg-card: 0 0% 10%;
+  --bg-input: 0 0% 12%;
+
+  --text-primary: 36 20% 88%;
+  --text-secondary: 36 15% 65%;
+  --text-tertiary: 36 10% 45%;
+  --text-inverse: 0 0% 5%;
+
+  --border-default: 0 0% 20%;
+  --border-subtle: 0 0% 15%;
+  --border-strong: 36 15% 40%;
+
+  --price-up: 350 70% 55%;
+  --price-down: 195 65% 50%;
+  --price-up-bg: 350 50% 12%;
+  --price-down-bg: 195 50% 10%;
+
+  --chart-grid: 0 0% 18%;
+  --chart-text: 36 15% 62%;
+  --chart-border: 0 0% 22%;
+
   color-scheme: dark;
 }
 
-html {
-  color-scheme: dark;
-}
+/* ═══════════════════════════════════════════════════════
+   Base — 新聞紙質感
+   ═══════════════════════════════════════════════════════ */
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: #09090b;
-  color: #e4e4e7;
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif;
+  background: hsl(var(--bg-root));
+  color: hsl(var(--text-primary));
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/* ═══════════════════════════════════════════════════════
+   Sidebar — 報紙欄目風格
+   ═══════════════════════════════════════════════════════ */
+
+.sidebar-glass {
+  background: hsl(var(--bg-sidebar));
+  border-right: 3px solid hsl(var(--ink));
+}
+.dark .sidebar-glass { border-right-color: hsl(var(--red-dark)); }
+
+/* ═══════════════════════════════════════════════════════
+   Topbar — 報頭風格
+   ═══════════════════════════════════════════════════════ */
+
+.topbar-glass {
+  background: hsl(var(--bg-topbar));
+  border-bottom: 3px double hsl(var(--ink));
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* ═══════════════════════════════════════════════════════
+   Cards — 報紙區塊
+   ═══════════════════════════════════════════════════════ */
+
+.glass-card {
+  background: hsl(var(--bg-card));
+  border: 1px solid hsl(var(--border-strong));
+  box-shadow: var(--shadow-sm);
+}
+.glass-card:hover { border-color: hsl(var(--red)); }
+.glass-card-compact {
+  background: hsl(var(--bg-card));
+  border: 1px solid hsl(var(--border-default));
+  box-shadow: var(--shadow-xs);
+}
+.sticky-price-bar {
+  position: sticky; top: 0; z-index: 30;
+  background: hsl(var(--bg-card));
+  border-bottom: 3px double hsl(var(--ink));
 }
 
-::-webkit-scrollbar-thumb {
-  background: #27272a;
-  border-radius: 3px;
+/* ═══════════════════════════════════════════════════════
+   Scrollbar
+   ═══════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: hsl(var(--paper-dark)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--ink) / 0.25); }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--ink) / 0.45); }
+
+/* ═══════════════════════════════════════════════════════
+   Typography
+   ═══════════════════════════════════════════════════════ */
+
+.font-mono-nums {
+  font-variant-numeric: tabular-nums;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+h1, h2, h3, .newspaper-heading {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 900;
+  letter-spacing: 0.02em;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+/* ═══════════════════════════════════════════════════════
+   Price Colors — 紅漲綠跌 (台灣/中國習慣)
+   ═══════════════════════════════════════════════════════ */
+
+.price-up { color: hsl(var(--price-up)); }
+.price-down { color: hsl(var(--price-down)); }
+
+/* ═══════════════════════════════════════════════════════
+   Utilities
+   ═══════════════════════════════════════════════════════ */
+
+.btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
+.progress-bar-track { height: 4px; background: hsl(var(--border-subtle)); overflow: hidden; }
+.progress-bar-fill { height: 100%; transition: width 0.6s ease-out; }
+
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.live-indicator {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: hsl(var(--red-bright));
+  animation: pulse-dot 1.5s ease-in-out infinite;
+  display: inline-block;
+}
+
+@keyframes skeleton-pulse { 0%,100%{opacity:0.2} 50%{opacity:0.45} }
+.skeleton { animation: skeleton-pulse 1.5s ease-in-out infinite; background: hsl(var(--border-subtle)); }
+
+.table-dense th, .table-dense td { padding: 0.25rem 0.5rem; font-size: 0.6875rem; line-height: 1.25; }
+.sparkline-container { width: 100%; height: 28px; }
+.data-label-xs { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; font-weight: 700; }
+
+/* ── 報紙分隔線 ── */
+.newspaper-divider {
+  border: none;
+  border-top: 1px solid hsl(var(--ink) / 0.3);
+  margin: 0.5rem 0;
+}
+.newspaper-divider-double {
+  border: none;
+  border-top: 3px double hsl(var(--ink) / 0.4);
+  margin: 0.75rem 0;
 }

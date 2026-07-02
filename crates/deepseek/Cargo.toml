@@ -1,0 +1,20 @@
+[package]
+name = "deepseek"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+keyring = { version = "3", optional = true }
+rust_decimal = { version = "1.35", features = ["serde"] }
+domain = { path = "../domain" }
+
+[features]
+default = ["keyring"]
+keyring = ["dep:keyring"]
