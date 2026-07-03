@@ -5,7 +5,7 @@ import {
   ArrowUpRight, ArrowDownRight, Building2, DollarSign, TrendingUp, BarChart3,
   RefreshCw, Brain, ChevronDown, ChevronUp, Activity, Shield, Target, AlertTriangle,
 } from 'lucide-react';
-import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStockFundFlow, useRealtimeQuote, useIntraday, useDeepSeekConfig, useAnalyzeStockWithAI } from '@/hooks/useTauriQuery';
+import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStockFundFlow, useRealtimeQuote, useIntraday, useDeepSeekConfig, useAnalyzeStockWithAI, useSupportResistance } from '@/hooks/useTauriQuery';
 import { IntradayChart } from '@/components/IntradayChart';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume, fmtAmount } from '@/lib/format';
@@ -50,7 +50,7 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
   );
 }
 
-function KLineChart({ data }: { data: any[] }) {
+function KLineChart({ data, indicator }: { data: any[]; indicator: string }) {
   const chartStyle = useAppStore((s) => s.chartStyle);
   const T = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -102,67 +102,121 @@ function KLineChart({ data }: { data: any[] }) {
     return arr.map((q, i) => ({ time: String(q.date), dif: dif[i], dea: dea[i], hist: (dif[i]-dea[i])*2 }));
   }, [closes]);
 
+  // KDJ (9,3,3)
+  const kdjData = useMemo(() => {
+    const k: number[] = [], d: number[] = [], j: number[] = [];
+    let prevK = 50, prevD = 50;
+    for (let i = 0; i < closes.length; i++) {
+      const slice = closes.slice(Math.max(0, i - 8), i + 1);
+      const h = Math.max(...slice), l = Math.min(...slice);
+      const rsv = (h - l) === 0 ? 50 : ((closes[i] - l) / (h - l)) * 100;
+      prevK = (2/3) * prevK + (1/3) * rsv;
+      prevD = (2/3) * prevD + (1/3) * prevK;
+      k.push(prevK); d.push(prevD); j.push(3 * prevK - 2 * prevD);
+    }
+    return arr.map((q, i) => ({ time: String(q.date), k: k[i], d: d[i], j: j[i] }));
+  }, [closes]);
+
+  // RSI (14)
+  const rsiData = useMemo(() => {
+    const rsi: number[] = [];
+    for (let i = 0; i < closes.length; i++) {
+      if (i < 14) { rsi.push(50); continue; }
+      let gain = 0, loss = 0;
+      for (let j = i - 13; j <= i; j++) {
+        const ch = closes[j] - closes[j - 1];
+        if (ch > 0) gain += ch; else loss -= ch;
+      }
+      const avgG = gain / 14, avgL = loss / 14;
+      rsi.push(avgL === 0 ? 100 : 100 - (100 / (1 + avgG / avgL)));
+    }
+    return arr.map((q, i) => ({ time: String(q.date), value: rsi[i] }));
+  }, [closes]);
+
+  const IND = indicator; // capture for chart creation
+
   // Create charts ONCE
   useEffect(() => {
     if (!mainRef.current || !volRef.current || !indRef.current) return;
     try {
-      const mo = (tv: boolean) => ({
-        layout: { background: { color: 'transparent' }, textColor: T.textColor },
-        grid: { vertLines: { color: 'T.gridVertColor' }, horzLines: { color: 'T.gridVertColor' } },
-        autoSize: true, crosshair: tv ? { mode: 1 as const } : { mode: 0 as const },
-        rightPriceScale: { borderColor: 'T.gridVertColor' },
-        timeScale: { borderColor: 'T.gridVertColor', timeVisible: tv },
-      });
-      const mc = createChart(mainRef.current, mo(true));
-      mc.timeScale().applyOptions({ minBarSpacing: 5, rightOffset: 3 });
-      // Hide logo
-      const logo = mainRef.current.querySelector('a');
-      if (logo) logo.style.display = 'none';
-      const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor });
-      const mkL = (c: string) => mc.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      const ma5 = mkL(T.ma5Color); const ma10 = mkL(T.ma10Color); const ma20 = mkL(T.ma20Color); const ma70 = mkL(T.ma60Color);
-      // Bollinger Bands
-      const bbU = mc.addLineSeries({ color: 'rgba(251,146,60,0.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-      const bbM = mc.addLineSeries({ color: 'rgba(251,191,36,0.5)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      const bbL = mc.addLineSeries({ color: 'rgba(251,146,60,0.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+      const gridColor = 'rgba(148,163,184,0.1)';
+      const borderColor = 'rgba(148,163,184,0.2)';
+      const textColor = '#94a3b8';
 
-      // Crosshair
+      // Main K-line chart
+      const mc = createChart(mainRef.current, {
+        layout: { background: { color: 'transparent' }, textColor },
+        grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+        autoSize: true,
+        crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false }, horzLine: { visible: false } },
+        rightPriceScale: { borderColor },
+        timeScale: { borderColor, timeVisible: true },
+      });
+      mc.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true });
+      try { const a = mainRef.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) {}
+
+      const candle = mc.addCandlestickSeries({
+        upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor,
+        wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor,
+      });
+      const addLine = (c: string) => mc.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const ma5 = addLine(T.ma5Color); const ma10 = addLine(T.ma10Color); const ma20 = addLine(T.ma20Color); const ma70 = addLine(T.ma60Color);
+      // BOLL — dashed style
+      const bbU = mc.addLineSeries({ color: '#ff6b6b', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+      const bbM = mc.addLineSeries({ color: '#f9ca24', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+      const bbL = mc.addLineSeries({ color: '#4ecdc4', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+
+      // Crosshair tooltip on main chart
       mc.subscribeCrosshairMove((param: any) => {
-        if (!param.time || !param.point) return;
-        const d = param.seriesData.get(candle) as any;
-        if (!d) return;
         const c2 = charts.current; if (!c2) return;
+        if (!param.time || !param.point) { c2._tooltip = null; return; }
+        const d = param.seriesData.get(candle) as any;
+        if (!d) { c2._tooltip = null; return; }
         const o = d.open??0, h = d.high??0, l = d.low??0, c = d.close??0;
         const chg = o > 0 ? ((c - o) / o * 100) : 0;
-        c2._tooltip = { x: param.point.x + 10, y: param.point.y - 50, html: `<div style="font-size:10px;font-family:monospace;line-height:1.6"><div>开 <b>${o.toFixed(2)}</b></div><div>高 <b style="color:#10b981">${h.toFixed(2)}</b></div><div>低 <b style="color:#f43f5e">${l.toFixed(2)}</b></div><div>收 <b>${c.toFixed(2)}</b></div><div style="color:${chg>=0?'#10b981':'#f43f5e'};font-weight:bold">${chg>=0?'+':''}${chg.toFixed(2)}%</div></div>` };
+        c2._tooltip = { x: param.point.x + 10, y: param.point.y - 50, html: `<div style="font-size:10px;font-family:monospace;line-height:1.6"><div>开 <b>${o.toFixed(2)}</b></div><div>高 <b style="color:#ff6b6b">${h.toFixed(2)}</b></div><div>低 <b style="color:#4ecdc4">${l.toFixed(2)}</b></div><div>收 <b>${c.toFixed(2)}</b></div><div style="color:${chg>=0?'#ff6b6b':'#4ecdc4'};font-weight:bold">${chg>=0?'+':''}${chg.toFixed(2)}%</div></div>` };
       });
 
-      const vc = createChart(volRef.current, mo(false));
+      // Volume chart
+      const vc = createChart(volRef.current, {
+        layout: { background: { color: 'transparent' }, textColor },
+        grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+        autoSize: true,
+        crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false }, horzLine: { visible: false } },
+        rightPriceScale: { borderColor },
+        timeScale: { borderColor, timeVisible: false },
+      });
+      vc.timeScale().applyOptions({ minBarSpacing: 6, fixLeftEdge: true, fixRightEdge: true });
       const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' } });
 
-      const ic = createChart(indRef.current, mo(true));
-      const macdHist = ic.addHistogramSeries({});
-      const macdDif = ic.addLineSeries({ color: T.macdDifColor, lineWidth: 1, priceLineVisible: false });
-      const macdDea = ic.addLineSeries({ color: T.macdDeaColor, lineWidth: 1, priceLineVisible: false });
+      // Indicator chart
+      const ic = createChart(indRef.current, {
+        layout: { background: { color: 'transparent' }, textColor },
+        grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+        autoSize: true,
+        crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false }, horzLine: { visible: false } },
+        rightPriceScale: { borderColor },
+        timeScale: { borderColor, timeVisible: false },
+      });
+      ic.timeScale().applyOptions({ minBarSpacing: 6, fixLeftEdge: true, fixRightEdge: true });
+      const indHist = ic.addHistogramSeries({});
+      const indLine1 = ic.addLineSeries({ color: T.macdDifColor, lineWidth: 1, priceLineVisible: false });
+      const indLine2 = ic.addLineSeries({ color: T.macdDeaColor, lineWidth: 1, priceLineVisible: false });
+      const indLine3 = ic.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceLineVisible: false });
 
-      // Sync zoom/pan: all 3 charts share the same time range
-      const sync = (source: any) => {
-        source.timeScale().subscribeVisibleTimeRangeChange((r: any) => {
+      // Simple zoom sync only — no crosshair sync
+      const syncZoom = (src: any) => {
+        src.timeScale().subscribeVisibleTimeRangeChange((r: any) => {
           if (!r || !charts.current) return;
-          const charts_ = charts.current;
-          if (source !== charts_.mc) try { charts_.mc.timeScale().setVisibleRange(r); } catch (_) {}
-          if (source !== charts_.vc) try { charts_.vc.timeScale().setVisibleRange(r); } catch (_) {}
-          if (source !== charts_.ic) try { charts_.ic.timeScale().setVisibleRange(r); } catch (_) {}
+          const cs = charts.current;
+          try { if (src !== cs.mc) cs.mc.timeScale().setVisibleRange(r); } catch (_) {}
+          try { if (src !== cs.vc) cs.vc.timeScale().setVisibleRange(r); } catch (_) {}
+          try { if (src !== cs.ic) cs.ic.timeScale().setVisibleRange(r); } catch (_) {}
         });
       };
-      sync(mc); sync(vc); sync(ic);
+      syncZoom(mc); syncZoom(vc); syncZoom(ic);
 
-      // Prevent excessive zoom-out: min 3px per bar
-      mc.timeScale().applyOptions({ minBarSpacing: 3, rightOffset: 2, fixLeftEdge: true, fixRightEdge: true });
-      vc.timeScale().applyOptions({ minBarSpacing: 3, fixLeftEdge: true, fixRightEdge: true });
-      ic.timeScale().applyOptions({ minBarSpacing: 3, fixLeftEdge: true, fixRightEdge: true });
-
-      charts.current = { mc, vc, ic, candle, ma5, ma10, ma20, ma70, bbU, bbM, bbL, vol, macdHist, macdDif, macdDea };
+      charts.current = { mc, vc, ic, candle, ma5, ma10, ma20, ma70, bbU, bbM, bbL, vol, indHist, indLine1, indLine2, indLine3 };
     } catch (e) { console.error('KLineChart create:', e); }
     return () => {
       if (charts.current) {
@@ -181,16 +235,30 @@ function KLineChart({ data }: { data: any[] }) {
     try {
       c.candle?.setData(items);
       c.ma5?.setData(ma5d); c.ma10?.setData(ma10d); c.ma20?.setData(ma20d); c.ma70?.setData(ma70d);
-      c.bbU?.setData(bbD.filter(d => d.upper > 0).map(d => ({ time: d.time, value: d.upper })));
-      c.bbM?.setData(bbD.filter(d => d.middle > 0).map(d => ({ time: d.time, value: d.middle })));
-      c.bbL?.setData(bbD.filter(d => d.lower > 0).map(d => ({ time: d.time, value: d.lower })));
+      // BOLL on main chart (always visible)
+      c.bbU?.setData(bbD.map(d => ({ time: d.time, value: d.upper || undefined })));
+      c.bbM?.setData(bbD.map(d => ({ time: d.time, value: d.middle || undefined })));
+      c.bbL?.setData(bbD.map(d => ({ time: d.time, value: d.lower || undefined })));
       c.vol?.setData(volItems);
-      c.macdHist?.setData(macdData.map(d => ({ time: d.time, value: d.hist, color: d.hist >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(244,63,94,0.6)' })));
-      c.macdDif?.setData(macdData.map(d => ({ time: d.time, value: d.dif })));
-      c.macdDea?.setData(macdData.map(d => ({ time: d.time, value: d.dea })));
-      try { c.mc.timeScale().fitContent(); } catch (_) {}
+      // Indicator panel
+      if (indicator === 'macd') {
+        c.indHist?.setData(macdData.map(d => ({ time: d.time, value: d.hist, color: d.hist >= 0 ? 'rgba(16,185,129,0.6)' : 'rgba(244,63,94,0.6)' })));
+        c.indLine1?.setData(macdData.map(d => ({ time: d.time, value: d.dif })));
+        c.indLine2?.setData(macdData.map(d => ({ time: d.time, value: d.dea })));
+        c.indLine3?.setData([]);
+      } else if (indicator === 'kdj') {
+        c.indLine1?.setData(kdjData.map(d => ({ time: d.time, value: d.k })));
+        c.indLine2?.setData(kdjData.map(d => ({ time: d.time, value: d.d })));
+        c.indLine3?.setData(kdjData.map(d => ({ time: d.time, value: d.j })));
+        c.indHist?.setData([]);
+      } else if (indicator === 'rsi') {
+        c.indLine1?.setData(rsiData.map(d => ({ time: d.time, value: d.value })));
+        c.indLine2?.setData([]); c.indLine3?.setData([]); c.indHist?.setData([]);
+      } else {
+        c.indHist?.setData([]); c.indLine1?.setData([]); c.indLine2?.setData([]); c.indLine3?.setData([]);
+      }
     } catch (e) { console.error('KLineChart update:', e); }
-  }, [items, ma5d, ma10d, ma20d, ma70d, volItems, macdData, bbD]);
+  }, [items, ma5d, ma10d, ma20d, ma70d, volItems, macdData, kdjData, rsiData, bbD, indicator]);
 
   const [tip, setTip] = useState<{x:number;y:number;html:string}|null>(null);
   useEffect(() => {
@@ -198,18 +266,30 @@ function KLineChart({ data }: { data: any[] }) {
     if (!c) return;
     const check = setInterval(() => {
       const t = (c as any)._tooltip;
-      if (t && t.html) setTip(t);
-      else setTip(null);
+      if (t && t.html) setTip(t); else setTip(null);
     }, 100);
     return () => clearInterval(check);
   }, []);
 
   return (
     <div className="flex flex-col relative" style={{ height: 500 }}>
+      {/* MA color legend above main chart */}
+      <div className="flex items-center gap-3 px-2 py-0.5 text-[9px] font-bold bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-zinc-800">
+        <span style={{ color: T.ma5Color, fontWeight: 900 }}>━ MA5</span>
+        <span style={{ color: T.ma10Color, fontWeight: 900 }}>━ MA10</span>
+        <span style={{ color: T.ma20Color, fontWeight: 900 }}>━ MA20</span>
+        <span style={{ color: T.ma60Color, fontWeight: 900 }}>━ MA70</span>
+        <span className="shape-diamond ml-auto mr-0.5" style={{ width: 5, height: 5, background: '#ff6b6b' }} />
+        <span style={{ color: '#ff6b6b', fontWeight: 900 }}>BOLL</span>
+      </div>
       <div ref={mainRef} className="flex-1" />
-      <div className="border-t border-gray-200 dark:border-zinc-800" />
+      <div className="border-t border-gray-200 dark:border-zinc-800 relative">
+        <span className="absolute left-2 top-0 text-[9px] text-gray-400 font-bold z-10 bg-white dark:bg-zinc-900 px-1">副图 · 成交量</span>
+      </div>
       <div ref={volRef} style={{ height: 100 }} />
-      <div className="border-t border-gray-200 dark:border-zinc-800" />
+      <div className="border-t border-gray-200 dark:border-zinc-800 relative">
+        <span className="absolute left-2 top-0 text-[9px] text-gray-400 font-bold z-10 bg-white dark:bg-zinc-900 px-1">指标 · {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'—'}[indicator]}</span>
+      </div>
       <div ref={indRef} style={{ height: 120 }} />
       {tip && (
         <div className="absolute z-20 px-2 py-1 rounded bg-black/85 pointer-events-none" style={{ left: tip.x, top: tip.y, fontSize: '10px' }}>
@@ -229,6 +309,8 @@ export default function StockDetailPage() {
   const setSelectedStock = useAppStore((s) => s.setSelectedStock);
   const [aiExpanded, setAiExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'fundflow'>('overview');
+  const [indicator, setIndicator] = useState<'macd' | 'kdj' | 'rsi' | 'none'>('macd');
+  const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
 
   const { data: stockList } = useStockList();
   const { data: stockDetail } = useStockDetail(stockId);
@@ -266,7 +348,7 @@ export default function StockDetailPage() {
   const ff = Array.isArray(fundFlowData) ? fundFlowData : [];
   const ai = (aiAnalysis || {}) as any;
   // TODO: populate sr from an S/R data source (e.g. AI analysis or dedicated endpoint)
-  const sr = {} as any;
+  const { data: sr } = useSupportResistance(effectiveCode);
   const finance = (financeData || {}) as any;
 
   const amplitude = hasQuote && prevClose > 0
@@ -300,29 +382,38 @@ export default function StockDetailPage() {
             </div>
           </div>
 
-          {/* Center: Price + Change */}
-          <div className="text-center">
-            {hasQuote ? (
-              <>
-                <div className={`font-mono-nums text-2xl font-bold ${up ? 'price-up' : 'price-down'}`}>
-                  ¥{fmtPrice(price)}
-                </div>
-                <div className={`flex items-center justify-center gap-1 text-sm font-mono-nums font-medium ${up ? 'price-up' : 'price-down'}`}>
-                  {up ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                  <span>{up ? '+' : ''}{fmtPrice(change)} ({up ? '+' : ''}{fmtPct(changePercent)}%)</span>
-                </div>
-              </>
-            ) : (
-              <div className="text-gray-400 dark:text-zinc-400 text-lg font-mono-nums">加载中...</div>
-            )}
+          {/* Center: Price — 和モダン vertical layout */}
+          <div className="flex items-center gap-3">
+            <span className="vertical-text text-xs font-black tracking-widest" style={{ color: 'hsl(var(--text-tertiary))', height: 60 }}>
+              股價
+            </span>
+            <div className={`px-4 py-1 border-2 ${up ? 'border-l-[hsl(var(--red))]' : 'border-l-[hsl(var(--price-down))]'}`}
+              style={{ borderColor: 'hsl(var(--border-strong))', borderLeftWidth: 4 }}>
+              {hasQuote ? (
+                <>
+                  <div className={`font-mono-nums text-2xl font-black ${up ? 'price-up' : 'price-down'}`}>
+                    ¥{fmtPrice(price)}
+                  </div>
+                  <div className={`flex items-center gap-1 text-sm font-mono-nums font-bold ${up ? 'price-up' : 'price-down'}`}>
+                    {up ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                    <span>{up ? '+' : ''}{fmtPrice(change)} ({up ? '+' : ''}{fmtPct(changePercent)}%)</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-gray-400 text-lg font-mono-nums">—</div>
+              )}
+            </div>
           </div>
 
-          {/* Right: Mini stats strip */}
-          <div className="flex items-center gap-3">
-            <MiniStat label="开盘" value={realtimeQuote ? safeNumber(realtimeQuote.open).toFixed(2) : '--'} />
-            <MiniStat label="最高" value={realtimeQuote ? safeNumber(realtimeQuote.high).toFixed(2) : '--'} color="text-emerald-500" />
-            <MiniStat label="最低" value={realtimeQuote ? safeNumber(realtimeQuote.low).toFixed(2) : '--'} color="text-rose-500" />
-            <MiniStat label="昨收" value={hasQuote ? prevClose.toFixed(2) : '--'} />
+          {/* Right: Mini stats — 横長 strip with dot dividers */}
+          <div className="flex items-center gap-2 text-[10px] font-bold">
+            <MiniStat label="開" value={realtimeQuote ? safeNumber(realtimeQuote.open).toFixed(2) : '--'} />
+            <span className="shape-dot" style={{ background: 'hsl(var(--text-tertiary))' }} />
+            <MiniStat label="高" value={realtimeQuote ? safeNumber(realtimeQuote.high).toFixed(2) : '--'} color="price-up" />
+            <span className="shape-dot" style={{ background: 'hsl(var(--text-tertiary))' }} />
+            <MiniStat label="低" value={realtimeQuote ? safeNumber(realtimeQuote.low).toFixed(2) : '--'} color="price-down" />
+            <span className="shape-dot" style={{ background: 'hsl(var(--text-tertiary))' }} />
+            <MiniStat label="昨" value={hasQuote ? prevClose.toFixed(2) : '--'} />
             <div className="w-px h-8 bg-gray-300 dark:bg-zinc-700" />
             <MiniStat label="成交量" value={realtimeQuote ? `${(safeNumber(realtimeQuote.volume) / 1e6).toFixed(1)}M` : '--'} />
             <MiniStat label="换手率" value={realtimeQuote ? `${safeNumber(realtimeQuote.turnover_rate).toFixed(2)}%` : '--'} />
@@ -334,9 +425,9 @@ export default function StockDetailPage() {
 
       {/* Row 2: Key Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-        <MetricCard label="市盈率 PE" value={finance.pe ? String(finance.pe) : '--'} icon={BarChart3} />
-        <MetricCard label="市净率 PB" value={finance.pb ? String(finance.pb) : '--'} icon={Building2} />
-        <MetricCard label="ROE" value={finance.roe ? `${finance.roe}%` : '--'} icon={TrendingUp} />
+        <MetricCard label="市盈率 PE" value={finance.pe ? fmtPrice(finance.pe) : '--'} icon={BarChart3} />
+        <MetricCard label="市净率 PB" value={finance.pb ? fmtPrice(finance.pb) : '--'} icon={Building2} />
+        <MetricCard label="ROE" value={finance.roe ? `${fmtPct(finance.roe)}%` : '--'} icon={TrendingUp} />
         <MetricCard label="市值" value={finance.total_market_cap ? `${(safeNumber(finance.total_market_cap) / 1e8).toFixed(1)}亿` : '--'} icon={DollarSign} />
         <MetricCard label="成交量" value={hasQuote ? `${(safeNumber(realtimeQuote?.volume) / 1e6).toFixed(1)}M` : '--'} icon={Activity} />
         <MetricCard label="换手率" value={hasQuote ? `${safeNumber(realtimeQuote?.turnover_rate).toFixed(2)}%` : '--'} icon={RefreshCw} />
@@ -346,14 +437,40 @@ export default function StockDetailPage() {
 
       {/* Row 3: K-line Chart */}
       <div className="rounded-lg border border-gray-300 dark:border-zinc-800 overflow-hidden">
-        <div className="flex items-center gap-1 px-3 py-1.5 border-b border-gray-200 dark:border-zinc-800">
-        {['minute','day','week','month'].map(p => (
-          <button key={p} onClick={() => setPeriod(p)}
-            className={`px-2 py-0.5 text-[10px] font-medium rounded border ${p === period ? 'bg-violet-600 border-violet-500 text-white' : 'border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-violet-400'}`}>
-            {{minute:'分时',day:'日线',week:'周线',month:'月线'}[p]}
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-zinc-800">
+          <div className="flex items-center gap-1">
+            {['minute','day','week','month'].map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`px-2 py-0.5 text-[10px] font-bold border ${p === period ? 'bg-red-700 border-red-700 text-white' : 'border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-red-400'}`}>
+                {{minute:'分时',day:'日线',week:'周线',month:'月线'}[p]}
+              </button>
+            ))}
+            {/* Indicator selector */}
+            <span className="text-[10px] text-gray-400 mx-1">|</span>
+            <div className="relative">
+              <button onClick={() => setShowIndicatorMenu(!showIndicatorMenu)}
+                className="px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-red-400">
+                指标: {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'无'}[indicator]} ▾
+              </button>
+              {showIndicatorMenu && (
+                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 shadow-lg z-20">
+                  {(['macd','kdj','rsi','none'] as const).map(i => (
+                    <button key={i} onClick={() => { setIndicator(i); setShowIndicatorMenu(false); }}
+                      className={`block w-full text-left px-3 py-1.5 text-[10px] font-bold hover:bg-gray-100 dark:hover:bg-white/5 ${indicator === i ? 'text-red-700' : 'text-gray-600 dark:text-zinc-400'}`}>
+                      {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'无'}[i]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Refresh button */}
+          <button onClick={() => window.location.reload()}
+            className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:text-red-700 hover:border-red-400 transition-colors"
+            title="刷新数据">
+            <RefreshCw size={11} /> 刷新
           </button>
-        ))}
-      </div>
+        </div>
       {period === 'minute' ? (
         <IntradayChart
           data={Array.isArray(intradayData) ? intradayData : []}
@@ -363,7 +480,7 @@ export default function StockDetailPage() {
         />
       ) : historyLoading ? (
         <div className="h-[500px] flex items-center justify-center text-gray-500"><RefreshCw className="animate-spin" size={20} /></div>
-      ) : <KLineChart data={chartData} />}
+      ) : <KLineChart data={chartData} indicator={indicator} />}
       </div>
 
       {/* Row 4: AI Analysis + Detailed Data (2-column) */}
@@ -485,10 +602,10 @@ export default function StockDetailPage() {
               <div className="text-[10px] text-gray-500 dark:text-zinc-400 mb-1">
                 当前: <span className="font-mono-nums font-medium text-black dark:text-white">¥{price.toFixed(2)}</span>
               </div>
-              {((sr.resistances as any[]) || []).length > 0 && (
+              {((sr?.resistances as any[]) || []).length > 0 && (
                 <div className="space-y-1">
                   <div className="text-[10px] text-rose-500 font-medium">阻力位</div>
-                  {(sr.resistances as any[]).slice(0, 3).map((r: any, i: number) => (
+                  {(sr?.resistances as any[]).slice(0, 3).map((r: any, i: number) => (
                     <div key={i} className="flex items-center justify-between text-[11px]">
                       <span className="text-gray-500 dark:text-zinc-400">R{i + 1}</span>
                       <span className="font-mono-nums text-rose-500">{safeNumber(r).toFixed(2)}</span>
@@ -499,10 +616,10 @@ export default function StockDetailPage() {
                   ))}
                 </div>
               )}
-              {((sr.supports as any[]) || []).length > 0 && (
+              {((sr?.supports as any[]) || []).length > 0 && (
                 <div className="space-y-1">
                   <div className="text-[10px] text-emerald-500 font-medium">支撑位</div>
-                  {(sr.supports as any[]).slice(0, 3).map((s: any, i: number) => (
+                  {(sr!.supports as any[]).slice(0, 3).map((s: any, i: number) => (
                     <div key={i} className="flex items-center justify-between text-[11px]">
                       <span className="text-gray-500 dark:text-zinc-400">S{i + 1}</span>
                       <span className="font-mono-nums text-emerald-500">{safeNumber(s).toFixed(2)}</span>
@@ -513,7 +630,7 @@ export default function StockDetailPage() {
                   ))}
                 </div>
               )}
-              {((sr.supports as any[]) || []).length === 0 && ((sr.resistances as any[]) || []).length === 0 && (
+              {((sr?.supports as any[]) || []).length === 0 && ((sr?.resistances as any[]) || []).length === 0 && (
                 <div className="text-[11px] text-gray-400 dark:text-zinc-400">暂无数据</div>
               )}
             </div>
@@ -566,11 +683,11 @@ export default function StockDetailPage() {
             <div className="grid grid-cols-3 gap-2">
               <div className="p-2 rounded bg-gray-50 dark:bg-white/5">
                 <div className="text-[10px] text-gray-500 dark:text-zinc-400">最近支撑</div>
-                <div className="text-xs font-mono-nums font-medium text-emerald-500">{sr.nearest_support ? safeNumber(sr.nearest_support).toFixed(2) : '--'}</div>
+                <div className="text-xs font-mono-nums font-medium text-emerald-500">{sr?.nearest_support ? safeNumber(sr?.nearest_support).toFixed(2) : '--'}</div>
               </div>
               <div className="p-2 rounded bg-gray-50 dark:bg-white/5">
                 <div className="text-[10px] text-gray-500 dark:text-zinc-400">最近阻力</div>
-                <div className="text-xs font-mono-nums font-medium text-rose-500">{sr.nearest_resistance ? safeNumber(sr.nearest_resistance).toFixed(2) : '--'}</div>
+                <div className="text-xs font-mono-nums font-medium text-rose-500">{sr?.nearest_resistance ? safeNumber(sr?.nearest_resistance).toFixed(2) : '--'}</div>
               </div>
             </div>
           </div>

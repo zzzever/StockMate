@@ -549,6 +549,139 @@ fn quote_to_ref(quote: &Quote) -> QuoteRef {
 }
 
 // ============================================================
+// Psychology Analysis — DeepSeek evaluates market sentiment
+// ============================================================
+
+#[derive(serde::Serialize)]
+struct PsychRequest {
+    stock_name: String,
+    ticker: String,
+    current_price: f64,
+    prev_close: f64,
+    change_pct: f64,
+    volume: u64,
+    avg_volume: u64,
+    high: f64,
+    low: f64,
+    recent_trend: String,
+    volume_ratio: f64,
+}
+
+#[tauri::command]
+pub async fn analyze_psychology(
+    stock_id: String,
+    stock_name: String,
+    ticker: String,
+    current_price: f64,
+    prev_close: f64,
+    change_pct: f64,
+    volume: u64,
+    avg_volume: u64,
+    high: f64,
+    low: f64,
+    recent_trend: String,
+    volume_ratio: f64,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, ApiError> {
+    let client = create_deepseek_client(&state.db_pool).await?;
+    let user_prompt = format!(
+        "股票:{} ({}) 现价:{:.2} 昨收:{:.2} 涨跌:{:.2}% 成交量:{} 均量:{} 最高:{:.2} 最低:{:.2} 量比:{:.2} 近期趋势:{}",
+        stock_name, ticker, current_price, prev_close, change_pct, volume, avg_volume, high, low, volume_ratio, recent_trend
+    );
+    let resp = client.analyze_psychology(&user_prompt).await
+        .map_err(|e| ApiError { code: 500, message: e.to_string(), details: None })?;
+    let cleaned = resp.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim().to_string();
+    serde_json::from_str(&cleaned).map_err(|e| ApiError { code: 500, message: format!("Parse: {}", e), details: None })
+}
+
+// ============================================================
+// Great Wall Line Design — DeepSeek designs adaptive support line formula
+// ============================================================
+
+/// Response type for Great Wall formula design
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GreatWallDesign {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub params: GreatWallParams,
+    pub corrections: Vec<GreatWallCorrection>,
+    pub algorithm_notes: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GreatWallParams {
+    pub base_ema_period: i32,
+    pub anchor_lookback: i32,
+    pub anchor_volume_threshold: f64,
+    pub anchor_price_threshold: f64,
+    pub anchor_weight: f64,
+    pub momentum_period: i32,
+    pub momentum_panic_threshold: f64,
+    pub momentum_surge_threshold: f64,
+    pub smooth_alpha: f64,
+    pub decay_halflife: i32,
+    pub atr_period: i32,
+    pub atr_buffer_mult: f64,
+    pub psychology_floor: f64,
+    pub psychology_ceil: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GreatWallCorrection {
+    pub name: String,
+    pub condition: String,
+    pub adjustment: String,
+    pub magnitude: f64,
+}
+
+#[tauri::command]
+pub async fn design_great_wall(
+    stock_id: String,
+    stock_name: String,
+    ticker: String,
+    daily_text: String,
+    state: State<'_, AppState>,
+) -> Result<GreatWallDesign, ApiError> {
+    cmd_log("design_great_wall", &stock_id);
+    let client = create_deepseek_client(&state.db_pool).await?;
+
+    let user_prompt = format!(
+        "股票: {} ({}.{})
+请分析以下日K线数据，设计最优的长城线（转折点支撑线）公式参数。
+
+## 股票信息
+名称: {}
+代码: {}
+
+## 近250日K线数据（日期 O H L C V）
+{}
+
+## 设计要求
+长城线用于识别趋势转折点，作为动态支撑线。请根据该股票的实际波动特征（振幅、成交量分布、趋势持续性、反转频率）设计参数：
+- 高波动股：更宽的ATR缓冲、更长的EMA周期、更低的锚点权重
+- 低波动股：更紧的ATR缓冲、更短的EMA周期、更高的锚点权重
+- 大盘蓝筹：放量阈值可设低一些（流动性好）
+- 小盘股：放量阈值设高一些（需确认主力意图）
+
+请返回JSON格式的公式参数。",
+        stock_name, ticker, "SH/SZ",
+        stock_name, ticker,
+        daily_text,
+    );
+
+    let resp = client.design_great_wall(&user_prompt).await
+        .map_err(|e| ApiError { code: 500, message: e.to_string(), details: None })?;
+
+    let cleaned = resp.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim().to_string();
+    serde_json::from_str(&cleaned).map_err(|e| ApiError {
+        code: 500,
+        message: format!("Failed to parse Great Wall design: {}", e),
+        details: None,
+    })
+}
+
+// ============================================================
 // Unified Analyze All — frontend passes cached data, NO re-fetch
 // ============================================================
 

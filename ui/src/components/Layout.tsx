@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/store/useAppStore';
 import Sidebar from '@/components/Sidebar';
+import TitleBar from '@/components/TitleBar';
 import TopBar from '@/components/TopBar';
 import { useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
@@ -31,6 +32,7 @@ export default function Layout({ children }: LayoutProps) {
         <Sidebar />
       </aside>
       <div className="flex flex-1 flex-col overflow-hidden relative z-10">
+        <TitleBar />
         <TopBar />
         <motion.main
           key={location.pathname}

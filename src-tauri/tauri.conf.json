@@ -47,6 +47,8 @@
         "resizable": true,
         "title": "StockMate",
         "theme": "Light",
+        "decorations": false,
+        "devtools": true,
         "width": 1280,
         "minWidth": 1024,
         "minHeight": 640

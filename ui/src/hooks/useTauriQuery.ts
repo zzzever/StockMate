@@ -354,7 +354,7 @@ export function useAnalyzeStockWithAI(stock_id: string) {
         throw error;
       }
     },
-    enabled: false,
+    enabled: stock_id.length > 0,
   });
 }
 
@@ -475,4 +475,38 @@ export function useMarketEnvironment(stock_id: string) {
     },
     enabled: stock_id.length > 0,
   });
+}
+
+// Great Wall Line Design — DeepSeek designs adaptive support line formula
+export function useGreatWallDesign(
+  stock_id: string,
+  stock_name: string,
+  ticker: string,
+  daily_text: string,
+) {
+  const { data: cached, isLoading: cachedLoading } = useQuery<import('@/types').GreatWallDesign, Error>({
+    queryKey: ['stocks', 'great_wall_design', stock_id],
+    queryFn: async () => {
+      console.log('[useGreatWallDesign] fired, stock_id:', stock_id);
+      try {
+        const data = await invoke<import('@/types').GreatWallDesign>('design_great_wall', {
+          stockId: stock_id,
+          stockName: stock_name,
+          ticker: ticker,
+          dailyText: daily_text,
+        });
+        console.log('[useGreatWallDesign] data arrived:', data);
+        return data;
+      } catch (error) {
+        console.log('[useGreatWallDesign] error:', error);
+        throw error;
+      }
+    },
+    enabled: stock_id.length > 0 && daily_text.length > 0,
+    staleTime: 24 * 60 * 60 * 1000, // cache for 24h — formula doesn't need frequent refresh
+    retry: 2,
+    retryDelay: 2000,
+  });
+
+  return { data: cached, isLoading: cachedLoading };
 }

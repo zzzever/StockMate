@@ -28,9 +28,9 @@ export default function RulesPage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col"
       style={{ background: 'linear-gradient(180deg, #fdfbf7 0%, #f5f0e8 30%, #ede4d3 60%, #fdfbf7 100%)' }}
     >
-      {/* Header — Japanese newspaper masthead style */}
-      <div className="shrink-0 px-8 pt-8 pb-4 border-b-4 border-rose-800/80"
-        style={{ borderBottomStyle: 'double' }}
+      {/* Header — 和モダン masthead with 罫線 */}
+      <div className="shrink-0 px-8 pt-8 pb-4 fragment-top"
+        style={{ borderBottom: '4px double #8b1a1a' }}
       >
         <div className="flex items-end justify-between">
           <div>

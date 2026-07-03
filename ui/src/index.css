@@ -220,3 +220,272 @@ h1, h2, h3, .newspaper-heading {
   border-top: 3px double hsl(var(--ink) / 0.4);
   margin: 0.75rem 0;
 }
+
+/* ═══════════════════════════════════════════════════════
+   日式「碎」美學 — 10 Design Principles
+   ═══════════════════════════════════════════════════════ */
+
+/* 1. 碎元素 — fragmented borders, torn edges */
+.fragment-border {
+  border: 2px solid hsl(var(--ink));
+  clip-path: polygon(0% 3px, 3px 0%, calc(100% - 5px) 0%, 100% 5px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 2px 100%, 0% calc(100% - 2px));
+}
+.fragment-top {
+  position: relative;
+}
+.fragment-top::before {
+  content: ''; position: absolute; top: 0; left: 8px; right: 8px;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, hsl(var(--ink)) 0px, hsl(var(--ink)) 8px, transparent 8px, transparent 14px);
+}
+
+/* 2. 手绘 — rough sketch borders & underlines */
+.sketch-border {
+  border: 2px solid hsl(var(--ink));
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+.sketch-underline {
+  text-decoration: none;
+  background: linear-gradient(transparent 65%, hsl(var(--red) / 0.25) 65%, hsl(var(--red) / 0.25) 85%, transparent 85%);
+  padding-bottom: 2px;
+}
+
+/* 3. 縱横交錯 — vertical + horizontal text mix */
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.15em;
+  line-height: 1.8;
+}
+.horizontal-vertical-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 1rem;
+}
+
+/* 4. 網格系統 — modular grid */
+.grid-jp {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.grid-jp-8 { gap: 8px; }
+.grid-jp-16 { gap: 16px; }
+
+/* 5. 打破常規 — break rules: overflow, offset, rotation */
+.break-out {
+  margin-left: -12px; margin-right: -12px;
+}
+.offset-tag {
+  position: relative; top: -0.5em; left: -0.25em;
+  transform: rotate(-3deg);
+  display: inline-block;
+}
+
+/* 6. 疊印 — overprint with multiply blend */
+.overprint {
+  mix-blend-mode: multiply;
+  opacity: 0.85;
+}
+.stamp-seal {
+  display: inline-block;
+  border: 3px double hsl(var(--red));
+  color: hsl(var(--red));
+  padding: 0.25rem 0.75rem;
+  transform: rotate(-5deg);
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  opacity: 0.8;
+}
+
+/* 7. 留白 — generous negative space */
+.ma {
+  max-width: 720px;
+  margin-left: auto; margin-right: auto;
+}
+.ma-wide { max-width: 960px; }
+.p-breath { padding: 2rem 3rem; }
+
+/* 8. 横竖對比 — horizontal-vertical contrast blocks */
+.hv-contrast {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.hv-contrast > .v-label {
+  writing-mode: vertical-rl;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  color: hsl(var(--text-tertiary));
+  flex-shrink: 0;
+}
+.hv-contrast > .h-content {
+  flex: 1;
+}
+
+/* 9. 非對稱平衡 — asymmetric balance (3:5 golden ratio) */
+.asym-grid {
+  display: grid;
+  grid-template-columns: 3fr 5fr;
+  gap: 1rem;
+}
+.asym-grid-flip {
+  display: grid;
+  grid-template-columns: 5fr 3fr;
+  gap: 1rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   和柄・裝飾圖形 — 日本の伝統文様と幾何学模様
+   ═══════════════════════════════════════════════════════ */
+
+/* 青海波 (Seigaiha) — wave pattern background */
+.bg-seigaiha {
+  background:
+    radial-gradient(circle at 50% 0%, transparent 35%, hsl(var(--red) / 0.04) 35%, hsl(var(--red) / 0.04) 45%, transparent 45%),
+    radial-gradient(circle at 50% 100%, transparent 35%, hsl(var(--ink) / 0.03) 35%, hsl(var(--ink) / 0.03) 45%, transparent 45%),
+    radial-gradient(circle at 100% 50%, transparent 35%, hsl(var(--red) / 0.04) 35%, hsl(var(--red) / 0.04) 45%, transparent 45%),
+    radial-gradient(circle at 0% 50%, transparent 35%, hsl(var(--ink) / 0.03) 35%, hsl(var(--ink) / 0.03) 45%, transparent 45%);
+  background-size: 40px 40px;
+  background-position: 0 0, 20px 20px, 20px 0, 0 20px;
+}
+
+/* 市松 (Ichimatsu) — checkered pattern */
+.bg-ichimatsu {
+  background-image:
+    linear-gradient(45deg, hsl(var(--ink) / 0.03) 25%, transparent 25%),
+    linear-gradient(-45deg, hsl(var(--ink) / 0.03) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, hsl(var(--ink) / 0.03) 75%),
+    linear-gradient(-45deg, transparent 75%, hsl(var(--ink) / 0.03) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+/* 麻の葉 (Asanoha) — hemp leaf geometric */
+.bg-asanoha {
+  background-image:
+    linear-gradient(60deg, hsl(var(--red) / 0.03) 1px, transparent 1px),
+    linear-gradient(-60deg, hsl(var(--red) / 0.03) 1px, transparent 1px),
+    linear-gradient(0deg, hsl(var(--ink) / 0.02) 1px, transparent 1px);
+  background-size: 30px 52px;
+}
+
+/* ── Large watermark character — 空 (ku/void) ── */
+.watermark-ku {
+  position: relative;
+}
+.watermark-ku::after {
+  content: '空';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20rem;
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 900;
+  color: hsl(var(--ink) / 0.025);
+  pointer-events: none;
+  z-index: 0;
+  white-space: nowrap;
+}
+
+/* ── Decorative corner bracket ── */
+.corner-bracket {
+  position: relative;
+}
+.corner-bracket::before, .corner-bracket::after {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  border-color: hsl(var(--red) / 0.3);
+  border-style: solid;
+}
+.corner-bracket::before { top: 4px; left: 4px; border-width: 2px 0 0 2px; }
+.corner-bracket::after { bottom: 4px; right: 4px; border-width: 0 2px 2px 0; }
+
+/* ── Decorative circle cluster ── */
+.circle-cluster {
+  display: flex; gap: 4px; align-items: center;
+}
+.circle-cluster span { border-radius: 50%; display: block; }
+.circle-cluster .c1 { width: 10px; height: 10px; background: hsl(var(--red) / 0.6); }
+.circle-cluster .c2 { width: 6px; height: 6px; background: hsl(var(--ink) / 0.4); }
+.circle-cluster .c3 { width: 14px; height: 14px; border: 1.5px solid hsl(var(--ink) / 0.3); background: transparent; }
+
+/* ── Ink splash decorative divider ── */
+.ink-splash {
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%, hsl(var(--red) / 0.4) 20%, hsl(var(--ink) / 0.5) 40%,
+    hsl(var(--red) / 0.2) 60%, transparent 100%);
+  position: relative;
+  margin: 1.5rem 0;
+}
+.ink-splash::after {
+  content: '◆';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 8px;
+  color: hsl(var(--red) / 0.5);
+  background: hsl(var(--bg-root));
+  padding: 0 6px;
+}
+
+/* ── Enso circle (円相) — hand-drawn imperfect circle ── */
+.enso {
+  width: 120px; height: 120px;
+  border: 2px solid hsl(var(--ink) / 0.12);
+  border-radius: 47% 53% 51% 49% / 48% 52% 49% 51%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Vertical rule line with dot ── */
+.v-rule {
+  width: 1px; height: 100%;
+  background: linear-gradient(180deg, transparent 0%, hsl(var(--ink) / 0.15) 15%, hsl(var(--ink) / 0.15) 85%, transparent 100%);
+  position: relative;
+  flex-shrink: 0;
+}
+.v-rule::after {
+  content: '';
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: hsl(var(--red) / 0.5);
+}
+
+/* ── Triple line accent ── */
+.triple-line { display: flex; flex-direction: column; gap: 3px; width: 24px; }
+.triple-line span { height: 1px; }
+.triple-line .t1 { background: hsl(var(--red) / 0.5); width: 100%; }
+.triple-line .t2 { background: hsl(var(--ink) / 0.3); width: 60%; }
+.triple-line .t3 { background: hsl(var(--red) / 0.5); width: 100%; }
+
+/* 10. 善用圖形 — decorative shapes */
+.shape-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.shape-diamond { width: 8px; height: 8px; transform: rotate(45deg); display: inline-block; }
+.shape-triangle { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid currentColor; display: inline-block; }
+.decorative-corner {
+  position: relative;
+}
+.decorative-corner::after {
+  content: '◆';
+  position: absolute;
+  bottom: -6px; right: -6px;
+  font-size: 10px;
+  color: hsl(var(--red));
+  opacity: 0.5;
+}
+
+/* Hand-drawn circle stamp */
+.hand-circle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px;
+  border: 2.5px solid hsl(var(--red));
+  border-radius: 48% 52% 55% 45% / 45% 48% 52% 55%;
+  font-size: 0.6rem; font-weight: 900; color: hsl(var(--red));
+  transform: rotate(-8deg);
+}

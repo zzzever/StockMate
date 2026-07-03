@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"c:/Users/gao_y/Documents/kimi/Workspaces/sstock/stockmate/ui\" && npm run build && cd .. && taskkill //f //im stockmate-tauri.exe 2>nul & \"$HOME/.cargo/bin/cargo\" build --release"
+          }
+        ]
+      }
+    ]
+  }
+}

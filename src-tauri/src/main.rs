@@ -252,6 +252,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::deepseek_commands::generate_card_with_ai,
             api_tauri_commands::deepseek_commands::analyze_market_environment,
             api_tauri_commands::deepseek_commands::analyze_all,
+            api_tauri_commands::deepseek_commands::analyze_psychology,
+            api_tauri_commands::deepseek_commands::design_great_wall,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

@@ -312,3 +312,37 @@ export interface MarketEnvironment {
   generated_at: string;
   is_offline: boolean;
 }
+
+// ── Great Wall Line Design (DeepSeek-designed adaptive support formula) ──
+export interface GreatWallParams {
+  base_ema_period: number;
+  anchor_lookback: number;
+  anchor_volume_threshold: number;
+  anchor_price_threshold: number;
+  anchor_weight: number;
+  momentum_period: number;
+  momentum_panic_threshold: number;
+  momentum_surge_threshold: number;
+  smooth_alpha: number;
+  decay_halflife: number;
+  atr_period: number;
+  atr_buffer_mult: number;
+  psychology_floor: number;
+  psychology_ceil: number;
+}
+
+export interface GreatWallCorrection {
+  name: string;
+  condition: string;
+  adjustment: string;
+  magnitude: number;
+}
+
+export interface GreatWallDesign {
+  name: string;
+  version: string;
+  description: string;
+  params: GreatWallParams;
+  corrections: GreatWallCorrection[];
+  algorithm_notes: string;
+}

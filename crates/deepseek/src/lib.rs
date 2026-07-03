@@ -776,6 +776,68 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         serde_json::from_str(&cleaned).map_err(|e| DeepSeekError::ParseError(format!("All-in-one parse: {}", e)))
     }
 
+    /// Psychology analysis — market sentiment from price/volume data
+    pub async fn analyze_psychology(&self, prompt: &str) -> Result<String, DeepSeekError> {
+        let system_prompt = r#"你是市场心理学专家。分析当日交易数据，从散户/主力心理角度判断支撑压力。
+返回JSON: {"sentiment":"bullish|neutral|bearish","sentiment_score":0-100,"psych_support":价格,"psych_resistance":价格,"reasoning":"分析","crowd_behavior":"散户行为","smart_money":"主力意图"}"#;
+        self.chat_completion(system_prompt, prompt).await
+    }
+
+    /// 长城线公式设计 — DeepSeek 根据股票数据特征设计自适应支撑线公式
+    /// 用于判断转折点的动态支撑线，融合分形几何、量价确认、波动率适应
+    pub async fn design_great_wall(&self, prompt: &str) -> Result<String, DeepSeekError> {
+        let system_prompt = r#"你是一位量化交易算法工程师，专精于技术指标设计。你需要为"长城线"（Great Wall Line）设计一个数学公式。
+
+## 长城线的定义
+长城线是一条**动态自适应支撑线**，用于判断价格趋势中的转折点。它不同于简单的MA均线——它需要：
+1. **识别关键转折点**（分形低点、放量止跌点）作为"锚点"
+2. **在锚点之间**跟随短期趋势（EMA基础）
+3. **动态适应**不同股票的波动率特征
+4. **量价确认**：高成交量 + 不跌破 = 强支撑确认
+
+## 输出要求
+返回纯JSON，包含完整的公式参数。参数设计需考虑：
+- 不同波动率（高波动股 vs 低波动股）应有不同的参数
+- 不同市值（大盘蓝筹 vs 小盘成长）行为不同
+- 牛熊市环境下支撑线应有不同表现
+
+JSON结构：
+{
+  "name": "长城线公式名称",
+  "version": "1.0",
+  "description": "公式设计思路简介（中文，50字以内）",
+  "params": {
+    "base_ema_period": 整数(20-60, 默认30),
+    "anchor_lookback": 整数(3-10, 默认5),
+    "anchor_volume_threshold": 浮点(1.2-2.0, 默认1.3),
+    "anchor_price_threshold": 浮点(-0.05到0.02, 默认-0.02),
+    "anchor_weight": 浮点(0.3-0.8, 默认0.6),
+    "momentum_period": 整数(2-5, 默认3),
+    "momentum_panic_threshold": 浮点(-0.10到-0.03, 默认-0.05),
+    "momentum_surge_threshold": 浮点(0.03-0.10, 默认0.05),
+    "smooth_alpha": 浮点(0.1-0.5, 默认0.2),
+    "decay_halflife": 整数(5-30, 默认10),
+    "atr_period": 整数(10-20, 默认14),
+    "atr_buffer_mult": 浮点(0.5-2.0, 默认1.0),
+    "psychology_floor": 浮点(0.8-0.95, 默认0.88),
+    "psychology_ceil": 浮点(1.05-1.2, 默认1.12)
+  },
+  "corrections": [
+    {
+      "name": "修正名称",
+      "condition": "触发条件描述",
+      "adjustment": "调整方式描述",
+      "magnitude": 浮点(-0.05到0.05)
+    }
+  ],
+  "algorithm_notes": "实现注意事项（中文，用于前端开发参考）"
+}
+
+请基于你对该股票数据的理解，设计最优参数。考虑该股票的实际波动特征。"
+"#;
+        self.chat_completion(system_prompt, prompt).await
+    }
+
     pub fn delete_api_key() -> Result<(), DeepSeekError> {
         Ok(())
     }

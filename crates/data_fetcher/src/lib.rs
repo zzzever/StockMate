@@ -590,7 +590,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             .await?;
 
         if val.is_null() {
-            // No sidecar → no real finance data. Return None (frontend will use DeepSeek)
+            // No sidecar → no real finance data available
             return Ok(None);
         }
 
@@ -637,19 +637,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             .await?;
 
         if val.is_null() {
-            return Ok(vec![FundFlow {
-                stock_id: stock_id.into(),
-                date: NaiveDate::from_ymd_opt(2024, 6, 20).ok_or_else(|| ApiError {
-                    code: 500,
-                    message: "Invalid date".into(),
-                    details: None,
-                })?,
-                main_inflow: Some(1_200_000_000.0),
-                retail_inflow: Some(500_000_000.0),
-                large_order_inflow: Some(400_000_000.0),
-                medium_order_inflow: Some(300_000_000.0),
-                small_order_inflow: Some(100_000_000.0),
-            }]);
+            return Ok(vec![]);
         }
 
         let arr = val.as_array().ok_or(ApiError {

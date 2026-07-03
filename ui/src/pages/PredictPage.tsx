@@ -424,12 +424,10 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
               </div>
             </div>
 
-            {/* Signal stamp */}
+            {/* Signal stamp — overprint effect */}
             <div className="flex justify-center py-2">
-              <div className={`px-6 py-3 border-4 rotate-[-2deg] ${data.buy_signal ? 'border-red-700 bg-red-50' : 'border-gray-400 bg-gray-50'}`}>
-                <span className={`text-2xl font-black tracking-widest ${data.buy_signal ? 'text-red-700' : 'text-gray-500'}`}>
-                  {data.buy_signal ? '买入信号' : '观望'}
-                </span>
+              <div className={`stamp-seal ${data.buy_signal ? '' : 'opacity-30'}`} style={{ borderColor: data.buy_signal ? 'hsl(var(--red))' : 'hsl(var(--text-tertiary))', color: data.buy_signal ? 'hsl(var(--red))' : 'hsl(var(--text-tertiary))' }}>
+                {data.buy_signal ? '买入信号' : '观望'}
               </div>
             </div>
 

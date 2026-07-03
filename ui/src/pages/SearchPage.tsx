@@ -115,28 +115,34 @@ export default function SearchPage() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="flex flex-col items-center h-full pt-16 px-4"
+      className="flex flex-col items-center h-full pt-16 px-4 bg-seigaiha"
     >
-      {/* Title */}
-      <div className="text-center mb-6">
-        <h1 className="text-4xl font-black tracking-[0.15em] mb-2" style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}>
-          个股检索
-        </h1>
-        <div className="newspaper-divider-double w-32 mx-auto" />
-        <p className="text-sm font-bold mt-2 tracking-widest" style={{ color: 'hsl(var(--text-secondary))' }}>
-          台湾加权 · 上证综指 · 日经平均
-        </p>
+      {/* Title — vertical + horizontal contrast */}
+      <div className="hv-contrast mb-8">
+        <div className="v-label">个股检索</div>
+        <div className="h-content">
+          <h1 className="text-5xl font-black tracking-[0.2em] sketch-underline" style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}>
+            股票<br />檢索
+          </h1>
+          <div className="flex gap-2 mt-3">
+            <span className="shape-diamond" style={{ background: 'hsl(var(--red))' }} />
+            <span className="shape-dot" style={{ background: 'hsl(var(--ink))' }} />
+            <span className="text-xs font-bold tracking-widest" style={{ color: 'hsl(var(--text-tertiary))' }}>
+              台湾加权 · 上证综指 · 日经平均
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Search Box */}
-      <div className="w-full max-w-xl relative mb-6">
-        <div className="relative">
+      {/* Search Box — hand-drawn style */}
+      <div className="w-full max-w-xl relative mb-8 p-breath">
+        <div className="relative sketch-border bg-white" style={{ borderColor: 'hsl(var(--ink))' }}>
           <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'hsl(var(--text-tertiary))' }} />
           <input ref={inputRef} type="text" value={query}
             onChange={(e) => setQuery(e.target.value)} onKeyDown={handleKeyDown}
             placeholder="輸入代碼或名稱…"
-            className="w-full h-14 pl-12 pr-12 border-2 bg-white text-lg outline-none font-bold"
-            style={{ fontFamily: "'Noto Sans SC', sans-serif", borderColor: 'hsl(var(--ink))', color: 'hsl(var(--ink))' }}
+            className="w-full h-14 pl-12 pr-12 bg-transparent text-lg outline-none font-bold"
+            style={{ fontFamily: "'Noto Sans SC', sans-serif", color: 'hsl(var(--ink))' }}
             aria-label="搜索股票或ETF"
           />
           {query && (
@@ -249,7 +255,11 @@ export default function SearchPage() {
 
         {/* Search history when no query */}
         {!debouncedQuery && (
-          <div className="space-y-1">
+          <div className="space-y-1 relative">
+            {/* Decorative enso circle */}
+            <div className="absolute -top-16 -right-8 opacity-30 pointer-events-none">
+              <div className="enso" style={{ width: 100, height: 100 }} />
+            </div>
             {history.length > 0 && (
               <div className="flex items-center justify-between px-2 mb-2">
                 <p className="text-xs font-black tracking-widest flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>

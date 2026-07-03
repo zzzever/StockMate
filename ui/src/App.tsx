@@ -9,6 +9,7 @@ import StockDetailPage from '@/pages/StockDetailPage';
 import BacktestPage from '@/pages/BacktestPage';
 import PredictPage from '@/pages/PredictPage';
 import RulesPage from '@/pages/RulesPage';
+import IndicatorLabPage from '@/pages/IndicatorLabPage';
 import SettingsPage from '@/pages/SettingsPage';
 
 const queryClient = new QueryClient({
@@ -37,6 +38,7 @@ function App() {
               <Route path="/backtest" element={<BacktestPage />} />
               <Route path="/predict" element={<PredictPage />} />
               <Route path="/rules" element={<RulesPage />} />
+              <Route path="/indicator-lab" element={<IndicatorLabPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </ErrorBoundary>

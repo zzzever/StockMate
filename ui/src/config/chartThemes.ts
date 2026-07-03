@@ -399,7 +399,7 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     wickUpColor: '#ff6b6b', wickDownColor: '#4ecdc4',
     volumeUpColor: 'rgba(255,107,107,0.5)', volumeDownColor: 'rgba(78,205,196,0.5)', volumeMaColor: '#f9ca24',
     ma5Color: '#ff6b6b', ma10Color: '#f9ca24', ma20Color: '#a29bfe', ma60Color: '#2d3436',
-    bbUpperColor: 'rgba(45,52,54,0.15)', bbMiddleColor: 'rgba(45,52,54,0.3)', bbLowerColor: 'rgba(45,52,54,0.15)',
+    bbUpperColor: '#ff6b6b', bbMiddleColor: '#f9ca24', bbLowerColor: '#4ecdc4',
     supportColor: '#4ecdc4', resistanceColor: '#ff6b6b',
     macdDifColor: '#ff6b6b', macdDeaColor: '#4ecdc4', macdHistUpColor: '#f9ca24', macdHistDownColor: 'rgba(45,52,54,0.3)',
     kdjKColor: '#ff6b6b', kdjDColor: '#4ecdc4', kdjJColor: '#f9ca24',
@@ -411,7 +411,7 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
   },
 };
 
-export const defaultChartStyle: ChartStyle = 'classic';
+export const defaultChartStyle: ChartStyle = 'manga';
 
 export function getChartTheme(style: ChartStyle): ChartThemeConfig {
   return chartThemes[style] ?? chartThemes[defaultChartStyle];
