@@ -590,41 +590,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             .await?;
 
         if val.is_null() {
-            // Try to fetch real-time price to generate more realistic mock data per stock
-            let provider = market_data::select_provider(stock_id);
-            let price_data = provider.fetch_realtime_price(stock_id).await;
-            
-            // Use ticker hash as seed for deterministic per-stock variation
-            let seed = ticker.bytes().fold(0u64, |a, b| a.wrapping_mul(6364136223846793005).wrapping_add(b as u64));
-            let rng = |min: f64, max: f64| -> f64 {
-                let frac = ((seed.wrapping_mul(6364136223846793005).wrapping_add(1) % 1000) as f64) / 1000.0;
-                min + frac * (max - min)
-            };
-            
-            let current_price = price_data.as_ref().map(|p| p.current_price).unwrap_or(10.0);
-            
-            // Infer market cap from price (rough estimate: price * 10-50亿 shares)
-            let shares_billion = rng(5.0, 50.0); // 5-50 billion shares
-            let market_cap = (current_price * shares_billion * 1e8) as i64;
-            
-            return Ok(Some(StockFinance {
-                stock_id: stock_id.into(),
-                gross_margin: Some(rng(10.0, 60.0)),
-                net_margin: Some(rng(5.0, 35.0)),
-                roe: Some(rng(5.0, 25.0)),
-                revenue: Some(Decimal::new((market_cap / 10) as i64, 0)),
-                net_profit: Some(Decimal::new((market_cap / 30) as i64, 0)),
-                debt_ratio: Some(rng(20.0, 70.0)),
-                eps: Some(Decimal::from_f64_retain(current_price / rng(10.0, 50.0)).unwrap_or_default()),
-                report_date: Some(NaiveDate::from_ymd_opt(2024, 3, 31).ok_or_else(|| ApiError {
-                    code: 500,
-                    message: "Invalid date".into(),
-                    details: None,
-                })?),
-                pe: Some(rng(8.0, 50.0)),
-                pb: Some(rng(0.8, 8.0)),
-                total_market_cap: Some(Decimal::new(market_cap, 0)),
-            }));
+            // No sidecar → no real finance data. Return None (frontend will use DeepSeek)
+            return Ok(None);
         }
 
         let obj = val.as_object().ok_or(ApiError {

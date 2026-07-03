@@ -9,6 +9,7 @@ import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStoc
 import { IntradayChart } from '@/components/IntradayChart';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume, fmtAmount } from '@/lib/format';
+import { getChartTheme } from '@/config/chartThemes';
 
 function safeNumber(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
@@ -50,6 +51,8 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
 }
 
 function KLineChart({ data }: { data: any[] }) {
+  const chartStyle = useAppStore((s) => s.chartStyle);
+  const T = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
   const mainRef = useRef<HTMLDivElement>(null);
   const volRef = useRef<HTMLDivElement>(null);
   const indRef = useRef<HTMLDivElement>(null);
@@ -57,7 +60,7 @@ function KLineChart({ data }: { data: any[] }) {
 
   const arr = Array.isArray(data) ? data.filter((q: any) => q && q.date) : [];
   const items = useMemo(() => arr.map((q: any) => ({ time: String(q.date), open: Number(q.open)||0, high: Number(q.high)||0, low: Number(q.low)||0, close: Number(q.close)||0 })), [data]);
-  const volItems = useMemo(() => arr.map((q: any) => ({ time: String(q.date), value: Number(q.volume)||0, color: (Number(q.close)||0) >= (Number(q.open)||0) ? 'rgba(16,185,129,0.5)' : 'rgba(244,63,94,0.5)' })), [data]);
+  const volItems = useMemo(() => arr.map((q: any) => ({ time: String(q.date), value: Number(q.volume)||0, color: (Number(q.close)||0) >= (Number(q.open)||0) ? T.volumeUpColor : T.volumeDownColor })), [data, T]);
   const closes = useMemo(() => arr.map((q: any) => Number(q.close)||0), [data]);
 
   // SMA helper
@@ -104,20 +107,20 @@ function KLineChart({ data }: { data: any[] }) {
     if (!mainRef.current || !volRef.current || !indRef.current) return;
     try {
       const mo = (tv: boolean) => ({
-        layout: { background: { color: 'transparent' }, textColor: '#a1a1aa' },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.05)' }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
+        layout: { background: { color: 'transparent' }, textColor: T.textColor },
+        grid: { vertLines: { color: 'T.gridVertColor' }, horzLines: { color: 'T.gridVertColor' } },
         autoSize: true, crosshair: tv ? { mode: 1 as const } : { mode: 0 as const },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-        timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: tv },
+        rightPriceScale: { borderColor: 'T.gridVertColor' },
+        timeScale: { borderColor: 'T.gridVertColor', timeVisible: tv },
       });
       const mc = createChart(mainRef.current, mo(true));
       mc.timeScale().applyOptions({ minBarSpacing: 5, rightOffset: 3 });
       // Hide logo
       const logo = mainRef.current.querySelector('a');
       if (logo) logo.style.display = 'none';
-      const candle = mc.addCandlestickSeries({ upColor: '#10b981', downColor: '#f43f5e', borderUpColor: '#10b981', borderDownColor: '#f43f5e', wickUpColor: '#10b981', wickDownColor: '#f43f5e' });
+      const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor });
       const mkL = (c: string) => mc.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-      const ma5 = mkL('#fbbf24'); const ma10 = mkL('#60a5fa'); const ma20 = mkL('#c084fc'); const ma70 = mkL('#fb923c');
+      const ma5 = mkL(T.ma5Color); const ma10 = mkL(T.ma10Color); const ma20 = mkL(T.ma20Color); const ma70 = mkL(T.ma60Color);
       // Bollinger Bands
       const bbU = mc.addLineSeries({ color: 'rgba(251,146,60,0.5)', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
       const bbM = mc.addLineSeries({ color: 'rgba(251,191,36,0.5)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
@@ -139,8 +142,8 @@ function KLineChart({ data }: { data: any[] }) {
 
       const ic = createChart(indRef.current, mo(true));
       const macdHist = ic.addHistogramSeries({});
-      const macdDif = ic.addLineSeries({ color: '#fff', lineWidth: 1, priceLineVisible: false });
-      const macdDea = ic.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceLineVisible: false });
+      const macdDif = ic.addLineSeries({ color: T.macdDifColor, lineWidth: 1, priceLineVisible: false });
+      const macdDea = ic.addLineSeries({ color: T.macdDeaColor, lineWidth: 1, priceLineVisible: false });
 
       // Sync zoom/pan: all 3 charts share the same time range
       const sync = (source: any) => {

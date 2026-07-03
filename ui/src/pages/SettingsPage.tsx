@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Database, Palette, Trash2, Wifi, Server, Bot, Eye, EyeOff, Save, TestTube, CheckCircle, XCircle, AlertCircle, BarChart3 } from 'lucide-react';
-import { useDeepSeekConfig } from '@/hooks/useTauriQuery';
 import { invoke } from '@tauri-apps/api/core';
+import { useDeepSeekConfig } from '@/hooks/useTauriQuery';
 import { useAppStore } from '@/store/useAppStore';
 import { chartThemes, type ChartStyle } from '@/config/chartThemes';
 
@@ -171,26 +171,37 @@ export default function SettingsPage() {
             <Wifi size={16} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">数据源配置</h2>
           </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-100 dark:bg-white/5 px-3 py-2">
-              <span className="text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400">主要数据源</span>
-              <span className="text-xs text-slate-800 dark:text-slate-800 dark:text-zinc-200">akshare / 东方财富</span>
-            </div>
-            <div className="flex items-center justify-between rounded-xl bg-slate-100 dark:bg-slate-100 dark:bg-white/5 px-3 py-2">
-              <span className="text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400">备用数据源</span>
-              <span className="text-xs text-slate-800 dark:text-slate-800 dark:text-zinc-200">Yahoo Finance</span>
-            </div>
+          <div className="space-y-2 text-xs font-bold">
+            {[
+              ['A股实时行情', '腾讯财经 (qt.gtimg.cn)'],
+              ['K线历史 & 分时', '腾讯财经 (ifzq.gtimg.cn)'],
+              ['板块指数', '东方财富 (push2.eastmoney.com)'],
+              ['中文名搜索', '新浪财经 (suggest3.sinajs.cn)'],
+            ].map(([label, src]) => (
+              <div key={label} className="flex items-center justify-between border px-3 py-2" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
+                <span style={{ color: 'hsl(var(--text-secondary))' }}>{label}</span>
+                <span className="flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> {src}
+                </span>
+              </div>
+            ))}
           </div>
         </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Server size={16} className="text-cyan-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">Python 桥接</h2>
+            <Server size={16} className="text-cyan-600" />
+            <h2 className="text-sm font-black tracking-wider" style={{ color: 'hsl(var(--ink))' }}>Python 桥接 (akshare)</h2>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400">akshare 脚本路径</span>
-            <span className="text-xs font-mono text-slate-700 dark:text-slate-700 dark:text-zinc-300">scripts/akshare_data.py</span>
+          <p className="text-xs mb-3 leading-relaxed" style={{ color: 'hsl(var(--text-secondary))' }}>
+            akshare 是 Python 开源金融数据库。启用后可获取更全面的板块指数、分钟级K线、财务数据等。
+            需安装 <code className="text-[11px] bg-gray-100 dark:bg-white/5 px-1">Python 3</code> 并执行
+            <code className="text-[11px] bg-gray-100 dark:bg-white/5 px-1">pip install akshare flask</code>，
+            运行 <code className="text-[11px] bg-gray-100 dark:bg-white/5 px-1">python scripts/akshare_server.py</code> 启动（端口 15678）。
+          </p>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold" style={{ color: 'hsl(var(--text-secondary))' }}>状态：</span>
+            <PythonStatus />
           </div>
         </motion.div>
 
@@ -200,11 +211,8 @@ export default function SettingsPage() {
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">缓存管理</h2>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400">本地缓存大小</span>
-            <button className="flex items-center gap-1 bg-rose-500/20 border border-rose-500/30 px-3 py-1.5 rounded-lg text-xs text-rose-300 hover:bg-rose-500/30 transition-colors">
-              <Trash2 size={12} />
-              清理缓存
-            </button>
+            <span className="text-xs font-bold" style={{ color: 'hsl(var(--text-secondary))' }}>本地 SQLite 数据缓存</span>
+            <CacheClearButton />
           </div>
         </motion.div>
 
@@ -269,32 +277,92 @@ function ThemeSelector() {
 }
 
 // ── Accent color picker ──
-const ACCENT_COLORS = [
-  { name: '紫色', hue: 262, sat: 83 },
-  { name: '蓝色', hue: 221, sat: 83 },
-  { name: '绿色', hue: 158, sat: 64 },
-  { name: '橙色', hue: 25, sat: 95 },
-  { name: '粉色', hue: 330, sat: 81 },
-  { name: '石墨', hue: 215, sat: 10 },
+const ACCENT_COLORS: { name: string; key: import('@/store/useAppStore').AccentColor }[] = [
+  { name: '红色', key: 'red' },
+  { name: '蓝色', key: 'blue' },
+  { name: '绿色', key: 'green' },
+  { name: '橙色', key: 'orange' },
+  { name: '粉色', key: 'pink' },
+  { name: '石墨', key: 'graphite' },
 ];
 
 function AccentColorPicker() {
-  const setAccent = (hue: number, sat: number) => {
-    const root = document.documentElement;
-    root.style.setProperty('--accent', `${hue} ${sat}% 58%`);
-    root.style.setProperty('--accent-subtle', `${hue} ${sat}% 95%`);
-    root.style.setProperty('--accent-muted', `${hue} ${sat}% 42%`);
-  };
+  const accent = useAppStore((s) => s.accent);
+  const setAccent = useAppStore((s) => s.setAccent);
+  const ACCENT_VALS: Record<string, [number, number]> = { red: [350, 75], blue: [221, 83], green: [158, 64], orange: [25, 95], pink: [330, 81], graphite: [215, 10] };
   return (
     <div className="flex gap-2">
-      {ACCENT_COLORS.map((c) => (
-        <button key={c.name} onClick={() => setAccent(c.hue, c.sat)}
-          className="w-8 h-8 rounded-full border-2 border-white dark:border-zinc-700 shadow-sm hover:scale-110 transition-transform"
-          style={{ background: `hsl(${c.hue} ${c.sat}% 58%)` }}
-          title={c.name}
-        />
-      ))}
+      {ACCENT_COLORS.map((c) => {
+        const [h, s] = ACCENT_VALS[c.key];
+        return (
+          <button key={c.key} onClick={() => setAccent(c.key)}
+            className={`w-8 h-8 rounded-full border-2 shadow-sm hover:scale-110 transition-transform ${accent === c.key ? 'border-black dark:border-white scale-110' : 'border-white dark:border-zinc-700'}`}
+            style={{ background: `hsl(${h}, ${s}%, 58%)` }}
+            title={c.name}
+          />
+        );
+      })}
     </div>
+  );
+}
+
+function PythonStatus() {
+  const [status, setStatus] = useState<'idle' | 'testing' | 'running' | 'stopped'>('idle');
+  const test = async () => {
+    setStatus('testing');
+    try {
+      await invoke<string>('check_sidecar_status');
+      setStatus('running');
+    } catch { setStatus('stopped'); }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      {status === 'idle' ? (
+        <button onClick={test} className="text-xs font-bold border px-2 py-0.5 hover:bg-black/5 transition-colors"
+          style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>测试连接</button>
+      ) : status === 'testing' ? (
+        <span className="text-xs font-bold text-amber-600">检测中…</span>
+      ) : status === 'running' ? (
+        <span className="text-xs font-black flex items-center gap-1.5 text-emerald-600">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> 运行中 ✓
+        </span>
+      ) : (
+        <span className="text-xs font-black flex items-center gap-1.5 text-amber-600">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" /> 未运行
+          <button onClick={test} className="text-[10px] underline ml-1" style={{ color: 'hsl(var(--text-tertiary))' }}>重试</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function CacheClearButton() {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [cleared, setCleared] = useState(false);
+  const handleClear = async () => {
+    try { await invoke('clean_cache'); setCleared(true); setTimeout(() => setCleared(false), 2000); }
+    catch (e) { console.error('Cache clear failed:', e); }
+    setShowConfirm(false);
+  };
+  return (
+    <>
+      <button onClick={() => setShowConfirm(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-red-700 text-red-700 font-black text-xs hover:bg-red-50 transition-colors">
+        <Trash2 size={12} /> {cleared ? '已清除 ✓' : '清理缓存'}
+      </button>
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowConfirm(false)}>
+          <div className="glass-card p-6 max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-black mb-2" style={{ color: 'hsl(var(--ink))' }}>确认清理缓存？</h3>
+            <p className="text-sm mb-4" style={{ color: 'hsl(var(--text-secondary))' }}>将删除所有本地缓存的行情数据，下次加载时重新获取。</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowConfirm(false)} className="px-4 py-1.5 border-2 text-sm font-bold" style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>取消</button>
+              <button onClick={handleClear} className="px-4 py-1.5 border-2 border-red-700 bg-red-700 text-white text-sm font-bold">确认清理</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -305,7 +373,7 @@ function ChartStyleSelector() {
   const styles = Object.entries(chartThemes) as [ChartStyle, typeof chartThemes['classic']][];
 
   return (
-    <div className="grid grid-cols-5 gap-2">
+    <div className="grid grid-cols-4 gap-2">
       {styles.map(([key, config]) => (
         <button
           key={key}

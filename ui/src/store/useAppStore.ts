@@ -4,6 +4,23 @@ import { type ChartStyle, defaultChartStyle } from '@/config/chartThemes';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type AccentColor = 'red' | 'blue' | 'green' | 'orange' | 'pink' | 'graphite';
+const ACCENT_MAP: Record<AccentColor, [number, number]> = { red: [350, 75], blue: [221, 83], green: [158, 64], orange: [25, 95], pink: [330, 81], graphite: [215, 10] };
+
+function applyAccent(color: AccentColor) {
+  const [h, s] = ACCENT_MAP[color];
+  const r = document.documentElement;
+  r.style.setProperty('--accent', `${h} ${s}% 38%`);
+  r.style.setProperty('--accent-subtle', `${h} ${s}% 95%`);
+  r.style.setProperty('--accent-muted', `${h} ${s}% 28%`);
+  // Dark mode overrides
+  const isDark = r.classList.contains('dark');
+  if (isDark) {
+    r.style.setProperty('--accent', `${h} ${s}% 52%`);
+    r.style.setProperty('--accent-subtle', `${h} 50% 15%`);
+    r.style.setProperty('--accent-muted', `${h} 60% 40%`);
+  }
+}
 
 function applyTheme(mode: ThemeMode) {
   const root = document.documentElement;
@@ -32,7 +49,8 @@ interface AppState {
   sidebarOpen: boolean;
   selectedStock: { code: string; name: string } | null;
   theme: ThemeMode;
-  darkMode: boolean; // derived convenience
+  darkMode: boolean;
+  accent: AccentColor;
   debugOpen: boolean;
   chartStyle: ChartStyle;
 
@@ -40,6 +58,7 @@ interface AppState {
   toggleSidebar: () => void;
   setSelectedStock: (stock: { code: string; name: string } | null) => void;
   setTheme: (theme: ThemeMode) => void;
+  setAccent: (accent: AccentColor) => void;
   toggleDarkMode: () => void;
   toggleDebug: () => void;
   setChartStyle: (style: ChartStyle) => void;
@@ -51,6 +70,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedStock: null,
   theme: 'system',
   darkMode: true,
+  accent: 'red',
   debugOpen: false,
   chartStyle: defaultChartStyle,
 
@@ -69,5 +89,6 @@ export const useAppStore = create<AppState>((set) => ({
     return { theme: next, darkMode: isDark };
   }),
   toggleDebug: () => set((s) => ({ debugOpen: !s.debugOpen })),
+  setAccent: (accent) => { applyAccent(accent); set({ accent }); },
   setChartStyle: (style) => set({ chartStyle: style }),
 }));

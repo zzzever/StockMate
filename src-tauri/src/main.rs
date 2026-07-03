@@ -236,6 +236,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::calculate_ma,
             api_tauri_commands::commands_v2::calculate_support_resistance,
             api_tauri_commands::commands_v2::test_network_connectivity,
+            api_tauri_commands::commands_v2::check_sidecar_status,
             api_tauri_commands::commands_v2::generate_strategy,
             api_tauri_commands::commands_v2::predict_trend,
             api_tauri_commands::commands_v2::generate_card_data,

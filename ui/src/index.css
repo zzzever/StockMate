@@ -58,6 +58,11 @@
   --chart-text: 0 0% 28%;
   --chart-border: 0 0% 20%;
 
+  /* Accent (persisted by useAppStore, applied by AccentColorPicker) */
+  --accent: 350 75% 38%;
+  --accent-subtle: 350 75% 95%;
+  --accent-muted: 350 70% 28%;
+
   color-scheme: light;
 }
 
@@ -91,6 +96,10 @@
   --chart-grid: 0 0% 18%;
   --chart-text: 36 15% 62%;
   --chart-border: 0 0% 22%;
+
+  --accent: 350 70% 52%;
+  --accent-subtle: 350 50% 15%;
+  --accent-muted: 350 60% 40%;
 
   color-scheme: dark;
 }

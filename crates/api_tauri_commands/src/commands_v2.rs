@@ -269,6 +269,24 @@ pub async fn generate_card_data(stock_id: String, _state: State<'_, AppState>) -
     Ok(data_fetcher::mock_card_data(&stock_id))
 }
 
+// ============================================================
+// Sidecar health check
+// ============================================================
+
+#[tauri::command]
+pub async fn check_sidecar_status(state: State<'_, AppState>) -> Result<String, domain::ApiError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .no_proxy()
+        .build()
+        .map_err(|e| domain::ApiError { code: 500, message: format!("client: {}", e), details: None })?;
+    match client.get("http://127.0.0.1:15678/health").send().await {
+        Ok(resp) if resp.status().is_success() => Ok("running".into()),
+        Ok(resp) => Err(domain::ApiError { code: 500, message: format!("HTTP {}", resp.status()), details: None }),
+        Err(e) => Err(domain::ApiError { code: 500, message: e.to_string(), details: None }),
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

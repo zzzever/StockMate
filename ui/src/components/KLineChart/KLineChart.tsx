@@ -137,7 +137,11 @@ export function KLineChart({
     <div className={`rounded-lg border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 ${className ?? ''}`}>
       <KLineChartToolbar period={period} range={range} chartStyle={chartStyle} activeIndicator={indicator}
         onPeriodChange={onPeriodChange} onRangeChange={onRangeChange} onChartStyleChange={onChartStyleChange} onIndicatorToggle={setIndicator}
-        themes={{ classic: getChartTheme('classic'), kawaii: getChartTheme('kawaii'), dark: getChartTheme('dark'), neon: getChartTheme('neon'), minimal: getChartTheme('minimal') }} />
+        themes={{
+          classic: getChartTheme('classic'), kawaii: getChartTheme('kawaii'), dark: getChartTheme('dark'),
+          neon: getChartTheme('neon'), minimal: getChartTheme('minimal'),
+          morandi: getChartTheme('morandi'), mondrian: getChartTheme('mondrian'), manga: getChartTheme('manga'),
+        }} />
       <div ref={mainRef} style={{ height: 280 }} />
       <div className="border-t border-gray-200 dark:border-zinc-800" />
       <div ref={volRef} style={{ height: 110 }} />

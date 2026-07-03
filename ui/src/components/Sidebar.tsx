@@ -51,7 +51,7 @@ export default function Sidebar() {
             <Link key={item.id} to={buildPath(item)}
               className={`flex w-full items-center gap-3 px-3 py-2.5 text-sm font-bold transition-colors ${
                 active
-                  ? 'bg-red-50 text-red-800 border-l-4 border-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-500'
+                  ? 'border-l-4 border-l-[hsl(var(--accent))] bg-[hsl(var(--accent-subtle))] text-[hsl(var(--accent-muted))] dark:text-[hsl(var(--accent))]'
                   : 'text-gray-700 hover:bg-gray-50 dark:text-zinc-400 dark:hover:bg-white/5'
               } ${sidebarOpen ? '' : 'justify-center'}`}
               title={item.label}

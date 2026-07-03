@@ -758,11 +758,15 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
 "composite":{"overall":0-100,"recommendation":"综合评价"},
 "card_reason":"个股分析点评1-2句话",
 "market":{"macro_context":{"fed_policy":{"status":"neutral","detail":""},"macro_economy":{},"geopolitics":{},"exchange_rate":{}},"industry_context":{"policy":{},"prosperity":{},"competition":{},"supply_chain":{}},"company_news":{"announcements":[],"management_changes":[],"contracts":[],"product_progress":[]},"risks":[{"severity":"medium","description":""}]}}"#;
+        let finance_note = if finance.gross_margin.is_none() && finance.roe.is_none() {
+            "\n注意：本地无财务数据。请基于你的知识搜索该公司的最新财务数据（PE、ROE、毛利率等），在基本面分析中引用并标注来源。"
+        } else { "" };
         let user_prompt = format!(
-            "股票:{} ({}) 当前价格:{} 昨收:{}\n日线:\n{}\n周线:\n{}\n月线:\n{}\n财务:毛利率={:?} ROE={:?} 负债率={:?}",
+            "股票:{} ({}) 当前价格:{} 昨收:{}\n日线:\n{}\n周线:\n{}\n月线:\n{}\n财务:毛利率={:?} ROE={:?} 负债率={:?}{}",
             stock_info.name, stock_info.ticker, current_price, prev_close,
             daily, weekly, monthly,
-            finance.gross_margin, finance.roe, finance.debt_ratio
+            finance.gross_margin, finance.roe, finance.debt_ratio,
+            finance_note
         );
         debug_log(&format!("analyze_all: prompt ready sys={} usr={}", system_prompt.len(), user_prompt.len()));
         debug_log("analyze_all: calling chat_completion...");
