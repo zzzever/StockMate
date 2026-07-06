@@ -2,10 +2,10 @@
 
 use api_tauri_commands::AppState;
 use domain::{Stock, Quote, ApiError};
-use storage::{DbPool, SqliteStockRepository, SqliteQuoteRepository, init_db};
+use storage::{DbPool, SqliteStockRepository, SqliteQuoteRepository, WatchlistRepository, init_db};
 use sqlx::sqlite::SqlitePoolOptions;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{State, Emitter};
 
 #[tauri::command]
 async fn get_stock_list(state: State<'_, AppState>) -> Result<Vec<Stock>, ApiError> {
@@ -184,6 +184,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let stock_repo: Arc<dyn storage::StockRepository> = Arc::new(SqliteStockRepository::new(pool.clone()));
     let quote_repo: Arc<dyn storage::QuoteRepository> = Arc::new(SqliteQuoteRepository::new(pool.clone()));
+    let watchlist_repo = WatchlistRepository::new(pool.clone());
     
     // Seed minimal stock registry for name→ticker lookup (no price data)
     seed_stock_registry(&pool).await?;
@@ -191,6 +192,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_service = data_fetcher::DataService::new_offline(Some(pool.clone()));
     // Start background real-time sector data refresh (every 5 seconds)
     data_service.start_realtime_refresh();
+
+    // ── WebSocket real-time push (Sina Finance) ──
+    // Collect all known stock tickers from the seed registry, convert to "CODE.EXCH" format
+    let mut all_tickers: Vec<String> = Vec::new();
+    // Query the stock repository for all stocks
+    if let Ok(stocks) = stock_repo.get_all().await {
+        for stock in &stocks {
+            all_tickers.push(stock.id.clone());
+        }
+    }
+    tracing::info!("Starting WS client with {} subscribed tickers", all_tickers.len());
+    // Start WS background task; returns a broadcast receiver we'll use for Tauri event emission
+    let mut ws_event_rx = data_service.start_ws_client(&all_tickers);
 
     // P0-5: Initialize CacheManager and clean expired on startup
     let cache_manager = data_fetcher::CacheManager::new(Some(pool.clone()));
@@ -214,11 +228,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         quote_repo,
         data_service,
         cache_manager,
+        watchlist_repo,
     };
     
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(state)
+        .setup(move |app| {
+            let handle = app.handle().clone();
+
+            // ── Spawn WS → Tauri event bridge ──
+            // Forward every WebSocket price update to the frontend as a
+            // "realtime-quote" event. The frontend can listen with:
+            //   import { listen } from '@tauri-apps/api/event';
+            //   listen('realtime-quote', (event) => { ... });
+            tokio::spawn(async move {
+                loop {
+                    match ws_event_rx.recv().await {
+                        Ok(price) => {
+                            if let Err(e) = handle.emit("realtime-quote", &price) {
+                                tracing::warn!("[WS→Tauri] Event emit failed: {}", e);
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::error!("[WS→Tauri] Broadcast channel closed, stopping event bridge");
+                            break;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::warn!("[WS→Tauri] Lagged by {} messages", n);
+                            continue;
+                        }
+                    }
+                }
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_stock_list,
             search_stocks,
@@ -252,6 +297,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::deepseek_commands::analyze_all,
             api_tauri_commands::deepseek_commands::analyze_psychology,
             api_tauri_commands::deepseek_commands::design_great_wall,
+            api_tauri_commands::commands_v2::watchlist_list,
+            api_tauri_commands::commands_v2::watchlist_add,
+            api_tauri_commands::commands_v2::watchlist_remove,
+            api_tauri_commands::commands_v2::watchlist_check,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

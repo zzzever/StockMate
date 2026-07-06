@@ -1,64 +1,63 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   日台紙媒設計系統 — 日本経済新聞 / 工商時報 風格
+   StockMate Design System — Modern Finance Theme
+   Reference: TradingView (dark/light)
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  --ink: 0 0% 12%;
-  --ink-light: 0 0% 28%;
-  --red: 350 75% 38%;           /* 日本紅 #c41e3a */
+  --ink: 220 10% 16%;
+  --ink-light: 220 10% 30%;
+  --red: 350 75% 38%;
   --red-bright: 350 85% 48%;
   --red-dark: 350 70% 22%;
-  --gold: 42 75% 35%;           /* 金色 */
+  --gold: 42 75% 35%;
   --gold-light: 42 70% 55%;
-  --paper: 36 33% 97%;          /* 新聞紙奶油色 */
-  --paper-dark: 36 20% 92%;
+  --paper: 220 10% 97%;
+  --paper-dark: 220 10% 92%;
   --white: 0 0% 100%;
   --black: 0 0% 5%;
 
-  --bg-root: 36 33% 97%;
+  --bg-root: 220 15% 97%;
   --bg-sidebar: 0 0% 100%;
   --bg-topbar: 0 0% 100%;
   --bg-card: 0 0% 100%;
-  --bg-input: 0 0% 100%;
+  --bg-input: 220 15% 97%;
 
-  --text-primary: 0 0% 12%;
-  --text-secondary: 0 0% 35%;
-  --text-tertiary: 0 0% 55%;
+  --text-primary: 220 15% 16%;
+  --text-secondary: 220 8% 48%;
+  --text-tertiary: 220 8% 60%;
   --text-inverse: 0 0% 100%;
 
-  --border-default: 36 20% 82%;
-  --border-subtle: 36 20% 88%;
-  --border-strong: 0 0% 25%;
+  --border-default: 220 15% 86%;
+  --border-subtle: 220 15% 92%;
+  --border-strong: 220 10% 30%;
   --border-red: 350 75% 38%;
 
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.04);
   --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.06);
   --shadow-md: 0 4px 8px rgb(0 0 0 / 0.08);
 
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
   --price-up: 350 75% 38%;
-  --price-down: 195 75% 22%;
+  --price-down: 145 55% 30%;
   --price-up-bg: 350 75% 95%;
-  --price-down-bg: 195 75% 94%;
-  --color-up: #c41e3a;        /* 红涨 — 日本紅, matches --red */
-  --color-down: #157a73;      /* 绿跌 — deep teal green, matches --price-down */
+  --price-down-bg: 145 55% 94%;
+  --color-up: #c41e3a;
+  --color-down: #219653;
 
   --sidebar-width: 220px;
   --sidebar-collapsed: 56px;
   --sidebar-blur: none;
-  --chart-grid: 36 20% 82%;
-  --chart-text: 0 0% 28%;
-  --chart-border: 0 0% 20%;
+  --chart-grid: 220 15% 86%;
+  --chart-text: 220 10% 30%;
+  --chart-border: 220 10% 22%;
 
   /* Accent (persisted by useAppStore, applied by AccentColorPicker) */
   --accent: 350 75% 38%;
@@ -68,38 +67,38 @@
   color-scheme: light;
 }
 
-/* ── Dark: 深夜報紙風格 ── */
+/* ── Dark Mode ── */
 .dark {
-  --ink: 36 20% 92%;
-  --ink-light: 36 20% 78%;
-  --paper: 0 0% 8%;
-  --paper-dark: 0 0% 6%;
+  --ink: 220 12% 88%;
+  --ink-light: 220 12% 70%;
+  --paper: 220 20% 8%;
+  --paper-dark: 220 20% 6%;
 
-  --bg-root: 0 0% 5%;
-  --bg-sidebar: 0 0% 8%;
-  --bg-topbar: 0 0% 10%;
-  --bg-card: 0 0% 10%;
-  --bg-input: 0 0% 12%;
+  --bg-root: 220 25% 6%;
+  --bg-sidebar: 220 20% 9%;
+  --bg-topbar: 220 20% 11%;
+  --bg-card: 220 20% 12%;
+  --bg-input: 220 15% 14%;
 
-  --text-primary: 36 20% 88%;
-  --text-secondary: 36 15% 65%;
-  --text-tertiary: 36 10% 45%;
-  --text-inverse: 0 0% 5%;
+  --text-primary: 220 15% 88%;
+  --text-secondary: 220 12% 60%;
+  --text-tertiary: 220 10% 45%;
+  --text-inverse: 0 0% 6%;
 
-  --border-default: 0 0% 20%;
-  --border-subtle: 0 0% 15%;
-  --border-strong: 36 15% 40%;
+  --border-default: 220 10% 22%;
+  --border-subtle: 220 10% 16%;
+  --border-strong: 220 10% 35%;
 
   --price-up: 350 70% 55%;
-  --price-down: 195 65% 50%;
+  --price-down: 145 55% 45%;
   --price-up-bg: 350 50% 12%;
-  --price-down-bg: 195 50% 10%;
-  --color-up: #e8607a;        /* 红涨 — brighter red for dark mode */
-  --color-down: #3fb5ad;      /* 绿跌 — brighter teal for dark mode */
+  --price-down-bg: 145 50% 10%;
+  --color-up: #e8607a;
+  --color-down: #4caf7d;
 
-  --chart-grid: 0 0% 18%;
-  --chart-text: 36 15% 62%;
-  --chart-border: 0 0% 22%;
+  --chart-grid: 220 5% 16%;
+  --chart-text: 220 12% 62%;
+  --chart-border: 220 5% 22%;
 
   --accent: 350 70% 52%;
   --accent-subtle: 350 50% 15%;
@@ -109,55 +108,55 @@
 }
 
 /* ═══════════════════════════════════════════════════════
-   Base — 新聞紙質感
+   Base
    ═══════════════════════════════════════════════════════ */
 
 body {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif;
+  font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
   background: hsl(var(--bg-root));
   color: hsl(var(--text-primary));
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
 }
 
 /* ═══════════════════════════════════════════════════════
-   Sidebar — 報紙欄目風格
+   Layout Components
    ═══════════════════════════════════════════════════════ */
 
+/* Sidebar */
 .sidebar-glass {
   background: hsl(var(--bg-sidebar));
-  border-right: 3px solid hsl(var(--ink));
+  border-right: 1px solid hsl(var(--border-default));
 }
-.dark .sidebar-glass { border-right-color: hsl(var(--red-dark)); }
 
-/* ═══════════════════════════════════════════════════════
-   Topbar — 報頭風格
-   ═══════════════════════════════════════════════════════ */
-
+/* TopBar */
 .topbar-glass {
   background: hsl(var(--bg-topbar));
-  border-bottom: 3px double hsl(var(--ink));
+  border-bottom: 1px solid hsl(var(--border-default));
 }
 
-/* ═══════════════════════════════════════════════════════
-   Cards — 報紙區塊
-   ═══════════════════════════════════════════════════════ */
-
+/* Cards */
 .glass-card {
   background: hsl(var(--bg-card));
-  border: 1px solid hsl(var(--border-strong));
+  border: 1px solid hsl(var(--border-default));
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
 }
-.glass-card:hover { border-color: hsl(var(--red)); }
+.glass-card:hover {
+  border-color: hsl(var(--border-strong));
+}
 .glass-card-compact {
   background: hsl(var(--bg-card));
-  border: 1px solid hsl(var(--border-default));
+  border: 1px solid hsl(var(--border-subtle));
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-xs);
 }
+
 .sticky-price-bar {
   position: sticky; top: 0; z-index: 30;
   background: hsl(var(--bg-card));
-  border-bottom: 3px double hsl(var(--ink));
+  border-bottom: 1px solid hsl(var(--border-default));
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -166,25 +165,28 @@ body {
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: hsl(var(--paper-dark)); }
-::-webkit-scrollbar-thumb { background: hsl(var(--ink) / 0.25); }
+::-webkit-scrollbar-thumb { background: hsl(var(--ink) / 0.25); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(var(--ink) / 0.45); }
 
 /* ═══════════════════════════════════════════════════════
    Typography
    ═══════════════════════════════════════════════════════ */
 
+/* Monospace numbers (for financial figures) */
 .font-mono-nums {
   font-variant-numeric: tabular-nums;
-  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
 }
-h1, h2, h3, .newspaper-heading {
+
+/* Serif headings (titles only) */
+h1, h2, h3, .heading-serif {
   font-family: 'Noto Serif SC', serif;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 /* ═══════════════════════════════════════════════════════
-   Price Colors — 紅漲綠跌 (台灣/中國習慣)
+   Price Colors — 紅漲綠跌 (Chinese convention)
    ═══════════════════════════════════════════════════════ */
 
 .price-up { color: hsl(var(--price-up)); }
@@ -195,7 +197,7 @@ h1, h2, h3, .newspaper-heading {
    ═══════════════════════════════════════════════════════ */
 
 .btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
-.progress-bar-track { height: 4px; background: hsl(var(--border-subtle)); overflow: hidden; }
+.progress-bar-track { height: 4px; background: hsl(var(--border-subtle)); overflow: hidden; border-radius: 2px; }
 .progress-bar-fill { height: 100%; transition: width 0.6s ease-out; }
 
 @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -207,289 +209,8 @@ h1, h2, h3, .newspaper-heading {
 }
 
 @keyframes skeleton-pulse { 0%,100%{opacity:0.2} 50%{opacity:0.45} }
-.skeleton { animation: skeleton-pulse 1.5s ease-in-out infinite; background: hsl(var(--border-subtle)); }
+.skeleton { animation: skeleton-pulse 1.5s ease-in-out infinite; background: hsl(var(--border-subtle)); border-radius: var(--radius-sm); }
 
 .table-dense th, .table-dense td { padding: 0.25rem 0.5rem; font-size: 0.6875rem; line-height: 1.25; }
 .sparkline-container { width: 100%; height: 28px; }
 .data-label-xs { font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; font-weight: 700; }
-
-/* ── 報紙分隔線 ── */
-.newspaper-divider {
-  border: none;
-  border-top: 1px solid hsl(var(--ink) / 0.3);
-  margin: 0.5rem 0;
-}
-.newspaper-divider-double {
-  border: none;
-  border-top: 3px double hsl(var(--ink) / 0.4);
-  margin: 0.75rem 0;
-}
-
-/* ═══════════════════════════════════════════════════════
-   日式「碎」美學 — 10 Design Principles
-   ═══════════════════════════════════════════════════════ */
-
-/* 1. 碎元素 — fragmented borders, torn edges */
-.fragment-border {
-  border: 2px solid hsl(var(--ink));
-  clip-path: polygon(0% 3px, 3px 0%, calc(100% - 5px) 0%, 100% 5px, 100% calc(100% - 3px), calc(100% - 3px) 100%, 2px 100%, 0% calc(100% - 2px));
-}
-.fragment-top {
-  position: relative;
-}
-.fragment-top::before {
-  content: ''; position: absolute; top: 0; left: 8px; right: 8px;
-  height: 1px;
-  background: repeating-linear-gradient(90deg, hsl(var(--ink)) 0px, hsl(var(--ink)) 8px, transparent 8px, transparent 14px);
-}
-
-/* 2. 手绘 — rough sketch borders & underlines */
-.sketch-border {
-  border: 2px solid hsl(var(--ink));
-  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
-}
-.sketch-underline {
-  text-decoration: none;
-  background: linear-gradient(transparent 65%, hsl(var(--red) / 0.25) 65%, hsl(var(--red) / 0.25) 85%, transparent 85%);
-  padding-bottom: 2px;
-}
-
-/* 3. 縱横交錯 — vertical + horizontal text mix */
-.vertical-text {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  letter-spacing: 0.15em;
-  line-height: 1.8;
-}
-.horizontal-vertical-layout {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: start;
-  gap: 1rem;
-}
-
-/* 4. 網格系統 — modular grid */
-.grid-jp {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-}
-.grid-jp-8 { gap: 8px; }
-.grid-jp-16 { gap: 16px; }
-
-/* 5. 打破常規 — break rules: overflow, offset, rotation */
-.break-out {
-  margin-left: -12px; margin-right: -12px;
-}
-.offset-tag {
-  position: relative; top: -0.5em; left: -0.25em;
-  transform: rotate(-3deg);
-  display: inline-block;
-}
-
-/* 6. 疊印 — overprint with multiply blend */
-.overprint {
-  mix-blend-mode: multiply;
-  opacity: 0.85;
-}
-.stamp-seal {
-  display: inline-block;
-  border: 3px double hsl(var(--red));
-  color: hsl(var(--red));
-  padding: 0.25rem 0.75rem;
-  transform: rotate(-5deg);
-  font-weight: 900;
-  letter-spacing: 0.2em;
-  opacity: 0.8;
-}
-
-/* 7. 留白 — generous negative space */
-.ma {
-  max-width: 720px;
-  margin-left: auto; margin-right: auto;
-}
-.ma-wide { max-width: 960px; }
-.p-breath { padding: 2rem 3rem; }
-
-/* 8. 横竖對比 — horizontal-vertical contrast blocks */
-.hv-contrast {
-  display: flex;
-  align-items: flex-start;
-  gap: 1.5rem;
-}
-.hv-contrast > .v-label {
-  writing-mode: vertical-rl;
-  font-size: 0.75rem;
-  font-weight: 900;
-  letter-spacing: 0.3em;
-  color: hsl(var(--text-tertiary));
-  flex-shrink: 0;
-}
-.hv-contrast > .h-content {
-  flex: 1;
-}
-
-/* 9. 非對稱平衡 — asymmetric balance (3:5 golden ratio) */
-.asym-grid {
-  display: grid;
-  grid-template-columns: 3fr 5fr;
-  gap: 1rem;
-}
-.asym-grid-flip {
-  display: grid;
-  grid-template-columns: 5fr 3fr;
-  gap: 1rem;
-}
-
-/* ═══════════════════════════════════════════════════════
-   和柄・裝飾圖形 — 日本の伝統文様と幾何学模様
-   ═══════════════════════════════════════════════════════ */
-
-/* 青海波 (Seigaiha) — wave pattern background */
-.bg-seigaiha {
-  background:
-    radial-gradient(circle at 50% 0%, transparent 35%, hsl(var(--red) / 0.04) 35%, hsl(var(--red) / 0.04) 45%, transparent 45%),
-    radial-gradient(circle at 50% 100%, transparent 35%, hsl(var(--ink) / 0.03) 35%, hsl(var(--ink) / 0.03) 45%, transparent 45%),
-    radial-gradient(circle at 100% 50%, transparent 35%, hsl(var(--red) / 0.04) 35%, hsl(var(--red) / 0.04) 45%, transparent 45%),
-    radial-gradient(circle at 0% 50%, transparent 35%, hsl(var(--ink) / 0.03) 35%, hsl(var(--ink) / 0.03) 45%, transparent 45%);
-  background-size: 40px 40px;
-  background-position: 0 0, 20px 20px, 20px 0, 0 20px;
-}
-
-/* 市松 (Ichimatsu) — checkered pattern */
-.bg-ichimatsu {
-  background-image:
-    linear-gradient(45deg, hsl(var(--ink) / 0.03) 25%, transparent 25%),
-    linear-gradient(-45deg, hsl(var(--ink) / 0.03) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, hsl(var(--ink) / 0.03) 75%),
-    linear-gradient(-45deg, transparent 75%, hsl(var(--ink) / 0.03) 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
-}
-
-/* 麻の葉 (Asanoha) — hemp leaf geometric */
-.bg-asanoha {
-  background-image:
-    linear-gradient(60deg, hsl(var(--red) / 0.03) 1px, transparent 1px),
-    linear-gradient(-60deg, hsl(var(--red) / 0.03) 1px, transparent 1px),
-    linear-gradient(0deg, hsl(var(--ink) / 0.02) 1px, transparent 1px);
-  background-size: 30px 52px;
-}
-
-/* ── Large watermark character — 空 (ku/void) ── */
-.watermark-ku {
-  position: relative;
-}
-.watermark-ku::after {
-  content: '空';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 20rem;
-  font-family: 'Noto Serif SC', serif;
-  font-weight: 900;
-  color: hsl(var(--ink) / 0.025);
-  pointer-events: none;
-  z-index: 0;
-  white-space: nowrap;
-}
-
-/* ── Decorative corner bracket ── */
-.corner-bracket {
-  position: relative;
-}
-.corner-bracket::before, .corner-bracket::after {
-  content: '';
-  position: absolute;
-  width: 16px; height: 16px;
-  border-color: hsl(var(--red) / 0.3);
-  border-style: solid;
-}
-.corner-bracket::before { top: 4px; left: 4px; border-width: 2px 0 0 2px; }
-.corner-bracket::after { bottom: 4px; right: 4px; border-width: 0 2px 2px 0; }
-
-/* ── Decorative circle cluster ── */
-.circle-cluster {
-  display: flex; gap: 4px; align-items: center;
-}
-.circle-cluster span { border-radius: 50%; display: block; }
-.circle-cluster .c1 { width: 10px; height: 10px; background: hsl(var(--red) / 0.6); }
-.circle-cluster .c2 { width: 6px; height: 6px; background: hsl(var(--ink) / 0.4); }
-.circle-cluster .c3 { width: 14px; height: 14px; border: 1.5px solid hsl(var(--ink) / 0.3); background: transparent; }
-
-/* ── Ink splash decorative divider ── */
-.ink-splash {
-  height: 2px;
-  background: linear-gradient(90deg,
-    transparent 0%, hsl(var(--red) / 0.4) 20%, hsl(var(--ink) / 0.5) 40%,
-    hsl(var(--red) / 0.2) 60%, transparent 100%);
-  position: relative;
-  margin: 1.5rem 0;
-}
-.ink-splash::after {
-  content: '◆';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 8px;
-  color: hsl(var(--red) / 0.5);
-  background: hsl(var(--bg-root));
-  padding: 0 6px;
-}
-
-/* ── Enso circle (円相) — hand-drawn imperfect circle ── */
-.enso {
-  width: 120px; height: 120px;
-  border: 2px solid hsl(var(--ink) / 0.12);
-  border-radius: 47% 53% 51% 49% / 48% 52% 49% 51%;
-  display: flex; align-items: center; justify-content: center;
-}
-
-/* ── Vertical rule line with dot ── */
-.v-rule {
-  width: 1px; height: 100%;
-  background: linear-gradient(180deg, transparent 0%, hsl(var(--ink) / 0.15) 15%, hsl(var(--ink) / 0.15) 85%, transparent 100%);
-  position: relative;
-  flex-shrink: 0;
-}
-.v-rule::after {
-  content: '';
-  position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  width: 5px; height: 5px;
-  border-radius: 50%;
-  background: hsl(var(--red) / 0.5);
-}
-
-/* ── Triple line accent ── */
-.triple-line { display: flex; flex-direction: column; gap: 3px; width: 24px; }
-.triple-line span { height: 1px; }
-.triple-line .t1 { background: hsl(var(--red) / 0.5); width: 100%; }
-.triple-line .t2 { background: hsl(var(--ink) / 0.3); width: 60%; }
-.triple-line .t3 { background: hsl(var(--red) / 0.5); width: 100%; }
-
-/* 10. 善用圖形 — decorative shapes */
-.shape-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-.shape-diamond { width: 8px; height: 8px; transform: rotate(45deg); display: inline-block; }
-.shape-triangle { width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid currentColor; display: inline-block; }
-.decorative-corner {
-  position: relative;
-}
-.decorative-corner::after {
-  content: '◆';
-  position: absolute;
-  bottom: -6px; right: -6px;
-  font-size: 10px;
-  color: hsl(var(--red));
-  opacity: 0.5;
-}
-
-/* Hand-drawn circle stamp */
-.hand-circle {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 52px; height: 52px;
-  border: 2.5px solid hsl(var(--red));
-  border-radius: 48% 52% 55% 45% / 45% 48% 52% 55%;
-  font-size: 0.6rem; font-weight: 900; color: hsl(var(--red));
-  transform: rotate(-8deg);
-}

@@ -348,6 +348,100 @@ pub async fn generate_card_data(stock_id: String, _state: State<'_, AppState>) -
 }
 
 
+// ============================================================
+// Watchlist Commands
+// ============================================================
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WatchlistQuoteItem {
+    pub stock_id: String,
+    pub stock_code: String,
+    pub stock_name: String,
+    pub exchange: String,
+    pub added_at: String,
+    pub price: f64,
+    pub change: f64,
+    pub change_percent: f64,
+    pub volume: f64,
+    pub amount: f64,
+    pub high: f64,
+    pub low: f64,
+    pub open: f64,
+    pub prev_close: f64,
+    pub turnover_rate: f64,
+}
+
+#[tauri::command]
+pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQuoteItem>, domain::ApiError> {
+    eprintln!("[CMD] watchlist_list: fetching watchlist");
+    let items = state.watchlist_repo.get_all().await.map_err(|e| domain::ApiError {
+        code: 500, message: format!("Failed to fetch watchlist: {}", e), details: None,
+    })?;
+
+    // Fetch batch realtime prices
+    let codes: Vec<String> = items.iter().map(|i| i.stock_code.clone()).collect();
+    let codes_refs: Vec<&str> = codes.iter().map(|s| s.as_str()).collect();
+    let prices = if codes_refs.is_empty() {
+        vec![]
+    } else {
+        data_fetcher::market_data::fetch_realtime_batch(&codes_refs).await
+    };
+
+    let price_map: std::collections::HashMap<String, &data_fetcher::market_data::PriceData> =
+        prices.iter().map(|p| (p.ticker.clone(), p)).collect();
+
+    let result: Vec<WatchlistQuoteItem> = items.iter().map(|item| {
+        let price = price_map.get(&item.stock_code);
+        WatchlistQuoteItem {
+            stock_id: item.stock_id.clone(),
+            stock_code: item.stock_code.clone(),
+            stock_name: item.stock_name.clone(),
+            exchange: item.exchange.clone(),
+            added_at: item.added_at.format("%Y-%m-%d").to_string(),
+            price: price.map(|p| p.current_price).unwrap_or(0.0),
+            change: price.map(|p| p.change).unwrap_or(0.0),
+            change_percent: price.map(|p| p.change_percent).unwrap_or(0.0),
+            volume: price.map(|p| p.volume as f64).unwrap_or(0.0),
+            amount: price.map(|p| p.amount).unwrap_or(0.0),
+            high: price.map(|p| p.high).unwrap_or(0.0),
+            low: price.map(|p| p.low).unwrap_or(0.0),
+            open: price.map(|p| p.open).unwrap_or(0.0),
+            prev_close: price.map(|p| p.prev_close).unwrap_or(0.0),
+            turnover_rate: price.map(|p| p.turnover_rate).unwrap_or(0.0),
+        }
+    }).collect();
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn watchlist_add(symbol: String, state: State<'_, AppState>) -> Result<(), domain::ApiError> {
+    let ticker = symbol.split('.').next().unwrap_or(&symbol).to_string();
+    eprintln!("[CMD] watchlist_add: symbol={}", ticker);
+    state.watchlist_repo.add(&ticker, None, None, None).await.map_err(|e| domain::ApiError {
+        code: 500, message: format!("Failed to add to watchlist: {}", e), details: None,
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn watchlist_remove(symbol: String, state: State<'_, AppState>) -> Result<(), domain::ApiError> {
+    let ticker = symbol.split('.').next().unwrap_or(&symbol).to_string();
+    eprintln!("[CMD] watchlist_remove: symbol={}", ticker);
+    state.watchlist_repo.remove(&ticker).await.map_err(|e| domain::ApiError {
+        code: 500, message: format!("Failed to remove from watchlist: {}", e), details: None,
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn watchlist_check(symbol: String, state: State<'_, AppState>) -> Result<bool, domain::ApiError> {
+    let ticker = symbol.split('.').next().unwrap_or(&symbol).to_string();
+    state.watchlist_repo.contains(&ticker).await.map_err(|e| domain::ApiError {
+        code: 500, message: format!("Failed to check watchlist: {}", e), details: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

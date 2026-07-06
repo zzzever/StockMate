@@ -13,12 +13,15 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', 'Inter', '"Helvetica Neue"', 'sans-serif'],
-        mono: ['"SF Mono"', '"Fira Code"', '"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        sans: ['Inter', 'Noto Sans SC', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SF Mono', 'Fira Code', 'ui-monospace', 'monospace'],
+        serif: ['Noto Serif SC', 'serif'],
       },
       borderRadius: {
         'xl': 'var(--radius-xl)',
         'lg': 'var(--radius-lg)',
+        'md': 'var(--radius-md)',
+        'sm': 'var(--radius-sm)',
       },
     },
   },

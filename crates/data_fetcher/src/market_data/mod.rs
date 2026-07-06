@@ -4,6 +4,7 @@
 //! - Tencent: A-share (Shanghai/Shenzhen/Beijing) real-time prices and K-line via QQ Finance API
 //! - YahooFinance: US stock prices via Yahoo Finance chart API
 
+pub mod ws;     // Sina Finance WebSocket real-time push
 pub mod yahoo;
 pub mod tencent; // A-share (Shanghai/Shenzhen) real-time prices and K-line via QQ Finance API
 

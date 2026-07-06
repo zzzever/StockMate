@@ -273,13 +273,13 @@ export default function IndicatorLabPage() {
             style={{ color: 'hsl(var(--ink))' }}>
             <ArrowLeft size={18} /> 返回
           </button>
-          <h1 className="text-2xl font-black tracking-wider"
-            style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}>
+          <h1 className="heading-serif text-2xl font-bold tracking-tight"
+            style={{ color: 'hsl(var(--text-primary))' }}>
             支撑线
           </h1>
           {stockId && (
-            <span className="text-xs font-mono font-bold border-2 px-2 py-0.5"
-              style={{ borderColor: 'hsl(var(--ink))' }}>
+            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md"
+              style={{ background: 'hsl(var(--bg-input))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>
               {stockDetail?.name || stockId}
             </span>
           )}

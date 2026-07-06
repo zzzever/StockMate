@@ -323,6 +323,25 @@ export interface MarketEnvironment {
   is_offline: boolean;
 }
 
+// ── Watchlist types ──
+export interface WatchlistQuoteItem {
+  stock_id: string;
+  stock_code: string;
+  stock_name: string;
+  exchange: string;
+  added_at: string;
+  price: number;
+  change: number;
+  change_percent: number;
+  volume: number;
+  amount: number;
+  high: number;
+  low: number;
+  open: number;
+  prev_close: number;
+  turnover_rate: number;
+}
+
 export interface AnalyzeAllResponse {
   prediction: DeepSeekPrediction;
   technical: DimensionScore;

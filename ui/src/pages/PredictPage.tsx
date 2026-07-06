@@ -152,15 +152,15 @@ export default function PredictPage() {
             style={{ color: 'hsl(var(--ink))' }}>
             <ArrowLeft size={18} /> 返回
           </button>
-          <h1 className="text-2xl font-black tracking-wider" style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}>
+          <h1 className="heading-serif text-2xl font-bold tracking-tight" style={{ color: 'hsl(var(--text-primary))' }}>
             AI 预测中心
           </h1>
-          {stockId && <span className="text-xs font-mono font-bold border-2 px-2 py-0.5" style={{ borderColor: 'hsl(var(--ink))' }}>{stockId}</span>}
+          {stockId && <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md" style={{ background: 'hsl(var(--bg-input))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>{stockId}</span>}
           {/* History date selector */}
           {historyDates.length > 0 && (
             <select value={selectedDate} onChange={(e) => handleHistorySelect(e.target.value)}
-              className="text-xs font-bold border-2 px-2 py-1 bg-transparent cursor-pointer"
-              style={{ borderColor: 'hsl(var(--ink))', color: 'hsl(var(--ink))' }}>
+              className="text-xs font-medium px-2 py-1 rounded-md bg-transparent cursor-pointer"
+              style={{ color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>
               <option value="">实时数据</option>
               {historyDates.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
@@ -280,7 +280,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
               {data.target_price && <span>目标价 <b className="text-lg">{data.target_price}</b></span>}
               <span>周期 <b>{data.time_frame}</b></span>
             </div>
-            <div className="newspaper-divider w-full" />
+            <div className="w-full" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }} />
             <p className="text-sm leading-relaxed max-w-2xl text-center" style={{ color: 'hsl(var(--text-secondary))' }}>{data.reasoning}</p>
           </>
         ) : (
@@ -463,46 +463,49 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
         </div>
       ) : data ? (
         <div className="flex flex-col items-center gap-3 w-full max-w-[480px]">
-          {/* Card — 4:3 vertical */}
+          {/* Card — modern finance report card */}
           <div ref={cardRef}
-            className="relative w-full bg-cover border-4 border-double shadow-2xl"
+            className="relative w-full rounded-xl shadow-lg overflow-hidden"
             style={{
               aspectRatio: '3/4',
-              background: 'linear-gradient(180deg, #fefdfa 0%, #fdf8f0 15%, #faf3e6 50%, #fdf8f0 85%, #fefdfa 100%)',
-              borderColor: '#8b1a1a',
-              fontFamily: "'Noto Serif SC', serif",
+              background: 'hsl(var(--bg-card))',
+              border: '1px solid hsl(var(--border-default))',
             }}
           >
-            {/* Top decorative line */}
-            <div className="absolute top-3 left-4 right-4 h-1 bg-gradient-to-r from-transparent via-red-800 to-transparent" />
+            {/* Accent top bar */}
+            <div style={{ height: 4, background: 'hsl(var(--accent))' }} />
 
             {/* Header: stock name + ticker */}
-            <div className="text-center pt-8 pb-2 px-6">
-              <div className="text-[10px] font-black tracking-[0.3em] text-red-800/60 mb-1">STOCKMATE · 个股分析</div>
-              <h2 className="text-3xl font-black tracking-wider text-red-950">{data.name}</h2>
-              <p className="text-sm font-bold text-red-700/60 tracking-widest mt-0.5">{data.ticker}</p>
+            <div className="text-center pt-6 pb-3 px-6">
+              <div className="text-[10px] font-bold tracking-widest mb-1" style={{ color: 'hsl(var(--text-tertiary))' }}>STOCKMATE · 个股分析</div>
+              <h2 className="heading-serif text-3xl font-bold tracking-tight" style={{ color: 'hsl(var(--text-primary))' }}>{data.name}</h2>
+              <p className="font-mono-nums text-sm font-medium mt-0.5" style={{ color: 'hsl(var(--text-secondary))' }}>{data.ticker}</p>
             </div>
 
             {/* Price + change */}
             <div className="text-center py-3 px-6">
-              <div className={`text-5xl font-black tracking-tighter ${(data.change_percent ?? 0) >= 0 ? 'text-red-700' : 'text-blue-700'}`}>
+              <div className={`font-mono-nums text-5xl font-bold tracking-tight ${(data.change_percent ?? 0) >= 0 ? 'price-up' : 'price-down'}`}>
                 ¥{fmtPrice(data.price)}
               </div>
-              <div className={`text-xl font-black mt-1 ${(data.change_percent ?? 0) >= 0 ? 'text-red-600' : 'text-blue-600'}`}>
+              <div className={`font-mono-nums text-xl font-bold mt-1 ${(data.change_percent ?? 0) >= 0 ? 'price-up' : 'price-down'}`}>
                 {(data.change_percent ?? 0) >= 0 ? '+' : ''}{fmtPct(data.change_percent)}%
               </div>
             </div>
 
-            {/* Signal stamp — overprint effect */}
+            {/* Signal badge */}
             <div className="flex justify-center py-2">
-              <div className={`stamp-seal ${data.buy_signal ? '' : 'opacity-30'}`} style={{ borderColor: data.buy_signal ? 'hsl(var(--red))' : 'hsl(var(--text-tertiary))', color: data.buy_signal ? 'hsl(var(--red))' : 'hsl(var(--text-tertiary))' }}>
+              <span className="inline-block px-4 py-1.5 text-sm font-bold rounded-lg"
+                style={{
+                  background: data.buy_signal ? 'hsl(var(--price-up-bg))' : 'hsl(var(--border-subtle))',
+                  color: data.buy_signal ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))',
+                }}>
                 {data.buy_signal ? '买入信号' : '观望'}
-              </div>
+              </span>
             </div>
 
             {/* Recommendation */}
             <div className="px-6 py-3 text-center">
-              <p className="text-sm font-bold leading-relaxed text-slate-800" style={{ fontFamily: "'Noto Serif SC', serif" }}>
+              <p className="text-sm font-medium leading-relaxed" style={{ color: 'hsl(var(--text-primary))' }}>
                 「{data.recommendation}」
               </p>
             </div>
@@ -510,26 +513,29 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
             {/* Tags */}
             <div className="flex flex-wrap justify-center gap-1.5 px-6 py-2">
               {(data.tags ?? []).map((t, i) => (
-                <span key={i} className="text-xs font-black px-2.5 py-1 border-2 bg-red-50 text-red-800 tracking-wider"
-                  style={{ borderColor: '#8b1a1a', borderRadius: 2 }}>
+                <span key={i} className="text-xs font-medium px-2.5 py-1 rounded-md"
+                  style={{
+                    background: 'hsl(var(--accent-subtle))',
+                    color: 'hsl(var(--accent))',
+                    border: '1px solid hsl(var(--border-default))',
+                  }}>
                   #{t}
                 </span>
               ))}
             </div>
 
             {/* Footer */}
-            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between text-[10px] text-red-800/40 font-bold tracking-widest">
-              <span>{data.late_rush ? '⚡ 尾盘抢筹' : ''}</span>
+            <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between text-[10px] font-medium"
+              style={{ color: 'hsl(var(--text-tertiary))' }}>
+              <span>{data.late_rush ? '尾盘抢筹' : ''}</span>
               <span>{data.generated_at?.slice(0, 10)}</span>
             </div>
-
-            {/* Bottom decorative line */}
-            <div className="absolute bottom-3 left-4 right-4 h-1 bg-gradient-to-r from-transparent via-red-800 to-transparent" />
           </div>
 
           {/* Export button */}
           <button onClick={handleExport} disabled={exporting}
-            className="flex items-center gap-2 px-5 py-2 border-2 border-red-800 text-red-800 font-black text-sm tracking-wider hover:bg-red-50 transition-colors disabled:opacity-50">
+            className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            style={{ background: 'hsl(var(--bg-card))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>
             {exporting ? '导出中…' : '导出为图片'}
           </button>
         </div>

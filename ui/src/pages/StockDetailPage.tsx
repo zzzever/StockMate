@@ -4,10 +4,10 @@ import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, ty
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, Building2, DollarSign, TrendingUp, BarChart3,
   RefreshCw, Brain, ChevronDown, ChevronUp, Activity, Shield, Target, AlertTriangle,
-  Maximize2, Minimize2, X,
+  Maximize2, Minimize2, X, Star,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStockFundFlow, useRealtimeQuote, useIntraday, useDeepSeekConfig, useAnalyzeStockWithAI, useGenerateStrategyWithAI, useSupportResistance } from '@/hooks/useTauriQuery';
+import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStockFundFlow, useRealtimeQuote, useIntraday, useDeepSeekConfig, useAnalyzeStockWithAI, useGenerateStrategyWithAI, useSupportResistance, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove } from '@/hooks/useTauriQuery';
 import { IntradayChart } from '@/components/IntradayChart';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume, fmtAmount } from '@/lib/format';
@@ -566,7 +566,7 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
         <span style={{ color: T.ma10Color, fontWeight: 900 }}>━ MA10</span>
         <span style={{ color: T.ma20Color, fontWeight: 900 }}>━ MA20</span>
         <span style={{ color: T.ma60Color, fontWeight: 900 }}>━ MA60</span>
-        <span className="shape-diamond ml-auto mr-0.5" style={{ width: 5, height: 5, background: T.bbUpperColor ?? '#ff6b6b' }} />
+        <span className="ml-auto mr-0.5 inline-block rounded-sm" style={{ width: 8, height: 8, background: T.bbUpperColor ?? '#ff6b6b' }} />
         <span style={{ color: T.bbUpperColor ?? '#ff6b6b', fontWeight: 900 }}>BOLL</span>
       </div>
       <div ref={mainRef} className="flex-1" />
@@ -773,6 +773,29 @@ export default function StockDetailPage() {
   const { data: deepseekConfig } = useDeepSeekConfig();
   const { data: aiAnalysis, isLoading: aiLoading, error: aiError, refetch: analyzeAI } = useAnalyzeStockWithAI(effectiveCode);
 
+  // Watchlist toggle
+  const tickerCode = effectiveCode.split('.')[0];
+  const { data: isInWatchlist } = useWatchlistCheck(tickerCode);
+  const watchlistAdd = useWatchlistAdd();
+  const watchlistRemove = useWatchlistRemove();
+  const handleWatchlistToggle = () => {
+    if (isInWatchlist) {
+      watchlistRemove.mutate(tickerCode, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+          queryClient.invalidateQueries({ queryKey: ['watchlist', 'check', tickerCode] });
+        },
+      });
+    } else {
+      watchlistAdd.mutate(tickerCode, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+          queryClient.invalidateQueries({ queryKey: ['watchlist', 'check', tickerCode] });
+        },
+      });
+    }
+  };
+
 
   // Persist selected stock to global store so other pages can read it
   useEffect(() => {
@@ -847,6 +870,18 @@ export default function StockDetailPage() {
               </button>
               <div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleWatchlistToggle}
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
+                      isInWatchlist
+                        ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-500 hover:bg-amber-200 dark:hover:bg-amber-500/25'
+                        : 'bg-gray-100 dark:bg-white/10 text-gray-400 dark:text-zinc-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'
+                    }`}
+                    title={isInWatchlist ? '取消自选' : '加入自选'}
+                    aria-label={isInWatchlist ? '取消自选' : '加入自选'}
+                  >
+                    <Star size={14} fill={isInWatchlist ? 'currentColor' : 'none'} />
+                  </button>
                   <span className="text-lg font-bold text-black dark:text-zinc-100">{stock?.name || '--'}</span>
                   <span className="font-mono text-xs text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 px-1.5 py-0.5 rounded">{stock?.ticker || stockId}</span>
                   <span className="text-[10px] text-gray-400 dark:text-zinc-400 bg-gray-100 dark:bg-white/10 px-1 py-0 rounded">{stock?.exchange || 'A股'}</span>
@@ -857,10 +892,10 @@ export default function StockDetailPage() {
             </div>
           </div>
 
-          {/* Center: Price — 和モダン vertical layout */}
+          {/* Center: Price */}
           <div className="flex items-center gap-3">
-            <span className="vertical-text text-xs font-black tracking-widest" style={{ color: 'hsl(var(--text-tertiary))', height: 60 }}>
-              股價
+            <span className="text-[10px] font-bold tracking-wider" style={{ color: 'hsl(var(--text-tertiary))' }}>
+              股价
             </span>
             <div className={`px-4 py-1 border-2 ${up ? 'border-l-[hsl(var(--red))]' : 'border-l-[hsl(var(--price-down))]'}`}
               style={{ borderColor: 'hsl(var(--border-strong))', borderLeftWidth: 4 }}>
@@ -883,11 +918,11 @@ export default function StockDetailPage() {
           {/* Right: Mini stats — 横長 strip with dot dividers */}
           <div className="flex items-center gap-2 text-[10px] font-bold">
             <MiniStat label="開" value={realtimeQuote ? safeNumber(realtimeQuote.open).toFixed(2) : '--'} />
-            <span className="shape-dot" style={{ background: 'hsl(var(--text-tertiary))' }} />
+            <span className="w-1 h-1 rounded-full inline-block" style={{ background: 'hsl(var(--text-tertiary))' }} />
             <MiniStat label="高" value={realtimeQuote ? safeNumber(realtimeQuote.high).toFixed(2) : '--'} color="price-up" />
-            <span className="shape-dot" style={{ background: 'hsl(var(--text-tertiary))' }} />
+            <span className="w-1 h-1 rounded-full inline-block" style={{ background: 'hsl(var(--text-tertiary))' }} />
             <MiniStat label="低" value={realtimeQuote ? safeNumber(realtimeQuote.low).toFixed(2) : '--'} color="price-down" />
-            <span className="shape-dot" style={{ background: 'hsl(var(--text-tertiary))' }} />
+            <span className="w-1 h-1 rounded-full inline-block" style={{ background: 'hsl(var(--text-tertiary))' }} />
             <MiniStat label="昨" value={hasQuote ? prevClose.toFixed(2) : '--'} />
             <div className="w-px h-8 bg-gray-300 dark:bg-zinc-700" />
             <MiniStat label="成交量" value={realtimeQuote ? `${fmtVolume(safeNumber(realtimeQuote.volume) / 100)}` : '--'} />

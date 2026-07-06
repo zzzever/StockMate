@@ -1,7 +1,139 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
-import { type Stock, type HotSector, type SectorStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse } from '@/types';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { type Stock, type HotSector, type SectorStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse, type WatchlistQuoteItem } from '@/types';
+
+// ============================================================
+// WebSocket real-time price store
+// ============================================================
+//
+// The Tauri backend pushes price updates via "realtime-quote" events.
+// We cache them here and make them available to hooks.
+//
+const wsPriceCache = new Map<string, PriceData>();
+let wsListeners: UnlistenFn[] = [];
+let wsInitialized = false;
+
+/**
+ * Initialize the WebSocket event listener (called once).
+ * Listens for "realtime-quote" events from the Tauri backend and
+ * caches the latest price data keyed by ticker code.
+ */
+function ensureWsListener() {
+  if (wsInitialized) return;
+  wsInitialized = true;
+
+  // Guard against SSR / test environments without Tauri
+  if (typeof window === 'undefined') return;
+
+  listen<PriceData>('realtime-quote', (event) => {
+    const data = event.payload;
+    // Cache by ticker (e.g. "sh600519")
+    wsPriceCache.set(data.ticker, data);
+    // Also cache by the numeric code (e.g. "600519")
+    const numeric = data.ticker.replace(/^(sh|sz|gb_)/, '');
+    if (numeric !== data.ticker) {
+      wsPriceCache.set(numeric, data);
+    }
+  })
+    .then((unlisten) => {
+      wsListeners.push(unlisten);
+    })
+    .catch((err) => {
+      console.warn('[WsRealtime] Failed to listen for realtime-quote events:', err);
+      wsInitialized = false; // Allow retry
+    });
+}
+
+/**
+ * Get the latest WebSocket-pushed price for a given stock ID.
+ *
+ * `stockId` can be in any format: "600519.SH", "sh600519", "600519", etc.
+ */
+function getWsPrice(stockId: string): PriceData | undefined {
+  // Try direct ticker match
+  const cached = wsPriceCache.get(stockId);
+  if (cached) return cached;
+
+  // Try numeric part (e.g. "600519" from "600519.SH")
+  const numeric = stockId.split('.')[0];
+  if (numeric) {
+    const byNumeric = wsPriceCache.get(numeric);
+    if (byNumeric) return byNumeric;
+  }
+
+  // Try Sina-code derivation (e.g. "600519.SH" → "sh600519")
+  const upper = stockId.toUpperCase();
+  if (upper.endsWith('.SH') || upper.endsWith('.BJ')) {
+    return wsPriceCache.get(`sh${numeric}`);
+  }
+  if (upper.endsWith('.SZ')) {
+    return wsPriceCache.get(`sz${numeric}`);
+  }
+
+  return undefined;
+}
+
+/**
+ * Hook that initializes the WebSocket price listener once.
+ * Call this at the app root to start receiving real-time pushes.
+ */
+export function useRealtimePriceListener() {
+  useEffect(() => {
+    ensureWsListener();
+    return () => {
+      // Cleanup listeners on unmount
+      for (const unsub of wsListeners) {
+        unsub();
+      }
+      wsListeners = [];
+      wsInitialized = false;
+    };
+  }, []);
+}
+
+/**
+ * Hook that returns the latest WebSocket-pushed price for a stock,
+ * and a timestamp of when it was last updated.
+ *
+ * Falls back to the cached WebSocket data when the component re-renders.
+ * Does NOT perform HTTP polling — use `useRealtimeQuote` for polling fallback.
+ */
+export function useWsRealtimeQuote(stockId: string) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    ensureWsListener();
+
+    // Re-render when we get a new WS push for this stock
+    const checkForUpdate = (data: PriceData) => {
+      const numeric = stockId.split('.')[0];
+      if (
+        data.ticker === stockId ||
+        data.ticker === numeric ||
+        data.ticker === `sh${numeric}` ||
+        data.ticker === `sz${numeric}`
+      ) {
+        setTick((t) => t + 1);
+      }
+    };
+
+    // Listen for new events
+    let unlisten: UnlistenFn | undefined;
+    listen<PriceData>('realtime-quote', (event) => {
+      checkForUpdate(event.payload);
+    })
+      .then((fn) => { unlisten = fn; })
+      .catch(() => {});
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [stockId]);
+
+  return getWsPrice(stockId);
+}
 
 export function useStockList() {
   return useQuery<Stock[], Error>({
@@ -247,6 +379,15 @@ export function useRealtimeQuote(stock_id: string) {
     queryKey: ['stocks', 'realtime', stock_id],
     queryFn: async () => {
       console.log('[useRealtimeQuote] fired, stock_id:', stock_id);
+
+      // Check WebSocket cache first for instant response
+      const wsData = getWsPrice(stock_id);
+      if (wsData) {
+        console.log('[useRealtimeQuote] WS cache hit:', stock_id, wsData.current_price);
+        return wsData;
+      }
+
+      // Fall back to Tauri invoke (will check backend cache → HTTP)
       try {
         const data = await invoke<PriceData>('get_realtime_quote', { stockId: stock_id });
         console.log('[useRealtimeQuote] data arrived:', data);
@@ -257,7 +398,7 @@ export function useRealtimeQuote(stock_id: string) {
       }
     },
     enabled: stock_id.length > 0,
-    refetchInterval: 5000,
+    refetchInterval: 3000, // Reduced from 5000ms — backend now caches aggressively
     retry: 2,
   });
 }
@@ -475,5 +616,61 @@ export function useMarketEnvironment(stock_id: string) {
       } catch (error) { console.error('[useMarketEnvironment] error:', error); throw error; }
     },
     enabled: stock_id.length > 0,
+  });
+}
+
+// ── Watchlist hooks ──
+
+export function useWatchlist() {
+  return useQuery<WatchlistQuoteItem[], Error>({
+    queryKey: ['watchlist', 'list'],
+    queryFn: async () => {
+      console.log('[useWatchlist] fired');
+      try {
+        const data = await invoke<WatchlistQuoteItem[]>('watchlist_list');
+        console.log('[useWatchlist] data arrived:', data);
+        return data;
+      } catch (error) {
+        console.error('[useWatchlist] error:', error);
+        throw error;
+      }
+    },
+    refetchInterval: 10000,
+  });
+}
+
+export function useWatchlistAdd() {
+  return useMutation({
+    mutationFn: async (symbol: string) => {
+      console.log('[useWatchlistAdd] fired, symbol:', symbol);
+      return invoke<void>('watchlist_add', { symbol });
+    },
+  });
+}
+
+export function useWatchlistRemove() {
+  return useMutation({
+    mutationFn: async (symbol: string) => {
+      console.log('[useWatchlistRemove] fired, symbol:', symbol);
+      return invoke<void>('watchlist_remove', { symbol });
+    },
+  });
+}
+
+export function useWatchlistCheck(symbol: string) {
+  return useQuery<boolean, Error>({
+    queryKey: ['watchlist', 'check', symbol],
+    queryFn: async () => {
+      console.log('[useWatchlistCheck] fired, symbol:', symbol);
+      try {
+        const data = await invoke<boolean>('watchlist_check', { symbol });
+        console.log('[useWatchlistCheck] data arrived:', data);
+        return data;
+      } catch (error) {
+        console.error('[useWatchlistCheck] error:', error);
+        throw error;
+      }
+    },
+    enabled: symbol.length > 0,
   });
 }

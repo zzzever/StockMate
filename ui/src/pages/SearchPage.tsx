@@ -119,36 +119,29 @@ export default function SearchPage() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="flex flex-col items-center h-full pt-16 px-4 bg-seigaiha"
+      className="flex flex-col items-center h-full pt-16 px-4"
     >
-      {/* Title — vertical + horizontal contrast */}
-      <div className="hv-contrast mb-8">
-        <div className="v-label">个股检索</div>
-        <div className="h-content">
-          <h1 className="text-5xl font-black tracking-[0.2em] sketch-underline" style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}>
-            股票<br />檢索
-          </h1>
-          <div className="flex gap-2 mt-3">
-            <span className="shape-diamond" style={{ background: 'hsl(var(--red))' }} />
-            <span className="shape-dot" style={{ background: 'hsl(var(--ink))' }} />
-            <span className="text-xs font-bold tracking-widest" style={{ color: 'hsl(var(--text-tertiary))' }}>
-              台湾加权 · 上证综指 · 日经平均
-            </span>
-          </div>
-        </div>
+      {/* Title */}
+      <div className="mb-8 text-center">
+        <h1 className="text-4xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
+          股票检索
+        </h1>
+        <p className="text-sm mt-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          台湾加权 · 上证综指 · 日经平均
+        </p>
       </div>
 
-      {/* Search Box — hand-drawn style */}
-      <div className="w-full max-w-xl relative mb-8 p-breath">
-        <div className="relative sketch-border bg-white" style={{ borderColor: 'hsl(var(--ink))' }}>
+      {/* Search Box */}
+      <div className="w-full max-w-xl relative mb-8">
+        <div className="relative rounded-xl" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-default))' }}>
           <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'hsl(var(--text-tertiary))' }} />
           <input ref={inputRef} type="text" value={query}
             onChange={(e) => setQuery(e.target.value)} onKeyDown={handleKeyDown}
             onFocus={() => setShowResults(true)}
             onBlur={() => setTimeout(() => setShowResults(false), 200)}
             placeholder="輸入代碼或名稱…"
-            className="w-full h-14 pl-12 pr-12 bg-transparent text-lg outline-none font-bold"
-            style={{ fontFamily: "'Noto Sans SC', sans-serif", color: 'hsl(var(--ink))' }}
+            className="w-full h-14 pl-12 pr-12 bg-transparent text-lg outline-none font-medium rounded-xl"
+            style={{ color: 'hsl(var(--text-primary))' }}
             aria-label="搜索股票或ETF"
           />
           {query && (
@@ -181,7 +174,8 @@ export default function SearchPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex items-center justify-center py-8 text-gray-700 dark:text-gray-400 text-sm"
+              className="flex items-center justify-center py-8 text-sm"
+              style={{ color: 'hsl(var(--text-secondary))' }}
             >
               <Search size={16} className="animate-pulse mr-2" />
               搜索中...
@@ -194,11 +188,12 @@ export default function SearchPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              className="flex flex-col items-center py-12 text-gray-700 dark:text-gray-400"
+              className="flex flex-col items-center py-12"
+              style={{ color: 'hsl(var(--text-secondary))' }}
             >
               <BarChart3 size={40} className="opacity-30 mb-3" />
-              <p className="text-base font-bold" style={{ color: 'hsl(var(--ink))' }}>未找到该股票</p>
-              <p className="text-xs mt-1 font-bold opacity-50">请输入完整代码或关键字</p>
+              <p className="text-base font-bold" style={{ color: 'hsl(var(--text-primary))' }}>未找到该股票</p>
+              <p className="text-xs mt-1 opacity-50">请输入完整代码或关键字</p>
             </motion.div>
           )}
 
@@ -210,8 +205,7 @@ export default function SearchPage() {
               exit={{ opacity: 0 }}
               className="space-y-1"
             >
-              <div className="newspaper-divider mb-2" />
-              <p className="text-xs font-black tracking-widest px-2 mb-2" style={{ color: 'hsl(var(--ink))' }}>
+              <p className="text-xs font-medium px-2 mb-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
                 搜索结果 {results.length} 条
               </p>
               {results.map((stock, i) => {
@@ -273,19 +267,15 @@ export default function SearchPage() {
 
         {/* Search history when no query */}
         {!debouncedQuery && (
-          <div className="space-y-1 relative">
-            {/* Decorative enso circle */}
-            <div className="absolute -top-16 -right-8 opacity-30 pointer-events-none">
-              <div className="enso" style={{ width: 100, height: 100 }} />
-            </div>
+          <div className="space-y-1">
             {history.length > 0 && (
               <div className="flex items-center justify-between px-2 mb-2">
-                <p className="text-xs font-black tracking-widest flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
+                <p className="text-xs font-medium flex items-center gap-1.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
                   <Clock size={12} /> 搜索历史
                 </p>
                 <button
                   onClick={() => { localStorage.removeItem(HISTORY_KEY); setHistory([]); }}
-                  className="text-xs font-bold hover:text-red-700 transition-colors flex items-center gap-1"
+                  className="text-xs font-medium hover:text-red-700 transition-colors flex items-center gap-1"
                   style={{ color: 'hsl(var(--text-tertiary))' }}
                 >
                   <Trash2 size={12} /> 清空
@@ -323,7 +313,7 @@ export default function SearchPage() {
             })}
             {history.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-sm text-gray-700 dark:text-gray-500">
+                <p className="text-sm" style={{ color: 'hsl(var(--text-secondary))' }}>
                   搜索股票代码或名称，如 茅台、600519、510050
                 </p>
               </div>

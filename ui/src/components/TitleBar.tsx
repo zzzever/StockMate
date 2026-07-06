@@ -47,12 +47,11 @@ export default function TitleBar() {
     >
       {/* Left: app icon + title */}
       <div className="flex items-center gap-2 pl-3 pointer-events-none">
-        <span className="shape-diamond inline-block" style={{ width: 7, height: 7, background: 'hsl(var(--red))' }} />
         <span
-          className="text-[11px] font-black tracking-[0.25em]"
-          style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}
+          className="text-[11px] font-bold tracking-wide"
+          style={{ color: 'hsl(var(--text-secondary))' }}
         >
-          股王
+          StockMate
         </span>
       </div>
 

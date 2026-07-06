@@ -6,6 +6,7 @@ import TopBar from '@/components/TopBar';
 import { useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import type { Page } from '@/types';
+import { useRealtimePriceListener } from '@/hooks/useTauriQuery';
 
 interface LayoutProps { children: React.ReactNode; }
 
@@ -29,6 +30,9 @@ export default function Layout({ children }: LayoutProps) {
     const cleanup = initSystemThemeListener();
     return () => cleanup();
   }, []);
+
+  // Initialise the WebSocket real-time price listener (receives push from Tauri backend)
+  useRealtimePriceListener();
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'hsl(var(--bg-root))' }}>

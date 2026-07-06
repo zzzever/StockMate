@@ -8,6 +8,7 @@ pub struct AppState {
     pub quote_repo: Arc<dyn QuoteRepository>,
     pub data_service: DataService,
     pub cache_manager: data_fetcher::CacheManager,
+    pub watchlist_repo: storage::WatchlistRepository,
 }
 
 pub mod commands_v2;

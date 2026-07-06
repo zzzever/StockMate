@@ -398,18 +398,38 @@ impl WatchlistRepository {
     }
 
     pub async fn get_all(&self) -> Result<Vec<WatchlistItem>> {
-        let rows = sqlx::query("SELECT * FROM watchlist ORDER BY sort_order, added_at")
+        let rows = sqlx::query(
+            "SELECT w.symbol, w.added_at, w.alert_price, w.notes, w.sort_order, \
+             COALESCE(s.name, w.symbol) AS stock_name, \
+             COALESCE(s.id, w.symbol) AS stock_id, \
+             COALESCE(s.exchange, '') AS stock_exchange \
+             FROM watchlist w \
+             LEFT JOIN stocks s ON s.ticker = w.symbol \
+             ORDER BY w.sort_order, w.added_at"
+        )
             .fetch_all(&self.pool)
             .await?;
-        let items = rows.iter().map(|r| WatchlistItem {
-            stock_id: r.get("symbol"),
-            stock_code: r.get("symbol"),
-            stock_name: r.get("symbol"),
-            exchange: exchange_for_symbol(r.get("symbol")),
-            added_at: r.get("added_at"),
-            alert_price: r.get("alert_price"),
-            notes: r.get("notes"),
-            sort_order: r.get("sort_order"),
+        let items = rows.iter().map(|r| {
+            let symbol: String = r.get("symbol");
+            let db_exchange: String = r.get("stock_exchange");
+            WatchlistItem {
+                stock_id: r.get("stock_id"),
+                stock_code: symbol.clone(),
+                stock_name: r.get("stock_name"),
+                exchange: if db_exchange.is_empty() {
+                    exchange_for_symbol(&symbol)
+                } else {
+                    match db_exchange.as_str() {
+                        "SSE" => "SH".to_string(),
+                        "SZSE" => "SZ".to_string(),
+                        _ => db_exchange,
+                    }
+                },
+                added_at: r.get("added_at"),
+                alert_price: r.get("alert_price"),
+                notes: r.get("notes"),
+                sort_order: r.get("sort_order"),
+            }
         }).collect();
         Ok(items)
     }
@@ -441,6 +461,15 @@ impl WatchlistRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn contains(&self, symbol: &str) -> Result<bool> {
+        let row = sqlx::query("SELECT COUNT(*) as cnt FROM watchlist WHERE symbol = ?1")
+            .bind(symbol)
+            .fetch_one(&self.pool)
+            .await?;
+        let count: i64 = row.get("cnt");
+        Ok(count > 0)
     }
 }
 

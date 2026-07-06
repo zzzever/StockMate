@@ -30,33 +30,33 @@ export default function TopBar() {
 
   return (
     <div className="topbar-glass flex h-12 items-center justify-between px-4 relative z-20">
-      {/* Masthead */}
+      {/* Left section */}
       <div className="flex items-center gap-4">
-        <span className="text-sm font-black tracking-[0.3em] hidden lg:block"
-          style={{ fontFamily: "'Noto Serif SC', serif", color: 'hsl(var(--ink))' }}>
-          股王日报
+        <span className="text-sm font-bold tracking-wider hidden lg:block" style={{ color: 'hsl(var(--text-primary))' }}>
+          StockMate
         </span>
         {selectedStock && (
-          <span className="text-xs font-bold px-2.5 py-1 border-2"
-            style={{ fontFamily: "'Noto Sans SC', sans-serif", borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>
+          <span className="text-xs font-medium px-2.5 py-1 rounded-md"
+            style={{ background: 'hsl(var(--bg-input))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>
             {selectedStock.name || selectedStock.code}
           </span>
         )}
-        {/* Quick search */}
-        <div className="flex items-center gap-1.5 border-2 px-2.5 py-1 w-56" style={{ borderColor: 'hsl(var(--ink))' }}>
+        {/* Search box */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 w-56 rounded-lg" style={{ background: 'hsl(var(--bg-input))', border: '1px solid hsl(var(--border-subtle))' }}>
           <Search size={14} style={{ color: 'hsl(var(--text-tertiary))' }} />
           <input type="text" placeholder="輸入代碼…" value={search}
             onChange={(e) => setSearch(e.target.value)} onKeyDown={handleSearch} aria-label="搜索股票代码"
-            className="bg-transparent text-sm outline-none w-full font-bold"
-            style={{ fontFamily: "'Noto Sans SC', sans-serif", color: 'hsl(var(--ink))' }}
+            className="bg-transparent text-sm outline-none w-full"
+            style={{ color: 'hsl(var(--text-primary))' }}
           />
         </div>
       </div>
 
+      {/* Right section */}
       <div className="flex items-center gap-3">
         <button onClick={toggleDarkMode} title={`${themeLabel[theme]}`}
-          className="flex items-center gap-1 text-xs font-black px-2 py-1 border-2 hover:bg-black/5 transition-colors"
-          style={{ fontFamily: "'Noto Sans SC', sans-serif", borderColor: 'hsl(var(--ink))', color: 'hsl(var(--ink))' }}>
+          className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+          style={{ color: 'hsl(var(--text-secondary))', border: '1px solid hsl(var(--border-subtle))' }}>
           <ThemeIcon size={14} />
           <span className="hidden sm:inline">{themeLabel[theme]}</span>
         </button>

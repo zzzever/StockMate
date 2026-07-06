@@ -7,6 +7,7 @@ pub mod market_data;
 use std::sync::Arc;
 use std::time::Duration;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use chrono::{NaiveDate, Datelike};
@@ -52,6 +53,10 @@ struct DataServiceInner {
     fundflow_cache: Cache<String, Value>,
     overview_cache: Cache<String, Value>,
     intraday_cache: Cache<String, Value>,
+    /// Per-ticker HTTP realtime quote cache (short TTL to reduce redundant API calls).
+    realtime_http_cache: Cache<String, Value>,
+    /// WebSocket-backed live price cache (updated on each WS push).
+    ws_cache: Arc<RwLock<HashMap<String, market_data::PriceData>>>,
     sector_realtime: RwLock<Option<Vec<HotSector>>>,
     refresh_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
@@ -88,6 +93,9 @@ impl DataService {
             fundflow_cache: build_cache::<String, Value>(TTL_REALTIME_SECS, 10_000),
             overview_cache: build_cache::<String, Value>(TTL_REALTIME_SECS, 10_000),
             intraday_cache: build_cache::<String, Value>(TTL_INTRADAY_SECS, 10_000),
+            // HTTP realtime quote: short 3s TTL so fast-polling doesn't hammer the API
+            realtime_http_cache: build_cache::<String, Value>(3, 10_000),
+            ws_cache: Arc::new(RwLock::new(HashMap::new())),
             sector_realtime: RwLock::new(None),
             refresh_handle: RwLock::new(None),
         });
@@ -124,6 +132,68 @@ impl DataService {
         // 3. Mock (handled per-endpoint in public methods)
         tracing::debug!("[FETCH_FALLBACK] endpoint={} returning Null (cache_key={})", endpoint, cache_key);
         Ok(Value::Null)
+    }
+
+    /// Start Sina WebSocket background client to receive real-time push.
+    ///
+    /// This will connect to `wss://w.sinajs.cn/wskt` and maintain a persistent
+    /// connection, updating the internal `ws_cache` on each push. The returned
+    /// `broadcast::Receiver` can be used for Tauri event emission.
+    ///
+    /// `tickers` — list of internal-format tickers (e.g. `"600519.SH"`, `"000001.SZ"`).
+    pub fn start_ws_client(
+        &self,
+        tickers: &[String],
+    ) -> tokio::sync::broadcast::Receiver<market_data::PriceData> {
+        // Convert internal tickers to Sina codes
+        let sina_codes: Vec<String> = tickers
+            .iter()
+            .filter_map(|t| market_data::ws::to_sina_code(t))
+            .collect();
+
+        let (tx, rx) = tokio::sync::broadcast::channel(256);
+        let cache_for_task = self.inner.ws_cache.clone();
+
+        tokio::spawn(async move {
+            let (_, mut ws_rx) =
+                market_data::ws::start_ws_client_with_rx(&sina_codes);
+
+            // Forward parsed prices into both the ws_cache HashMap and the broadcast channel
+            loop {
+                match tokio::time::timeout(Duration::from_secs(60), ws_rx.recv()).await {
+                    Ok(Ok(price)) => {
+                        // Update the shared HashMap cache
+                        cache_for_task
+                            .write()
+                            .await
+                            .insert(price.ticker.clone(), price.clone());
+                        let _ = tx.send(price);
+                    }
+                    Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
+                        tracing::warn!("[DataService] WS broadcast channel closed, restarting...");
+                        break;
+                    }
+                    Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
+                        tracing::warn!("[DataService] WS broadcast lagged by {} messages", n);
+                        continue;
+                    }
+                    Err(_) => {
+                        // Timeout — WS may still be reconnecting, keep waiting
+                        tracing::trace!("[DataService] WS recv timeout (no data in 60s)");
+                        continue;
+                    }
+                }
+            }
+        });
+
+        rx
+    }
+
+    /// Return a reference to the WebSocket-backed price cache.
+    ///
+    /// Used by the Tauri host to read latest prices for event emission.
+    pub fn get_ws_cache(&self) -> Arc<RwLock<HashMap<String, market_data::PriceData>>> {
+        self.inner.ws_cache.clone()
     }
 
     /// Start background refresh — fetch all constituent stock prices from Tencent,
@@ -502,8 +572,42 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         &self,
         stock_id: &str,
     ) -> Result<market_data::PriceData, ApiError> {
+        // Extract the numeric ticker (e.g. "600519" from "600519.SH")
+        let numeric_ticker = stock_id.split('.').next().unwrap_or(stock_id).to_string();
+
+        // Tier 1: WebSocket cache (lowest latency, updated by push)
+        {
+            let ws = self.inner.ws_cache.read().await;
+            // Check both with and without exchange suffix
+            if let Some(data) = ws.get(&numeric_ticker) {
+                tracing::debug!("[get_realtime_quote] WS cache hit for {}", stock_id);
+                return Ok(data.clone());
+            }
+            // Also check with the full sina code (e.g. "sh600519")
+            if let Some(sina_code) = market_data::ws::to_sina_code(stock_id) {
+                if let Some(data) = ws.get(&sina_code) {
+                    tracing::debug!("[get_realtime_quote] WS cache hit (sina) for {}", stock_id);
+                    return Ok(data.clone());
+                }
+            }
+        }
+
+        // Tier 2: HTTP realtime cache (short 3s TTL, reduces redundant network calls)
+        // We cache by stock_id so that rapid polling doesn't hammer the upstream API.
+        if let Some(cached) = self.inner.realtime_http_cache.get(stock_id).await {
+            if let Ok(data) = serde_json::from_value::<market_data::PriceData>(cached) {
+                tracing::debug!("[get_realtime_quote] HTTP cache hit for {}", stock_id);
+                return Ok(data);
+            }
+        }
+
+        // Tier 3: Fresh fetch from network
         let provider = market_data::select_provider(stock_id);
         if let Some(data) = provider.fetch_realtime_price(stock_id).await {
+            // Store in HTTP cache for subsequent fast polls
+            if let Ok(json) = serde_json::to_value(&data) {
+                self.inner.realtime_http_cache.insert(stock_id.to_string(), json).await;
+            }
             return Ok(data);
         }
         Err(ApiError {
@@ -1068,7 +1172,6 @@ pub fn mock_support_resistance(stock_id: &str) -> SupportResistance {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[tokio::test]
     async fn test_cache_manager_l1_l2() {
@@ -1225,14 +1328,14 @@ mod tests {
     fn test_mock_strategy_signal() {
         let signal = mock_strategy_signal("600519.SH", "trend");
         assert_eq!(signal.stock_id, "600519.SH");
-        assert_eq!(signal.action, "buy");
+        assert_eq!(signal.action, domain::SignalAction::Buy);
     }
 
     #[test]
     fn test_mock_prediction() {
         let p = mock_prediction("600519.SH", "trend");
         assert_eq!(p.stock_id, "600519.SH");
-        assert_eq!(p.direction, "up");
+        assert_eq!(p.direction, domain::TrendDirection::Up);
     }
 
     #[test]
