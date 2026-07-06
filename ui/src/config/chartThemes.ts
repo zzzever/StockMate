@@ -1,6 +1,6 @@
 import { LineStyle } from 'lightweight-charts';
 
-export type ChartStyle = 'classic' | 'kawaii' | 'dark' | 'neon' | 'minimal' | 'morandi' | 'mondrian' | 'manga';
+export type ChartStyle = 'classic' | 'kawaii' | 'dark' | 'neon' | 'minimal' | 'morandi' | 'mondrian' | 'manga' | 'taiwan';
 
 export interface ChartThemeConfig {
   name: string;
@@ -490,9 +490,75 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     // 红涨绿跌 (Chinese convention: red=up, green=down)
     legendUpColor: '#ff6b6b', legendDownColor: '#4ecdc4',
   },
+
+  taiwan: {
+    candleLineWidth: 2,
+    maLineWidth: 1,
+    maLineStyle: LineStyle.Solid,
+    name: '台日',
+    icon: '🏛️',
+    description: '紅漲綠跌，粗線條專業風格',
+
+    // K线：红涨绿跌，实体粗，影线细
+    upColor: '#d0314e',       // 正红色（台湾主流）
+    downColor: '#1a8a4a',     // 深绿色
+    borderUpColor: '#d0314e',
+    borderDownColor: '#1a8a4a',
+    wickUpColor: 'rgba(208,49,78,0.4)',    // 影线淡红色
+    wickDownColor: 'rgba(26,138,74,0.4)',  // 影线淡绿色
+
+    // 成交量
+    volumeUpColor: '#d0314e',
+    volumeDownColor: '#1a8a4a',
+    volumeMaColor: '#f0ad4e',
+
+    // MA线：粗、易区分
+    ma5Color: '#f0ad4e',     // 金色
+    ma10Color: '#4a90d9',    // 蓝色
+    ma20Color: '#9b59b6',    // 紫色
+    ma60Color: '#7f8c8d',    // 灰色
+
+    // 布林带
+    bbUpperColor: '#e67e22',
+    bbMiddleColor: '#f0ad4e',
+    bbLowerColor: '#e67e22',
+
+    supportColor: '#1a8a4a',
+    resistanceColor: '#d0314e',
+
+    // MACD
+    macdDifColor: '#ffffff',
+    macdDeaColor: '#f0ad4e',
+    macdHistUpColor: '#d0314e',
+    macdHistDownColor: '#1a8a4a',
+
+    // KDJ
+    kdjKColor: '#f0ad4e',
+    kdjDColor: '#4a90d9',
+    kdjJColor: '#9b59b6',
+
+    // RSI
+    rsiLineColor: '#4a90d9',
+    rsiOverboughtColor: '#d0314e',
+    rsiOversoldColor: '#1a8a4a',
+
+    // 背景和网格
+    chartBackground: 'transparent',
+    textColor: '#e8e8e8',         // 亮白文字，高对比
+    gridVertColor: 'rgba(255,255,255,0.04)',   // 极淡垂直网格
+    gridHorzColor: 'rgba(255,255,255,0.08)',   // 稍明显水平网格
+    borderColor: 'rgba(255,255,255,0.10)',
+    crosshairColor: 'rgba(255,255,255,0.35)',  // 明显十字光标
+
+    rightPriceScaleBorder: 'rgba(255,255,255,0.10)',
+    leftPriceScaleBorder: 'rgba(255,255,255,0.10)',
+
+    legendUpColor: '#d0314e',
+    legendDownColor: '#1a8a4a',
+  },
 };
 
-export const defaultChartStyle: ChartStyle = 'classic';
+export const defaultChartStyle: ChartStyle = 'taiwan';
 
 export function getChartTheme(style: ChartStyle): ChartThemeConfig {
   const theme = chartThemes[style];

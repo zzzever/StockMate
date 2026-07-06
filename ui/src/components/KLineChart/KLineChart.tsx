@@ -370,6 +370,7 @@ export function KLineChart({
           morandi: { name: getChartTheme('morandi').name, icon: getChartTheme('morandi').icon },
           mondrian: { name: getChartTheme('mondrian').name, icon: getChartTheme('mondrian').icon },
           manga: { name: getChartTheme('manga').name, icon: getChartTheme('manga').icon },
+          taiwan: { name: getChartTheme('taiwan').name, icon: getChartTheme('taiwan').icon },
         }} />
       <div ref={mainRef} style={{ height: 280 }} />
       <div className="border-t border-gray-200 dark:border-zinc-800" />
