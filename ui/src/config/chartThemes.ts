@@ -117,14 +117,14 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     rsiOversoldColor: '#10b981',
 
     chartBackground: 'transparent',
-    textColor: '#a1a1aa',
-    gridVertColor: 'rgba(255,255,255,0.05)',
-    gridHorzColor: 'rgba(255,255,255,0.05)',
-    borderColor: 'rgba(255,255,255,0.1)',
-    crosshairColor: 'rgba(255,255,255,0.3)',
+    textColor: '#e4e4e7',
+    gridVertColor: 'rgba(148,163,184,0.06)',
+    gridHorzColor: 'rgba(148,163,184,0.10)',
+    borderColor: 'rgba(255,255,255,0.12)',
+    crosshairColor: 'rgba(255,255,255,0.35)',
 
-    rightPriceScaleBorder: 'rgba(255,255,255,0.1)',
-    leftPriceScaleBorder: 'rgba(255,255,255,0.1)',
+    rightPriceScaleBorder: 'rgba(255,255,255,0.12)',
+    leftPriceScaleBorder: 'rgba(255,255,255,0.12)',
 
     legendUpColor: '#34d399',
     legendDownColor: '#fb7185',
@@ -492,7 +492,7 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
   },
 };
 
-export const defaultChartStyle: ChartStyle = 'manga';
+export const defaultChartStyle: ChartStyle = 'classic';
 
 export function getChartTheme(style: ChartStyle): ChartThemeConfig {
   const theme = chartThemes[style];

@@ -2,6 +2,17 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { createChart, type IChartApi, type ISeriesApi, type AreaData, type LineData, type Time, LineStyle } from 'lightweight-charts';
 import { type Quote } from '@/types';
 import { fmtPrice, fmtPct } from '@/lib/format';
+import { getChartTheme, type ChartStyle } from '@/config/chartThemes';
+
+function hexToRgba(hex: string, alpha: number): string {
+  if (hex.startsWith('rgba')) return hex.replace(/[\d.]+\)$/, `${alpha})`);
+  if (hex.startsWith('rgb')) return hex.replace('rgb', 'rgba').replace(')', `,${alpha})`);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  if (isNaN(r)) return hex; // fallback
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 function safeNum(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 function fmtHM(ts: number): string { const d = new Date(ts * 1000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
@@ -17,17 +28,26 @@ function buildSlots() {
 }
 const ALL_SLOTS = buildSlots();
 
-// ── Design tokens — 红涨绿跌 (Chinese convention: red=up, green=down) ──
-const GREEN = { line: '#ef4444', top: 'rgba(239,68,68,0.28)', mid: 'rgba(239,68,68,0.08)', bottom: 'rgba(239,68,68,0.0)' };
-const RED = { line: '#22c55e', top: 'rgba(34,197,94,0.0)', mid: 'rgba(34,197,94,0.08)', bottom: 'rgba(34,197,94,0.28)' };
-const BASELINE = 'rgba(250,204,21,0.45)';
-const GRID = 'rgba(148,163,184,0.10)';
-const BORDER = 'rgba(148,163,184,0.15)';
-const TEXT = '#94a3b8';
+// ── Design tokens — derived from chart theme ──
 
-interface Props { data: Quote[]; prevClose: number; loading?: boolean; className?: string; }
+interface Props { data: Quote[]; prevClose: number; loading?: boolean; className?: string; chartStyle?: ChartStyle; }
 
-export function IntradayChart({ data, prevClose, loading = false, className }: Props) {
+export function IntradayChart({ data, prevClose, loading = false, className, chartStyle: chartStyleProp }: Props) {
+  const chartStyle = chartStyleProp ?? 'manga' as ChartStyle;
+  const theme = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
+  // Derive area colors from theme (follows 红涨绿跌 Chinese convention: up=red, down=green)
+  const UP_COLOR = useMemo(() => ({
+    line: theme.upColor,
+    top: hexToRgba(theme.upColor, 0.28),
+    mid: hexToRgba(theme.upColor, 0.08),
+    bottom: hexToRgba(theme.upColor, 0.0),
+  }), [theme]);
+  const DOWN_COLOR = useMemo(() => ({
+    line: theme.downColor,
+    top: hexToRgba(theme.downColor, 0.0),
+    mid: hexToRgba(theme.downColor, 0.08),
+    bottom: hexToRgba(theme.downColor, 0.28),
+  }), [theme]);
   const elRef = useRef<HTMLDivElement>(null);
   const storeRef = useRef<{ chart: IChartApi; green: ISeriesApi<'Area'>; red: ISeriesApi<'Area'>; base: ISeriesApi<'Line'>; price: ISeriesApi<'Line'> } | null>(null);
   const prevCloseRef = useRef(prevClose); prevCloseRef.current = prevClose;
@@ -58,21 +78,22 @@ export function IntradayChart({ data, prevClose, loading = false, className }: P
 
   useEffect(() => {
     const el = elRef.current; if (!el) return;
+    const t = theme;
     const chart = createChart(el, {
-      layout: { background: { color: 'transparent' }, textColor: TEXT },
-      grid: { vertLines: { color: GRID, style: 2 }, horzLines: { color: GRID, style: 2 } },
-      crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: 'rgba(148,163,184,0.3)', style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: 'rgba(148,163,184,0.3)', style: 2 } },
-      rightPriceScale: { borderColor: BORDER, scaleMargins: { top: 0.08, bottom: 0.08 }, autoScale: true, entireTextOnly: true },
-      timeScale: { borderColor: BORDER, timeVisible: true, secondsVisible: false, tickMarkFormatter: (t: unknown) => { const l = fmtHM(t as number); return HALF_HOURS.has(l) ? l : ''; }, fixLeftEdge: true, fixRightEdge: true },
+      layout: { background: { color: 'transparent' }, textColor: t.textColor },
+      grid: { vertLines: { color: t.gridVertColor, style: 2 }, horzLines: { color: t.gridHorzColor, style: 2 } },
+      crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: t.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: t.crosshairColor, style: 2 } },
+      rightPriceScale: { borderColor: t.borderColor, scaleMargins: { top: 0.08, bottom: 0.08 }, autoScale: true, entireTextOnly: true },
+      timeScale: { borderColor: t.borderColor, timeVisible: true, secondsVisible: false, tickMarkFormatter: (t: unknown) => { const l = fmtHM(t as number); return HALF_HOURS.has(l) ? l : ''; }, fixLeftEdge: true, fixRightEdge: true },
       handleScroll: false, handleScale: false, autoSize: true,
     });
 
-    // Price line (thin, on top)
-    const priceLineSeries = chart.addLineSeries({ color: '#6366f1', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    const areaGreen = chart.addAreaSeries({ topColor: GREEN.top, bottomColor: GREEN.mid, lineColor: GREEN.line, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: GREEN.line, crosshairMarkerBorderColor: '#fff' });
-    const areaRed = chart.addAreaSeries({ topColor: RED.mid, bottomColor: RED.bottom, lineColor: RED.line, lineWidth: 1, invertFilledArea: true, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: RED.line, crosshairMarkerBorderColor: '#fff' });
-    // Baseline (dashed yellow)
-    const baseline = chart.addLineSeries({ color: BASELINE, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    // Price line (thin, on top) — use a neutral color from theme
+    const priceLineSeries = chart.addLineSeries({ color: t.textColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const areaGreen = chart.addAreaSeries({ topColor: UP_COLOR.top, bottomColor: UP_COLOR.mid, lineColor: UP_COLOR.line, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: UP_COLOR.line, crosshairMarkerBorderColor: '#fff' });
+    const areaRed = chart.addAreaSeries({ topColor: DOWN_COLOR.mid, bottomColor: DOWN_COLOR.bottom, lineColor: DOWN_COLOR.line, lineWidth: 1, invertFilledArea: true, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: DOWN_COLOR.line, crosshairMarkerBorderColor: '#fff' });
+    // Baseline (dashed) — use a muted theme color
+    const baseline = chart.addLineSeries({ color: t.volumeMaColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
 
     chart.subscribeCrosshairMove((param: any) => {
       if (!param.time || param.point === undefined) { setTip(null); return; }

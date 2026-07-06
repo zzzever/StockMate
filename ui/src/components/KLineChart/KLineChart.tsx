@@ -1,5 +1,5 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type CandlestickData, type LineData, type HistogramData, type Time, LineStyle } from 'lightweight-charts';
+import { createChart, type IChartApi, type ISeriesApi, type CandlestickData, type LineData, type HistogramData, type Time, LineStyle, type LineWidth } from 'lightweight-charts';
 import { getChartTheme, type ChartStyle } from '@/config/chartThemes';
 import { type Quote, type MovingAverage, type SupportResistance, type PriceData } from '@/types';
 import { computeMACD, computeKDJ, computeRSI, computeBollinger, type BBData, type MACDData } from '@/utils/indicators';
@@ -115,34 +115,35 @@ export function KLineChart({
     const t = getChartTheme(chartStyleRef.current);
     try {
       const mc = createChart(mainRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: '#a1a1aa' },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.05)' }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
-        crosshair: { mode: 1 }, autoSize: true, height: 280,
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-        timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: true },
+        layout: { background: { color: 'transparent' }, textColor: t.textColor ?? '#a1a1aa' },
+        grid: { vertLines: { color: t.gridVertColor ?? 'rgba(255,255,255,0.05)' }, horzLines: { color: t.gridHorzColor ?? 'rgba(255,255,255,0.05)' } },
+        crosshair: { mode: 1, vertLine: { color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor, visible: true, labelVisible: true, style: 2, width: 1 }, horzLine: { color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor, visible: true, labelVisible: true, style: 2, width: 1 } },
+        autoSize: true, height: 280,
+        rightPriceScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)' },
+        timeScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)', timeVisible: true },
       });
-      const candle = mc.addCandlestickSeries({ upColor: t.upColor, downColor: t.downColor, borderUpColor: t.borderUpColor, borderDownColor: t.borderDownColor, wickUpColor: t.wickUpColor, wickDownColor: t.wickDownColor });
-      const mkL = (c: string) => mc.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const candle = mc.addCandlestickSeries({ upColor: t.upColor, downColor: t.downColor, borderUpColor: t.borderUpColor, borderDownColor: t.borderDownColor, wickUpColor: t.wickUpColor ?? 'rgba(148,163,184,0.5)', wickDownColor: t.wickDownColor ?? 'rgba(148,163,184,0.5)' });
+      const mkL = (c: string) => mc.addLineSeries({ color: c, lineWidth: (t.maLineWidth ?? 1) as LineWidth, lineStyle: t.maLineStyle ?? LineStyle.Solid, priceLineVisible: false, lastValueVisible: false });
       const ma5 = mkL(t.ma5Color); const ma10 = mkL(t.ma10Color); const ma20 = mkL(t.ma20Color); const ma60 = mkL(t.ma60Color);
       const mkB = (c: string) => mc.addLineSeries({ color: c, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
       const bbU = mkB(t.bbUpperColor); const bbM = mc.addLineSeries({ color: t.bbMiddleColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }); const bbL = mkB(t.bbLowerColor);
 
       const vc = createChart(volRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: '#a1a1aa' },
-        grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
-        autoSize: true, height: 110, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, color: 'rgba(148,163,184,0.3)', style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, color: 'rgba(148,163,184,0.3)', style: 2, width: 1 } },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)', scaleMargins: { top: 0, bottom: 0 } },
-        timeScale: { borderColor: 'rgba(255,255,255,0.1)', visible: false },
+        layout: { background: { color: 'transparent' }, textColor: t.textColor ?? '#a1a1aa' },
+        grid: { vertLines: { visible: false }, horzLines: { color: t.gridHorzColor ?? 'rgba(255,255,255,0.05)' } },
+        autoSize: true, height: 110, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor, style: 2, width: 1 } },
+        rightPriceScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)', scaleMargins: { top: 0, bottom: 0 } },
+        timeScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)', visible: false },
       });
       const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' } });
       const volMa = vc.addLineSeries({ color: t.volumeMaColor, lineWidth: 1, priceLineVisible: false });
 
       const ic = createChart(indRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: '#a1a1aa' },
-        grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
-        autoSize: true, height: 160, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, color: 'rgba(148,163,184,0.3)', style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, color: 'rgba(148,163,184,0.3)', style: 2, width: 1 } },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.1)' },
-        timeScale: { borderColor: 'rgba(255,255,255,0.1)', timeVisible: true },
+        layout: { background: { color: 'transparent' }, textColor: t.textColor ?? '#a1a1aa' },
+        grid: { vertLines: { visible: false }, horzLines: { color: t.gridHorzColor ?? 'rgba(255,255,255,0.05)' } },
+        autoSize: true, height: 160, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor, style: 2, width: 1 } },
+        rightPriceScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)' },
+        timeScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)', timeVisible: true },
       });
       const indHist = ic.addHistogramSeries({});
       const indLine1 = ic.addLineSeries({ color: t.macdDifColor, lineWidth: 1, priceLineVisible: false });
@@ -281,8 +282,10 @@ export function KLineChart({
     c.candle.applyOptions({
       upColor: t.upColor, downColor: t.downColor,
       borderUpColor: t.borderUpColor, borderDownColor: t.borderDownColor,
-      wickUpColor: t.wickUpColor, wickDownColor: t.wickDownColor,
+      wickUpColor: t.wickUpColor ?? 'rgba(148,163,184,0.5)',
+      wickDownColor: t.wickDownColor ?? 'rgba(148,163,184,0.5)',
     });
+    // MA lines — also update lineWidth and lineStyle from theme
     c.ma5.applyOptions({ color: t.ma5Color });
     c.ma10.applyOptions({ color: t.ma10Color });
     c.ma20.applyOptions({ color: t.ma20Color });
@@ -301,17 +304,23 @@ export function KLineChart({
     } else if (indicator === 'rsi') {
       if (c.indLine1) c.indLine1.applyOptions({ color: t.rsiLineColor });
     }
-    c.mc.applyOptions({
+    // Update layout, grid, crosshair, borders for all three charts
+    const chartOpts = {
       layout: { textColor: t.textColor ?? '#a1a1aa' },
+      grid: {
+        vertLines: { color: t.gridVertColor ?? 'rgba(255,255,255,0.05)' },
+        horzLines: { color: t.gridHorzColor ?? 'rgba(255,255,255,0.05)' },
+      },
+      crosshair: {
+        vertLine: { color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor },
+        horzLine: { color: t.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: t.crosshairColor },
+      },
       rightPriceScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)' },
       timeScale: { borderColor: t.borderColor ?? 'rgba(255,255,255,0.1)' },
-    });
-    c.vc.applyOptions({
-      layout: { textColor: t.textColor ?? '#a1a1aa' },
-    });
-    c.ic?.applyOptions({
-      layout: { textColor: t.textColor ?? '#a1a1aa' },
-    });
+    };
+    c.mc.applyOptions(chartOpts);
+    c.vc.applyOptions(chartOpts);
+    if (c.ic) c.ic.applyOptions(chartOpts);
   }, [chartStyle]);
 
   // Log period/range switches (dev only)

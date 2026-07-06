@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, type SeriesMarker } from 'lightweight-charts';
+import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, type SeriesMarker, LineStyle, type LineWidth } from 'lightweight-charts';
 import {
   ArrowLeft, ArrowUpRight, ArrowDownRight, Building2, DollarSign, TrendingUp, BarChart3,
   RefreshCw, Brain, ChevronDown, ChevronUp, Activity, Shield, Target, AlertTriangle,
@@ -263,37 +263,33 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
   useEffect(() => {
     if (!mainRef.current || !volRef.current || !indRef.current) return;
     try {
-      const gridColor = 'rgba(148,163,184,0.1)';
-      const borderColor = 'rgba(148,163,184,0.2)';
-      const textColor = '#94a3b8';
-
       // Main K-line chart
       const mc = createChart(mainRef.current, {
-        layout: { background: { color: 'transparent' }, textColor },
-        grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+        layout: { background: { color: 'transparent' }, textColor: T.textColor ?? '#94a3b8' },
+        grid: { vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' }, horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' } },
         autoSize: true,
         crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 } },
-        rightPriceScale: { borderColor, minimumWidth: 65 },
-        timeScale: { borderColor, timeVisible: true, tickMarkFormatter: (time: any) => {
+        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', minimumWidth: 65 },
+        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', timeVisible: true, barSpacing: 6, tickMarkFormatter: (time: any) => {
           if (typeof time !== 'string') return String(time);
           const parts = time.split('-');
           if (periodRef.current === 'day') return `${parts[1]}-${parts[2]}`;
           return `${parts[0]}-${parts[1]}`;
         } },
       });
-      mc.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true });
+      mc.timeScale().applyOptions({ minBarSpacing: 3, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true });
       try { const a = mainRef.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) {}
 
       const candle = mc.addCandlestickSeries({
         upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor,
-        wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor,
+        wickUpColor: T.wickUpColor ?? 'rgba(148,163,184,0.5)', wickDownColor: T.wickDownColor ?? 'rgba(148,163,184,0.5)',
       });
-      const addLine = (c: string) => mc.addLineSeries({ color: c, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+      const addLine = (c: string) => mc.addLineSeries({ color: c, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid, priceLineVisible: false, lastValueVisible: false });
       const ma5 = addLine(T.ma5Color); const ma10 = addLine(T.ma10Color); const ma20 = addLine(T.ma20Color); const ma60 = addLine(T.ma60Color);
       // BOLL — dashed style
-      const bbU = mc.addLineSeries({ color: '#ff6b6b', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-      const bbM = mc.addLineSeries({ color: '#f9ca24', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
-      const bbL = mc.addLineSeries({ color: '#4ecdc4', lineWidth: 1, lineStyle: 2, priceLineVisible: false, lastValueVisible: false });
+      const bbU = mc.addLineSeries({ color: T.bbUpperColor ?? '#ff6b6b', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
+      const bbM = mc.addLineSeries({ color: T.bbMiddleColor ?? '#f9ca24', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
+      const bbL = mc.addLineSeries({ color: T.bbLowerColor ?? '#4ecdc4', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
 
       // Crosshair tooltip on main chart — update InfoPanel and sync to volume/indicator charts
       mc.subscribeCrosshairMove((param: MouseEventParams) => {
@@ -322,24 +318,24 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
 
       // Volume chart
       const vc = createChart(volRef.current, {
-        layout: { background: { color: 'transparent' }, textColor },
-        grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+        layout: { background: { color: 'transparent' }, textColor: T.textColor ?? '#94a3b8' },
+        grid: { vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' }, horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' } },
         autoSize: true,
         crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 } },
-        rightPriceScale: { borderColor, minimumWidth: 65 },
-        timeScale: { borderColor, timeVisible: false },
+        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', minimumWidth: 65 },
+        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', timeVisible: false },
       });
       vc.timeScale().applyOptions({ minBarSpacing: 6, fixLeftEdge: true, fixRightEdge: true });
       const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' } });
 
       // Indicator chart
       const ic = createChart(indRef.current, {
-        layout: { background: { color: 'transparent' }, textColor },
-        grid: { vertLines: { color: gridColor }, horzLines: { color: gridColor } },
+        layout: { background: { color: 'transparent' }, textColor: T.textColor ?? '#94a3b8' },
+        grid: { vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' }, horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' } },
         autoSize: true,
         crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 } },
-        rightPriceScale: { borderColor, minimumWidth: 65 },
-        timeScale: { borderColor, timeVisible: false },
+        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', minimumWidth: 65 },
+        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', timeVisible: false },
       });
       ic.timeScale().applyOptions({ minBarSpacing: 6, fixLeftEdge: true, fixRightEdge: true });
       const indHist = ic.addHistogramSeries({});
@@ -421,17 +417,33 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
         borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor,
         wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor,
       });
-      c.ma5?.applyOptions({ color: T.ma5Color });
-      c.ma10?.applyOptions({ color: T.ma10Color });
-      c.ma20?.applyOptions({ color: T.ma20Color });
-      c.ma60?.applyOptions({ color: T.ma60Color });
+      // MA lines — also update lineWidth and lineStyle from theme
+      c.ma5?.applyOptions({ color: T.ma5Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
+      c.ma10?.applyOptions({ color: T.ma10Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
+      c.ma20?.applyOptions({ color: T.ma20Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
+      c.ma60?.applyOptions({ color: T.ma60Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
+      c.bbU?.applyOptions({ color: T.bbUpperColor });
+      c.bbM?.applyOptions({ color: T.bbMiddleColor });
+      c.bbL?.applyOptions({ color: T.bbLowerColor });
       c.indLine1?.applyOptions({ color: T.macdDifColor });
       c.indLine2?.applyOptions({ color: T.macdDeaColor });
-      // Update crosshair colors for theme
-      const xhOpts = { vertLine: { color: T.crosshairColor, labelBackgroundColor: T.crosshairColor }, horzLine: { color: T.crosshairColor, labelBackgroundColor: T.crosshairColor } };
-      c.mc?.applyOptions({ crosshair: xhOpts });
-      c.vc?.applyOptions({ crosshair: xhOpts });
-      c.ic?.applyOptions({ crosshair: xhOpts });
+      // Update layout, grid, crosshair, borders for all three charts
+      const chartOpts = {
+        layout: { textColor: T.textColor ?? '#94a3b8' },
+        grid: {
+          vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' },
+          horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' },
+        },
+        crosshair: {
+          vertLine: { color: T.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: T.crosshairColor },
+          horzLine: { color: T.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: T.crosshairColor },
+        },
+        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)' },
+        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)' },
+      };
+      c.mc?.applyOptions(chartOpts);
+      c.vc?.applyOptions(chartOpts);
+      c.ic?.applyOptions(chartOpts);
     } catch (e) { /* ignore */ }
   }, [chartStyle, T]);
 
@@ -490,7 +502,7 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
       c.vol?.setData(volItems);
       // Indicator panel
       if (indicator === 'macd') {
-        c.indHist?.setData(macdData.map(d => ({ time: d.time, value: d.hist, color: (d.hist ?? 0) >= 0 ? 'rgba(239,68,68,0.6)' : 'rgba(34,197,94,0.6)' })));
+        c.indHist?.setData(macdData.map(d => ({ time: d.time, value: d.hist, color: (d.hist ?? 0) >= 0 ? T.macdHistUpColor : T.macdHistDownColor })));
         c.indLine1?.setData(macdData.map(d => ({ time: d.time, value: d.dif })));
         c.indLine2?.setData(macdData.map(d => ({ time: d.time, value: d.dea })));
         c.indLine3?.setData([]);
@@ -512,14 +524,14 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
 
       // Dynamically calculate barSpacing based on data count
       const count = items.length;
-      const barSpacing = Math.max(Math.min(Math.floor(400 / count), 20), 2);
+      const barSpacing = Math.max(Math.min(Math.floor(800 / count), 20), 4);
 
       // Set barSpacing on ALL three charts BEFORE fitContent (order matters!)
-      // minBarSpacing: 1 ensures the calculated spacing is not clamped upward
+      // minBarSpacing: 2 ensures bars don't get too thin when zoomed out
       // maxBarSpacing: 30 prevents monthly bars from being too wide
-      c.mc.timeScale().applyOptions({ barSpacing, minBarSpacing: 1 });
-      c.vc.timeScale().applyOptions({ barSpacing, minBarSpacing: 1 });
-      c.ic.timeScale().applyOptions({ barSpacing, minBarSpacing: 1 });
+      c.mc.timeScale().applyOptions({ barSpacing, minBarSpacing: 2 });
+      c.vc.timeScale().applyOptions({ barSpacing, minBarSpacing: 2 });
+      c.ic.timeScale().applyOptions({ barSpacing, minBarSpacing: 2 });
 
       // Fit time scale to new data range — only call fitContent() on the MAIN chart (mc),
       // then explicitly sync vc/ic to its exact visible range.
@@ -554,18 +566,18 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
         <span style={{ color: T.ma10Color, fontWeight: 900 }}>━ MA10</span>
         <span style={{ color: T.ma20Color, fontWeight: 900 }}>━ MA20</span>
         <span style={{ color: T.ma60Color, fontWeight: 900 }}>━ MA60</span>
-        <span className="shape-diamond ml-auto mr-0.5" style={{ width: 5, height: 5, background: '#ff6b6b' }} />
-        <span style={{ color: '#ff6b6b', fontWeight: 900 }}>BOLL</span>
+        <span className="shape-diamond ml-auto mr-0.5" style={{ width: 5, height: 5, background: T.bbUpperColor ?? '#ff6b6b' }} />
+        <span style={{ color: T.bbUpperColor ?? '#ff6b6b', fontWeight: 900 }}>BOLL</span>
       </div>
       <div ref={mainRef} className="flex-1" />
       <div className="border-t border-gray-200 dark:border-zinc-800 relative">
         <span className="absolute left-2 top-0 text-[9px] text-gray-400 font-bold z-10 bg-white dark:bg-zinc-900 px-1">副图 · 成交量</span>
       </div>
-      <div ref={volRef} style={{ height: 100 }} />
+      <div ref={volRef} style={{ height: 80 }} />
       <div className="border-t border-gray-200 dark:border-zinc-800 relative">
         <span className="absolute left-2 top-0 text-[9px] text-gray-400 font-bold z-10 bg-white dark:bg-zinc-900 px-1">指标 · {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'—'}[indicator]}</span>
       </div>
-      <div ref={indRef} style={{ height: 120 }} />
+      <div ref={indRef} style={{ height: 90 }} />
       {/* Hide TradingView logo */}
       <style>{`a[href*="tradingview"]{display:none!important}`}</style>
     </div>
@@ -589,7 +601,7 @@ function InfoPanel({ data, indicator, T }: {
   const sign = data ? (isUp ? '+' : '') : '';
 
   return (
-    <div className="w-64 border-l border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/50 flex flex-col text-[11px] shrink-0">
+    <div className="w-56 border-l border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/50 flex flex-col text-[11px] shrink-0">
       {/* Title: date + weekday */}
       <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
         <div className="text-xs font-bold text-gray-900 dark:text-zinc-100">
@@ -965,6 +977,7 @@ export default function StockDetailPage() {
           data={Array.isArray(intradayData) ? intradayData : []}
           prevClose={prevClose}
           loading={intradayLoading}
+          chartStyle={chartStyle}
           className={isFullscreen ? 'border-0 rounded-none flex-1' : 'border-0 rounded-none'}
         />
       ) : historyLoading ? (
