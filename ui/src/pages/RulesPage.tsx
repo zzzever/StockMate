@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Save, Trash2, AlertTriangle, CheckCircle, Star, Edit3 } from 'lucide-react';
 
@@ -11,12 +11,18 @@ export default function RulesPage() {
   const [rules, setRules] = useState(loadRules);
   const [editing, setEditing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const handleSave = useCallback(() => {
     saveRulesToStore(rules);
     setSaved(true); setEditing(false);
-    setTimeout(() => setSaved(false), 2000);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
   }, [rules]);
+
+  useEffect(() => {
+    return () => clearTimeout(savedTimerRef.current);
+  }, []);
 
   const handleClear = useCallback(() => {
     if (confirm('确定要清空所有规则？')) { setRules(''); saveRulesToStore(''); }

@@ -50,6 +50,8 @@
   --price-down: 195 75% 22%;
   --price-up-bg: 350 75% 95%;
   --price-down-bg: 195 75% 94%;
+  --color-up: #c41e3a;        /* 红涨 — 日本紅, matches --red */
+  --color-down: #157a73;      /* 绿跌 — deep teal green, matches --price-down */
 
   --sidebar-width: 220px;
   --sidebar-collapsed: 56px;
@@ -92,6 +94,8 @@
   --price-down: 195 65% 50%;
   --price-up-bg: 350 50% 12%;
   --price-down-bg: 195 50% 10%;
+  --color-up: #e8607a;        /* 红涨 — brighter red for dark mode */
+  --color-down: #3fb5ad;      /* 绿跌 — brighter teal for dark mode */
 
   --chart-grid: 0 0% 18%;
   --chart-text: 36 15% 62%;

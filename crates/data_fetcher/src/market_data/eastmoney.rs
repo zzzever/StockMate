@@ -13,6 +13,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+use tracing;
 
 use super::{HistoryQuote, PriceData};
 
@@ -96,12 +97,19 @@ pub struct BoardData {
 // ── HTTP client ──
 
 fn build_client() -> Option<Client> {
-    Client::builder()
+    match Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(10))
+        .user_agent("StockMate/1.0")
         .no_proxy()
         .build()
-        .ok()
+    {
+        Ok(c) => Some(c),
+        Err(e) => {
+            tracing::error!("[EastMoney] failed to build HTTP client: {}", e);
+            None
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -109,15 +117,42 @@ fn build_client() -> Option<Client> {
 // ═══════════════════════════════════════════════════════
 
 pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
-    let secid = to_secid(ticker)?;
-    let client = build_client()?;
+    let secid = match to_secid(ticker) {
+        Some(s) => s,
+        None => {
+            tracing::warn!("[EastMoney] fetch_realtime_price invalid ticker format: {}", ticker);
+            return None;
+        }
+    };
+    let client = match build_client() {
+        Some(c) => c,
+        None => return None,
+    };
     let url = format!(
         "http://push2.eastmoney.com/api/qt/stock/get?secid={}&fields=f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f168,f169,f170",
         secid
     );
-    let resp = client.get(&url).send().await.ok()?;
-    let json: EmQuoteWrap = resp.json().await.ok()?;
-    let q = json.data?;
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("[EastMoney] fetch_realtime_price HTTP error for {}: {}", ticker, e);
+            return None;
+        }
+    };
+    let json: EmQuoteWrap = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("[EastMoney] fetch_realtime_price JSON parse error for {}: {}", ticker, e);
+            return None;
+        }
+    };
+    let q = match json.data {
+        Some(d) => d,
+        None => {
+            tracing::error!("[EastMoney] fetch_realtime_price missing data field for {}", ticker);
+            return None;
+        }
+    };
 
     let price = q.price? / PRICE_DIV;
     let prev = q.prev_close? / PRICE_DIV;
@@ -166,16 +201,43 @@ pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
 // ═══════════════════════════════════════════════════════
 
 pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<HistoryQuote> {
-    let secid = match to_secid(ticker) { Some(s) => s, None => return vec![] };
-    let client = match build_client() { Some(c) => c, None => return vec![] };
+    let secid = match to_secid(ticker) {
+        Some(s) => s,
+        None => {
+            tracing::warn!("[EastMoney] fetch_history invalid ticker format: {}", ticker);
+            return vec![];
+        }
+    };
+    let client = match build_client() {
+        Some(c) => c,
+        None => return vec![],
+    };
     let klt = period_to_klt(period);
     let url = format!(
         "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt={}&fqt=1&end=20500101&lmt={}",
         secid, klt, days
     );
-    let resp = match client.get(&url).send().await { Ok(r) => r, Err(_) => return vec![] };
-    let json: EmKlineWrap = match resp.json().await { Ok(j) => j, Err(_) => return vec![] };
-    let klines = match json.data { Some(d) => d.klines, None => return vec![] };
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("[EastMoney] fetch_history HTTP error for {}: {}", ticker, e);
+            return vec![];
+        }
+    };
+    let json: EmKlineWrap = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("[EastMoney] fetch_history JSON parse error for {}: {}", ticker, e);
+            return vec![];
+        }
+    };
+    let klines = match json.data {
+        Some(d) => d.klines,
+        None => {
+            tracing::error!("[EastMoney] fetch_history missing data field for {}", ticker);
+            return vec![];
+        }
+    };
 
     let mut quotes = Vec::new();
     for line in klines.iter().rev().take(days as usize) {
@@ -193,15 +255,42 @@ pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<History
 }
 
 pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
-    let secid = match to_secid(ticker) { Some(s) => s, None => return vec![] };
-    let client = match build_client() { Some(c) => c, None => return vec![] };
+    let secid = match to_secid(ticker) {
+        Some(s) => s,
+        None => {
+            tracing::warn!("[EastMoney] fetch_intraday invalid ticker format: {}", ticker);
+            return vec![];
+        }
+    };
+    let client = match build_client() {
+        Some(c) => c,
+        None => return vec![],
+    };
     let url = format!(
         "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=5&fqt=0&end=20500101&lmt=48",
         secid
     );
-    let resp = match client.get(&url).send().await { Ok(r) => r, Err(_) => return vec![] };
-    let json: EmKlineWrap = match resp.json().await { Ok(j) => j, Err(_) => return vec![] };
-    let klines = match json.data { Some(d) => d.klines, None => return vec![] };
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("[EastMoney] fetch_intraday HTTP error for {}: {}", ticker, e);
+            return vec![];
+        }
+    };
+    let json: EmKlineWrap = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("[EastMoney] fetch_intraday JSON parse error for {}: {}", ticker, e);
+            return vec![];
+        }
+    };
+    let klines = match json.data {
+        Some(d) => d.klines,
+        None => {
+            tracing::error!("[EastMoney] fetch_intraday missing data field for {}", ticker);
+            return vec![];
+        }
+    };
 
     let mut quotes = Vec::new();
     for line in &klines {
@@ -223,7 +312,7 @@ pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
         quotes.retain(|q| q.date == latest);
         quotes.sort_by(|a, b| a.time.cmp(&b.time));
     }
-    eprintln!("[eastmoney intraday] {} bars for {}", quotes.len(), ticker);
+    tracing::info!("[eastmoney intraday] {} bars for {}", quotes.len(), ticker);
     quotes
 }
 
@@ -295,7 +384,7 @@ pub async fn fetch_all_board_indices() -> std::collections::HashMap<String, Boar
         }
     }
 
-    eprintln!("East Money: {} unique board indices loaded", map.len());
+    tracing::info!("East Money: {} unique board indices loaded", map.len());
     map
 }
 

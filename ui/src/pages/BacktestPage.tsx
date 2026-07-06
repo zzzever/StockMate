@@ -3,6 +3,11 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createChart, type IChartApi, type ISeriesApi, LineStyle } from 'lightweight-charts';
+
+function safeToFixed(v: unknown, digits: number): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(digits) : '--';
+}
 import {
   ArrowLeft, TrendingUp, Activity, Gauge, CircleDashed, GitBranch,
   Play, ChevronDown, ChevronRight, Save, BarChart3, Target,
@@ -156,7 +161,7 @@ function calculateBollinger(data: number[], period: number, stdDev: number): { u
 }
 
 function generateSignals(quotes: Quote[], strategyId: string, params: StrategyParams): ('buy' | 'sell' | 'hold')[] {
-  const closes = quotes.map(q => parseFloat(q.close));
+  const closes = quotes.map(q => Number(q.close));
   const signals: ('buy' | 'sell' | 'hold')[] = new Array(quotes.length).fill('hold');
 
   switch (strategyId) {
@@ -230,7 +235,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
 
   for (let i = 0; i < quotes.length; i++) {
     const day = quotes[i];
-    const close = parseFloat(day.close);
+    const close = Number(day.close);
     const signal = signals[i];
 
     if (signal === 'buy' && shares === 0 && capital > 0) {
@@ -400,7 +405,7 @@ function PercentInput({ label, value, min, max, step, onChange }: {
   );
 }
 
-function EquityCurveChart({ result, initialCapital }: { result: BacktestResult | null; initialCapital: number }) {
+function EquityCurveChart({ result, initialCapital, quotes }: { result: BacktestResult | null; initialCapital: number; quotes?: Quote[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const strategySeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
@@ -432,8 +437,17 @@ function EquityCurveChart({ result, initialCapital }: { result: BacktestResult |
     if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
     if (!result?.equity_curve?.length) { strategySeriesRef.current.setData([]); benchmarkSeriesRef.current.setData([]); return; }
     const sd = result.equity_curve.map(p => ({ time: p.date as any, value: p.value }));
-    const fv = result.equity_curve[0]?.value ?? initialCapital;
-    const bd = result.equity_curve.map(p => ({ time: p.date as any, value: initialCapital + (fv > 0 ? (p.value - fv) * 0.3 : 0) }));
+    const firstPrice = Number(quotes?.[0]?.close ?? 0);
+    let bd: { time: any; value: number }[];
+    if (quotes && quotes.length > 0 && firstPrice && firstPrice > 0) {
+      bd = result.equity_curve.map((p, i) => {
+        const quote = quotes[i];
+        const buyHoldValue = quote ? initialCapital * (1 + (Number(quote.close) - firstPrice) / firstPrice) : initialCapital;
+        return { time: p.date as any, value: buyHoldValue };
+      });
+    } else {
+      bd = result.equity_curve.map(p => ({ time: p.date as any, value: initialCapital }));
+    }
     strategySeriesRef.current.setData(sd);
     benchmarkSeriesRef.current.setData(bd);
     chartRef.current.timeScale().fitContent();
@@ -493,10 +507,10 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
                       key={`${year}-${m}`}
                       className="h-8 rounded-md flex items-center justify-center text-xs font-mono-nums"
                       style={{ backgroundColor: getColor(cell?.return_pct ?? 0) }}
-                      title={cell ? `${year}-${String(m).padStart(2, '0')}: ${cell.return_pct.toFixed(2)}%` : ''}
+                      title={cell ? `${year}-${String(m).padStart(2, '0')}: ${safeToFixed(cell?.return_pct, 2)}%` : ''}
                     >
                       <span className={cell && cell.return_pct > 0 ? 'text-emerald-300' : cell && cell.return_pct < 0 ? 'text-rose-300' : 'text-slate-400 dark:text-slate-400 dark:text-zinc-600'}>
-                        {cell ? `${cell.return_pct > 0 ? '+' : ''}${cell.return_pct.toFixed(1)}` : '—'}
+                        {cell ? `${cell.return_pct > 0 ? '+' : ''}${safeToFixed(cell.return_pct, 1)}` : '—'}
                       </span>
                     </div>
                   );
@@ -560,12 +574,12 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
                           {trade.type === 'buy' ? '买入' : '卖出'}
                         </span>
                       </td>
-                      <td className="py-2 px-2 text-right font-mono-nums text-slate-700 dark:text-slate-700 dark:text-zinc-300">{trade.price.toFixed(2)}</td>
+                      <td className="py-2 px-2 text-right font-mono-nums text-slate-700 dark:text-slate-700 dark:text-zinc-300">{safeToFixed(trade.price, 2)}</td>
                       <td className="py-2 px-2 text-right font-mono-nums text-slate-700 dark:text-slate-700 dark:text-zinc-300">{trade.shares}</td>
                       <td className="py-2 px-2 text-right font-mono-nums">
                         {trade.type === 'sell' ? (
                           <span className={trade.profit > 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}>
-                            {trade.profit > 0 ? '+' : ''}{trade.profit.toFixed(2)}
+                            {trade.profit > 0 ? '+' : ''}{safeToFixed(trade.profit, 2)}
                           </span>
                         ) : (
                           <span className="text-slate-400 dark:text-slate-400 dark:text-zinc-600">—</span>
@@ -592,7 +606,7 @@ export default function BacktestPage() {
   const navigate = useNavigate();
   const selectedStock = useAppStore((s) => s.selectedStock);
   const code = searchParams.get('code') || selectedStock?.code || '';
-  const { data: stocks, isLoading: stocksLoading } = useStockList();
+  const { data: stocks, isLoading: stocksLoading, error: stocksError } = useStockList();
   const stock = useMemo(() => {
     if (!code || !stocks) return null;
     const exact = stocks.find((s) => s.ticker === code || s.id === code);
@@ -604,7 +618,7 @@ export default function BacktestPage() {
   }, [stocks, code]);
   const stockId = stock?.id ?? code;
 
-  const { data: quotes, isLoading: historyLoading } = useStockHistory(stockId, 180);
+  const { data: quotes, isLoading: historyLoading, error: historyError } = useStockHistory(stockId, 180);
 
   const [selectedStrategy, setSelectedStrategy] = useState('ma_cross');
   const [params, setParams] = useState<StrategyParams>(DEFAULT_PARAMS.ma_cross);
@@ -639,18 +653,23 @@ export default function BacktestPage() {
     setResult(null);
     if (runTimeoutRef.current) clearTimeout(runTimeoutRef.current);
     runTimeoutRef.current = setTimeout(() => {
-      runTimeoutRef.current = null;
-      const res = runMockBacktest(quotes, selectedStrategy, params);
-      console.log('[BacktestPage] strategy run complete:', {
-        total_return: res.total_return.toFixed(2) + '%',
-        annual_return: res.annual_return.toFixed(2) + '%',
-        max_drawdown: res.max_drawdown.toFixed(2) + '%',
-        sharpe_ratio: res.sharpe_ratio.toFixed(2),
-        win_rate: res.win_rate.toFixed(1) + '%',
-        trade_count: res.trade_count,
-      });
-      setResult(res);
-      setRunning(false);
+      try {
+        runTimeoutRef.current = null;
+        const res = runMockBacktest(quotes, selectedStrategy, params);
+        console.log('[BacktestPage] strategy run complete:', {
+          total_return: res.total_return.toFixed(2) + '%',
+          annual_return: res.annual_return.toFixed(2) + '%',
+          max_drawdown: res.max_drawdown.toFixed(2) + '%',
+          sharpe_ratio: res.sharpe_ratio.toFixed(2),
+          win_rate: res.win_rate.toFixed(1) + '%',
+          trade_count: res.trade_count,
+        });
+        setResult(res);
+      } catch (e) {
+        console.error('Backtest failed:', e);
+      } finally {
+        setRunning(false);
+      }
     }, 1200);
   }, [quotes, selectedStrategy, params]);
 
@@ -676,16 +695,17 @@ export default function BacktestPage() {
     setSavedResults(prev => prev.filter(s => s.id !== id));
   };
 
-  const formatPct = (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  const formatPct = (v: number) => `${v > 0 ? '+' : ''}${safeToFixed(v, 2)}%`;
 
   // 使用真实历史数据计算最新价格
   const latestQuote = quotes?.[quotes.length - 1];
   const prevQuote = quotes?.[quotes.length - 2];
-  const price = latestQuote ? parseFloat(latestQuote.close) : 0;
-  const prevPrice = prevQuote ? parseFloat(prevQuote.close) : 0;
+  const price = Number(latestQuote?.close) || 0;
+  const prevPrice = Number(prevQuote?.close) || 0;
   const change = latestQuote && prevQuote ? price - prevPrice : 0;
   const changePercent = prevPrice > 0 ? (change / prevPrice) * 100 : 0;
   const up = change >= 0;
+  const queryError = stocksError || historyError;
 
   // ── Empty state: no stock code ──
   if (!code) {
@@ -699,6 +719,11 @@ export default function BacktestPage() {
         <button onClick={() => navigate('/sectors')} className="px-5 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/30 text-sm font-medium text-violet-400 hover:bg-violet-500/30 transition-colors">前往选股</button>
       </div>
     );
+  }
+
+  // ── Error state ──
+  if (queryError) {
+    return <div className="p-4 text-red-500">加载失败: {queryError.message}</div>;
   }
 
   // ── Loading state ──
@@ -739,10 +764,10 @@ export default function BacktestPage() {
           </div>
         </div>
         <div className="text-right">
-          <div className="font-mono-nums text-2xl font-bold text-slate-900 dark:text-slate-900 dark:text-white">{price.toFixed(2)}</div>
+          <div className="font-mono-nums text-2xl font-bold text-slate-900 dark:text-slate-900 dark:text-white">{safeToFixed(price, 2)}</div>
           <div className={`flex items-center justify-end gap-1 text-sm font-medium ${up ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}`}>
             {up ? <TrendingUp size={16} /> : <TrendingUp size={16} className="rotate-180" />}
-            <span>{up ? '+' : ''}{change.toFixed(2)} ({up ? '+' : ''}{changePercent.toFixed(2)}%)</span>
+            <span>{up ? '+' : ''}{safeToFixed(change, 2)} ({up ? '+' : ''}{safeToFixed(changePercent, 2)}%)</span>
           </div>
         </div>
       </motion.div>
@@ -978,14 +1003,14 @@ export default function BacktestPage() {
               />
               <MetricCard
                 label="夏普比率"
-                value={result.sharpe_ratio.toFixed(2)}
+                value={safeToFixed(result.sharpe_ratio, 2)}
                 color={result.sharpe_ratio >= 1 ? 'text-cyan-400' : 'text-slate-600 dark:text-slate-600 dark:text-zinc-400'}
                 icon={Activity}
                 delay={0.15}
               />
               <MetricCard
                 label="胜率"
-                value={`${result.win_rate.toFixed(1)}%`}
+                value={`${safeToFixed(result.win_rate, 1)}%`}
                 color="text-violet-600 dark:text-violet-600 dark:text-violet-400"
                 icon={Target}
                 delay={0.2}
@@ -1001,7 +1026,7 @@ export default function BacktestPage() {
             </div>
 
             {/* 收益曲线图 */}
-            <EquityCurveChart result={result} initialCapital={params.initialCapital} />
+            <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
 
             {/* 月度热力图 + 交易记录 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1059,8 +1084,8 @@ export default function BacktestPage() {
                             {formatPct(s.result.annual_return)}
                           </td>
                           <td className="py-2 px-2 text-right font-mono-nums text-rose-600 dark:text-rose-600 dark:text-rose-400">{formatPct(s.result.max_drawdown)}</td>
-                          <td className="py-2 px-2 text-right font-mono-nums text-cyan-400">{s.result.sharpe_ratio.toFixed(2)}</td>
-                          <td className="py-2 px-2 text-right font-mono-nums text-violet-600 dark:text-violet-600 dark:text-violet-400">{s.result.win_rate.toFixed(1)}%</td>
+                          <td className="py-2 px-2 text-right font-mono-nums text-cyan-400">{safeToFixed(s.result.sharpe_ratio, 2)}</td>
+                          <td className="py-2 px-2 text-right font-mono-nums text-violet-600 dark:text-violet-600 dark:text-violet-400">{safeToFixed(s.result.win_rate, 1)}%</td>
                           <td className="py-2 px-2 text-center">
                             <button onClick={() => removeSaved(s.id)} className="text-slate-400 dark:text-slate-400 dark:text-zinc-600 hover:text-rose-600 dark:text-rose-600 dark:text-rose-400 transition-colors">
                               <X size={14} />

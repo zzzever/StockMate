@@ -1,7 +1,6 @@
 use tauri::State;
 use rust_decimal::prelude::ToPrimitive;
 use domain::{ApiError, Stock, Quote};
-use std::io::Write;
 use deepseek::{
     DeepSeekClient, DeepSeekAnalysis, DeepSeekPrediction, StrategyScript,
     StockRef, QuoteRef, StockFinanceRef, FundFlowRef, MovingAverageRef, DeepSeekError,
@@ -22,11 +21,7 @@ fn calc_sma(data: &[f64], period: usize) -> Option<rust_decimal::Decimal> {
 // ============================================================
 
 fn cmd_log(cmd: &str, stock_id: &str) {
-    let path = std::env::temp_dir().join("stockmate_deepseek.log");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let ts = chrono::Local::now().format("%H:%M:%S");
-        let _ = writeln!(f, "[{}] CMD {} invoked, stock={}", ts, cmd, stock_id);
-    }
+    tracing::info!("CMD {} invoked, stock={}", cmd, stock_id);
 }
 
 async fn get_stock_or_fetch(state: &AppState, stock_id: &str) -> Result<Stock, ApiError> {
@@ -119,10 +114,16 @@ async fn get_deepseek_model(pool: &storage::DbPool) -> String {
 async fn create_deepseek_client(pool: &storage::DbPool) -> Result<DeepSeekClient, ApiError> {
     let model = get_deepseek_model(pool).await;
     let api_key = get_deepseek_api_key(pool).await?;
-    DeepSeekClient::from_key(api_key, model).map_err(|e| ApiError {
-        code: 500,
-        message: e.to_string(),
-        details: None,
+    DeepSeekClient::from_key(api_key, model).map_err(|e| {
+        let msg = e.to_string();
+        let code = if msg.contains("401") || msg.contains("unauthorized") || msg.contains("Unauthorized") {
+            401
+        } else if msg.contains("rate") || msg.contains("limit") || msg.contains("429") {
+            429
+        } else {
+            500
+        };
+        ApiError { code, message: msg, details: None }
     })
 }
 
@@ -251,14 +252,17 @@ pub async fn analyze_stock_with_ai(
     };
 
     // Fetch real fund flow data
-    let fund_flow_raw = state.data_service.get_stock_fund_flow(&stock_id).await.unwrap_or_default();
+    let fund_flow_raw = state.data_service.get_stock_fund_flow(&stock_id).await.unwrap_or_else(|e| {
+        eprintln!("[WARN] analyze_stock_with_ai: get_stock_fund_flow failed for {}: {}, using default", stock_id, e);
+        Vec::new()
+    });
     let fund_flow_refs: Vec<FundFlowRef> = if fund_flow_raw.is_empty() {
         vec![]
     } else {
         fund_flow_raw.iter().map(|f| FundFlowRef {
             date: f.date.to_string(),
-            net_main: rust_decimal::Decimal::from_f64_retain(f.main_inflow.unwrap_or(0.0)).unwrap_or_default(),
-            net_retail: rust_decimal::Decimal::from_f64_retain(f.retail_inflow.unwrap_or(0.0)).unwrap_or_default(),
+            net_main: f.main_inflow.unwrap_or_default(),
+            net_retail: f.retail_inflow.unwrap_or_default(),
         }).collect()
     };
 
@@ -308,24 +312,22 @@ pub async fn analyze_multi_dimension_with_ai(
             eps: f.eps,
         },
         _ => StockFinanceRef {
-            gross_margin: Some(45.0),
-            net_margin: Some(25.0),
-            roe: Some(18.0),
-            revenue: Some(rust_decimal::Decimal::new(100000000000i64, 0)),
-            net_profit: Some(rust_decimal::Decimal::new(25000000000i64, 0)),
-            debt_ratio: Some(30.0),
-            eps: Some(rust_decimal::Decimal::new(550, 2)),
+            gross_margin: None, net_margin: None, roe: None,
+            revenue: None, net_profit: None, debt_ratio: None, eps: None,
         },
     };
 
-    let fund_flow_raw = state.data_service.get_stock_fund_flow(&stock_id).await.unwrap_or_default();
+    let fund_flow_raw = state.data_service.get_stock_fund_flow(&stock_id).await.unwrap_or_else(|e| {
+        eprintln!("[WARN] analyze_multi_dimension: get_stock_fund_flow failed for {}: {}, using default", stock_id, e);
+        Vec::new()
+    });
     let fund_flow_refs: Vec<FundFlowRef> = if fund_flow_raw.is_empty() {
-        vec![FundFlowRef { date: "2024-06-20".into(), net_main: rust_decimal::Decimal::new(1200000000i64, 0), net_retail: rust_decimal::Decimal::new(-500000000i64, 0) }]
+        vec![]
     } else {
         fund_flow_raw.iter().map(|f| FundFlowRef {
             date: f.date.to_string(),
-            net_main: rust_decimal::Decimal::from_f64_retain(f.main_inflow.unwrap_or(0.0)).unwrap_or_default(),
-            net_retail: rust_decimal::Decimal::from_f64_retain(f.retail_inflow.unwrap_or(0.0)).unwrap_or_default(),
+            net_main: f.main_inflow.unwrap_or_default(),
+            net_retail: f.retail_inflow.unwrap_or_default(),
         }).collect()
     };
 
@@ -351,7 +353,7 @@ pub async fn analyze_multi_dimension_with_ai(
 #[tauri::command]
 pub async fn generate_strategy_with_ai(
     stock_id: String,
-    description: String,
+    rules: String,
     state: State<'_, AppState>,
 ) -> Result<StrategyScript, ApiError> {
     let client = create_deepseek_client(&state.db_pool).await?;
@@ -372,7 +374,7 @@ pub async fn generate_strategy_with_ai(
         ma60: calc_sma(&closes, 60),
     };
 
-    client.generate_strategy(&description, &stock_ref, &quote_refs, &ma_ref).await
+    client.generate_strategy(&rules, &stock_ref, &quote_refs, &ma_ref).await
         .map_err(|e| ApiError {
             code: 500,
             message: e.to_string(),
@@ -401,13 +403,22 @@ pub async fn predict_with_ai(
     state: State<'_, AppState>,
 ) -> Result<DeepSeekPrediction, ApiError> {
     cmd_log("predict_with_ai", &stock_id);
-    // Fetch stock + daily K-line only (no intraday — causes deadlock with sidecar)
+    // Fetch stock + daily K-line only (no intraday — avoids deadlock with provider batch refresh)
     let client = create_deepseek_client(&state.db_pool).await?;
     let stock = get_stock_or_fetch(&state, &stock_id).await?;
     let daily = get_quotes_or_fetch(&state, &stock_id).await?;
-    let weekly = state.data_service.get_stock_history(&stock_id, 12, "week").await.unwrap_or_default();
-    let monthly = state.data_service.get_stock_history(&stock_id, 12, "month").await.unwrap_or_default();
-    let yearly = state.data_service.get_stock_history(&stock_id, 3, "month").await.unwrap_or_default();
+    let weekly = state.data_service.get_stock_history(&stock_id, 12, "week").await.unwrap_or_else(|e| {
+        eprintln!("[WARN] predict_with_ai: get_stock_history(week) failed for {}: {}, using default", stock_id, e);
+        Vec::new()
+    });
+    let monthly = state.data_service.get_stock_history(&stock_id, 12, "month").await.unwrap_or_else(|e| {
+        eprintln!("[WARN] predict_with_ai: get_stock_history(month) failed for {}: {}, using default", stock_id, e);
+        Vec::new()
+    });
+    let yearly = state.data_service.get_stock_history(&stock_id, 1, "year").await.unwrap_or_else(|e| {
+        eprintln!("[WARN] predict_with_ai: get_stock_history(yearly) failed for {}: {}, using default", stock_id, e);
+        Vec::new()
+    });
 
     let stock_ref = stock_to_ref(&stock);
     let current_price = daily.last().map(|q| q.close.to_string()).unwrap_or_default();
@@ -447,14 +458,17 @@ pub async fn generate_card_with_ai(
     let stock_ref = stock_to_ref(&stock);
     let quote_refs: Vec<QuoteRef> = quotes.iter().map(quote_to_ref).collect();
 
-    let fund_flow_raw = state.data_service.get_stock_fund_flow(&stock_id).await.unwrap_or_default();
+    let fund_flow_raw = state.data_service.get_stock_fund_flow(&stock_id).await.unwrap_or_else(|e| {
+        eprintln!("[WARN] generate_card_with_ai: get_stock_fund_flow failed for {}: {}, using default", stock_id, e);
+        Vec::new()
+    });
     let fund_flow_refs: Vec<FundFlowRef> = if fund_flow_raw.is_empty() {
         vec![]
     } else {
         fund_flow_raw.iter().map(|f| FundFlowRef {
             date: f.date.to_string(),
-            net_main: rust_decimal::Decimal::from_f64_retain(f.main_inflow.unwrap_or(0.0)).unwrap_or_default(),
-            net_retail: rust_decimal::Decimal::from_f64_retain(f.retail_inflow.unwrap_or(0.0)).unwrap_or_default(),
+            net_main: f.main_inflow.unwrap_or_default(),
+            net_retail: f.retail_inflow.unwrap_or_default(),
         }).collect()
     };
 
@@ -569,7 +583,7 @@ struct PsychRequest {
 
 #[tauri::command]
 pub async fn analyze_psychology(
-    stock_id: String,
+    _stock_id: String,
     stock_name: String,
     ticker: String,
     current_price: f64,
@@ -590,7 +604,14 @@ pub async fn analyze_psychology(
     );
     let resp = client.analyze_psychology(&user_prompt).await
         .map_err(|e| ApiError { code: 500, message: e.to_string(), details: None })?;
-    let cleaned = resp.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim().to_string();
+    let cleaned = resp.trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("``` json")
+        .trim_start_matches("```JSON")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim()
+        .to_string();
     serde_json::from_str(&cleaned).map_err(|e| ApiError { code: 500, message: format!("Parse: {}", e), details: None })
 }
 
@@ -673,7 +694,14 @@ pub async fn design_great_wall(
     let resp = client.design_great_wall(&user_prompt).await
         .map_err(|e| ApiError { code: 500, message: e.to_string(), details: None })?;
 
-    let cleaned = resp.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim().to_string();
+    let cleaned = resp.trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("``` json")
+        .trim_start_matches("```JSON")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim()
+        .to_string();
     serde_json::from_str(&cleaned).map_err(|e| ApiError {
         code: 500,
         message: format!("Failed to parse Great Wall design: {}", e),

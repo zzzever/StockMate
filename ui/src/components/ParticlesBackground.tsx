@@ -1,17 +1,19 @@
 import { motion } from 'framer-motion';
+import { useMemo } from 'react';
 
 export default function ParticlesBackground() {
-  const particles = Array.from({ length: 30 }, (_, i) => ({
+  const particles = useMemo(() => Array.from({ length: 30 }, (_, i) => ({
     id: i,
     left: `${Math.random() * 100}%`,
     delay: Math.random() * 10,
     duration: 8 + Math.random() * 12,
     size: 2 + Math.random() * 4,
     opacity: 0.2 + Math.random() * 0.5,
-  }));
+    xDrift: (Math.random() - 0.5) * 100, // precompute random x offset per particle
+  })), []);
 
   return (
-    <div className="particles-container">
+    <div className="particles-container" aria-hidden="true">
       {particles.map((p) => (
         <motion.div
           key={p.id}
@@ -29,7 +31,7 @@ export default function ParticlesBackground() {
           }}
           animate={{
             y: ['100vh', '-10vh'],
-            x: [0, (Math.random() - 0.5) * 100],
+            x: [0, p.xDrift],
             scale: [0, 1, 0],
           }}
           transition={{

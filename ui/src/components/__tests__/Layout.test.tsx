@@ -5,12 +5,14 @@ import Layout from '@/components/Layout';
 
 const mockStore = {
   sidebarOpen: true,
-  currentPage: 'dashboard' as const,
+  currentPage: 'search' as const,
   darkMode: true,
   setPage: vi.fn(),
   toggleSidebar: vi.fn(),
   toggleDarkMode: vi.fn(),
   setSelectedStock: vi.fn(),
+  selectedStock: null,
+  theme: 'dark' as const,
 };
 
 vi.mock('@/store/useAppStore', () => ({
@@ -39,19 +41,21 @@ describe('Layout', () => {
         </Layout>
       </MemoryRouter>
     );
-    expect(screen.getByText('StockMate')).toBeInTheDocument();
+    // Sidebar logo text updated to "股王" (was "StockMate" in old version)
+    expect(screen.getByText('股王')).toBeInTheDocument();
     expect(screen.getByTestId('child')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('搜索股票代码或名称...')).toBeInTheDocument();
+    // TopBar placeholder updated to "輸入代碼…" (was "搜索股票代码或名称..." in old version)
+    expect(screen.getByPlaceholderText('輸入代碼…')).toBeInTheDocument();
   });
 
   it('sets page based on route in useEffect', () => {
     render(
-      <MemoryRouter initialEntries={['/strategy']}>
+      <MemoryRouter initialEntries={['/backtest']}>
         <Layout>
-          <div>Strategy Page</div>
+          <div>Backtest Page</div>
         </Layout>
       </MemoryRouter>
     );
-    expect(screen.getByText('Strategy Page')).toBeInTheDocument();
+    expect(screen.getByText('Backtest Page')).toBeInTheDocument();
   });
 });

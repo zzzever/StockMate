@@ -126,8 +126,8 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     rightPriceScaleBorder: 'rgba(255,255,255,0.1)',
     leftPriceScaleBorder: 'rgba(255,255,255,0.1)',
 
-    legendUpColor: 'bg-emerald-400',
-    legendDownColor: 'bg-rose-400',
+    legendUpColor: '#34d399',
+    legendDownColor: '#fb7185',
   },
 
   kawaii: {
@@ -182,8 +182,8 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     rightPriceScaleBorder: 'rgba(255,200,220,0.15)',
     leftPriceScaleBorder: 'rgba(255,200,220,0.15)',
 
-    legendUpColor: 'bg-pink-400',
-    legendDownColor: 'bg-blue-300',
+    legendUpColor: '#f472b6',
+    legendDownColor: '#93c5fd',
   },
 
   dark: {
@@ -238,8 +238,8 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     rightPriceScaleBorder: 'rgba(255,255,255,0.08)',
     leftPriceScaleBorder: 'rgba(255,255,255,0.08)',
 
-    legendUpColor: 'bg-emerald-500',
-    legendDownColor: 'bg-red-500',
+    legendUpColor: '#10b981',
+    legendDownColor: '#ef4444',
   },
 
   neon: {
@@ -294,8 +294,8 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     rightPriceScaleBorder: 'rgba(0,243,255,0.15)',
     leftPriceScaleBorder: 'rgba(0,243,255,0.15)',
 
-    legendUpColor: 'bg-lime-400',
-    legendDownColor: 'bg-fuchsia-400',
+    legendUpColor: '#a3e635',
+    legendDownColor: '#e879f9',
   },
 
   minimal: {
@@ -357,39 +357,119 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
   // ── New styles with distinctive aesthetics ──
 
   morandi: {
-    candleLineWidth: 2, maLineWidth: 2, maLineStyle: LineStyle.Dashed,
-    name: "乔治·莫兰迪", icon: "🏺", description: "Morandi muted elegance — low saturation pastels, calm sophistication",
-    upColor: '#c9a99c', downColor: '#8b9d83', borderUpColor: '#b89586', borderDownColor: '#7a8d72',
-    wickUpColor: '#d4bab0', wickDownColor: '#9bada0',
-    volumeUpColor: 'rgba(201,169,156,0.5)', volumeDownColor: 'rgba(139,157,131,0.5)', volumeMaColor: 'rgba(180,170,160,0.7)',
-    ma5Color: '#d4a99a', ma10Color: '#b8a090', ma20Color: '#9b9786', ma60Color: '#a0a090',
-    bbUpperColor: 'rgba(180,160,150,0.3)', bbMiddleColor: 'rgba(160,145,135,0.5)', bbLowerColor: 'rgba(180,160,150,0.3)',
-    supportColor: '#c0a090', resistanceColor: '#a0b090',
-    macdDifColor: '#c9b0a0', macdDeaColor: '#a0b5a0', macdHistUpColor: 'rgba(200,169,156,0.6)', macdHistDownColor: 'rgba(139,157,131,0.6)',
-    kdjKColor: '#d4bab0', kdjDColor: '#b09b8b', kdjJColor: '#c0b8a8',
-    rsiLineColor: '#c0a898', rsiOverboughtColor: 'rgba(200,160,140,0.1)', rsiOversoldColor: 'rgba(150,170,150,0.1)',
-    chartBackground: '#f5f0eb', textColor: '#8b7d6b', gridVertColor: 'rgba(180,170,160,0.3)', gridHorzColor: 'rgba(180,170,160,0.3)',
-    borderColor: 'rgba(180,170,160,0.5)', crosshairColor: 'rgba(180,170,160,0.8)',
-    rightPriceScaleBorder: 'rgba(180,170,160,0.5)', leftPriceScaleBorder: 'transparent',
-    legendUpColor: '#c9a99c', legendDownColor: '#8b9d83',
+    candleLineWidth: 2,
+    maLineWidth: 2,
+    maLineStyle: LineStyle.Dashed,
+    name: '乔治·莫兰迪',
+    icon: '🏺',
+    description: 'Morandi muted elegance — low saturation pastels, calm sophistication',
+
+    upColor: '#c9a99c',
+    downColor: '#8b9d83',
+    borderUpColor: '#b89586',
+    borderDownColor: '#7a8d72',
+    wickUpColor: '#d4bab0',
+    wickDownColor: '#9bada0',
+
+    volumeUpColor: 'rgba(201,169,156,0.5)',
+    volumeDownColor: 'rgba(139,157,131,0.5)',
+    volumeMaColor: 'rgba(180,170,160,0.7)',
+
+    ma5Color: '#d4a99a',
+    ma10Color: '#b8a090',
+    ma20Color: '#9b9786',
+    ma60Color: '#a0a090',
+
+    bbUpperColor: 'rgba(180,160,150,0.3)',
+    bbMiddleColor: 'rgba(160,145,135,0.5)',
+    bbLowerColor: 'rgba(180,160,150,0.3)',
+
+    supportColor: '#c0a090',
+    resistanceColor: '#a0b090',
+
+    macdDifColor: '#c9b0a0',
+    macdDeaColor: '#a0b5a0',
+    macdHistUpColor: 'rgba(200,169,156,0.6)',
+    macdHistDownColor: 'rgba(139,157,131,0.6)',
+
+    kdjKColor: '#d4bab0',
+    kdjDColor: '#b09b8b',
+    kdjJColor: '#c0b8a8',
+
+    rsiLineColor: '#c0a898',
+    rsiOverboughtColor: 'rgba(200,160,140,0.1)',
+    rsiOversoldColor: 'rgba(150,170,150,0.1)',
+
+    chartBackground: 'transparent',
+    textColor: '#8b7d6b',
+    gridVertColor: 'rgba(180,170,160,0.3)',
+    gridHorzColor: 'rgba(180,170,160,0.3)',
+    borderColor: 'rgba(180,170,160,0.5)',
+    crosshairColor: 'rgba(180,170,160,0.8)',
+
+    rightPriceScaleBorder: 'rgba(180,170,160,0.5)',
+    leftPriceScaleBorder: 'transparent',
+
+    legendUpColor: '#c9a99c',
+    legendDownColor: '#8b9d83',
   },
 
   mondrian: {
-    candleLineWidth: 3, maLineWidth: 2, maLineStyle: LineStyle.Solid,
-    name: "皮特·蒙德里安", icon: "🟥", description: "Mondrian bold primaries — red, yellow, blue, black grids",
-    upColor: '#e63946', downColor: '#1d3557', borderUpColor: '#000000', borderDownColor: '#000000',
-    wickUpColor: '#e63946', wickDownColor: '#1d3557',
-    volumeUpColor: 'rgba(230,57,70,0.6)', volumeDownColor: 'rgba(29,53,87,0.6)', volumeMaColor: '#f1c40f',
-    ma5Color: '#e63946', ma10Color: '#f1c40f', ma20Color: '#1d3557', ma60Color: '#000000',
-    bbUpperColor: 'rgba(0,0,0,0.2)', bbMiddleColor: 'rgba(0,0,0,0.4)', bbLowerColor: 'rgba(0,0,0,0.2)',
-    supportColor: '#1d3557', resistanceColor: '#e63946',
-    macdDifColor: '#e63946', macdDeaColor: '#1d3557', macdHistUpColor: '#f1c40f', macdHistDownColor: 'rgba(0,0,0,0.3)',
-    kdjKColor: '#e63946', kdjDColor: '#1d3557', kdjJColor: '#f1c40f',
-    rsiLineColor: '#000000', rsiOverboughtColor: 'rgba(230,57,70,0.08)', rsiOversoldColor: 'rgba(29,53,87,0.08)',
-    chartBackground: '#f8f9fa', textColor: '#000000', gridVertColor: 'rgba(0,0,0,0.15)', gridHorzColor: 'rgba(0,0,0,0.15)',
-    borderColor: '#000000', crosshairColor: 'rgba(0,0,0,0.8)',
-    rightPriceScaleBorder: '#000000', leftPriceScaleBorder: 'transparent',
-    legendUpColor: '#e63946', legendDownColor: '#1d3557',
+    candleLineWidth: 3,
+    maLineWidth: 2,
+    maLineStyle: LineStyle.Solid,
+    name: '皮特·蒙德里安',
+    icon: '🟥',
+    description: 'Mondrian bold primaries — red, yellow, blue, black grids',
+
+    upColor: '#e63946',
+    downColor: '#1d3557',
+    borderUpColor: '#000000',
+    borderDownColor: '#000000',
+    wickUpColor: '#e63946',
+    wickDownColor: '#1d3557',
+
+    volumeUpColor: 'rgba(230,57,70,0.6)',
+    volumeDownColor: 'rgba(29,53,87,0.6)',
+    volumeMaColor: '#f1c40f',
+
+    ma5Color: '#e63946',
+    ma10Color: '#f1c40f',
+    ma20Color: '#1d3557',
+    ma60Color: '#000000',
+
+    bbUpperColor: 'rgba(0,0,0,0.2)',
+    bbMiddleColor: 'rgba(0,0,0,0.4)',
+    bbLowerColor: 'rgba(0,0,0,0.2)',
+
+    supportColor: '#1d3557',
+    resistanceColor: '#e63946',
+
+    macdDifColor: '#e63946',
+    macdDeaColor: '#1d3557',
+    macdHistUpColor: '#f1c40f',
+    macdHistDownColor: 'rgba(0,0,0,0.3)',
+
+    kdjKColor: '#e63946',
+    kdjDColor: '#1d3557',
+    kdjJColor: '#f1c40f',
+
+    rsiLineColor: '#000000',
+    rsiOverboughtColor: 'rgba(230,57,70,0.08)',
+    rsiOversoldColor: 'rgba(29,53,87,0.08)',
+
+    chartBackground: 'transparent',
+    textColor: '#000000',
+    gridVertColor: 'rgba(0,0,0,0.15)',
+    gridHorzColor: 'rgba(0,0,0,0.15)',
+    borderColor: '#000000',
+    crosshairColor: 'rgba(0,0,0,0.8)',
+
+    rightPriceScaleBorder: '#000000',
+    leftPriceScaleBorder: 'transparent',
+
+    legendUpColor: '#e63946',
+    legendDownColor: '#1d3557',
   },
 
   manga: {
@@ -404,9 +484,10 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
     macdDifColor: '#ff6b6b', macdDeaColor: '#4ecdc4', macdHistUpColor: '#f9ca24', macdHistDownColor: 'rgba(45,52,54,0.3)',
     kdjKColor: '#ff6b6b', kdjDColor: '#4ecdc4', kdjJColor: '#f9ca24',
     rsiLineColor: '#2d3436', rsiOverboughtColor: 'rgba(255,107,107,0.1)', rsiOversoldColor: 'rgba(78,205,196,0.1)',
-    chartBackground: '#fffef9', textColor: '#2d3436', gridVertColor: 'rgba(45,52,54,0.12)', gridHorzColor: 'rgba(45,52,54,0.12)',
+    chartBackground: 'transparent', textColor: '#2d3436', gridVertColor: 'rgba(45,52,54,0.12)', gridHorzColor: 'rgba(45,52,54,0.12)',
     borderColor: '#2d3436', crosshairColor: 'rgba(45,52,54,0.8)',
-    rightPriceScaleBorder: '#2d3436', leftPriceScaleBorder: 'transparent',
+    rightPriceScaleBorder: '#2d3436', leftPriceScaleBorder: 'transparent',  // manga
+    // 红涨绿跌 (Chinese convention: red=up, green=down)
     legendUpColor: '#ff6b6b', legendDownColor: '#4ecdc4',
   },
 };
@@ -414,5 +495,10 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
 export const defaultChartStyle: ChartStyle = 'manga';
 
 export function getChartTheme(style: ChartStyle): ChartThemeConfig {
-  return chartThemes[style] ?? chartThemes[defaultChartStyle];
+  const theme = chartThemes[style];
+  if (!theme) {
+    console.warn(`[chartThemes] Unknown chart style "${style}", falling back to ${defaultChartStyle}`);
+    return chartThemes[defaultChartStyle];
+  }
+  return theme;
 }

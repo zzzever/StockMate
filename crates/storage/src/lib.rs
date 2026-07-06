@@ -1,5 +1,6 @@
-use domain::{Stock, Quote, ApiError};
+use domain::{Stock, Quote};
 use sqlx::{SqlitePool, Result, Row};
+use rust_decimal::prelude::ToPrimitive;
 
 pub type DbPool = SqlitePool;
 
@@ -18,22 +19,26 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0002_add_fundamentals.sql"),
         include_str!("../migrations/0003_add_ai_cache.sql"),
         include_str!("../migrations/0004_add_stock_type.sql"),
+        include_str!("../migrations/0005_add_kline.sql"),
     ];
     for mig in migrations {
+        // Wrap each migration file in a transaction for atomicity
+        let mut tx = pool.begin().await?;
         for stmt in mig.split(";") {
             let stmt = stmt.trim();
             if !stmt.is_empty() {
-                // Ignore "duplicate column" errors for idempotent migrations
-                if let Err(e) = sqlx::query(stmt).execute(pool).await {
+                if let Err(e) = sqlx::query(stmt).execute(&mut *tx).await {
                     let msg = e.to_string();
                     if msg.contains("duplicate column") || msg.contains("already exists") {
                         eprintln!("Migration skip (idempotent): {}", msg);
                     } else {
+                        let _ = tx.rollback().await;
                         return Err(e);
                     }
                 }
             }
         }
+        tx.commit().await?;
     }
     Ok(())
 }
@@ -152,16 +157,26 @@ impl SqliteQuoteRepository {
 
 fn row_to_quote(row: &sqlx::sqlite::SqliteRow) -> Quote {
     use rust_decimal::Decimal;
+    let parse_or_warn = |s: &str, field: &str| -> Decimal {
+        s.parse().unwrap_or_else(|_| {
+            eprintln!("[storage] WARN: Failed to parse {} as Decimal, using ZERO. Value: {:?}", field, s);
+            Decimal::ZERO
+        })
+    };
+    let vol: i64 = row.get("volume");
+    if vol < 0 {
+        eprintln!("[storage] WARN: Negative volume {} in row, clamping to 0", vol);
+    }
     Quote {
         stock_id: row.get("stock_id"),
         date: row.get("date"),
         time: String::new(),
-        open: row.get::<String, _>("open").parse().unwrap_or(Decimal::ZERO),
-        high: row.get::<String, _>("high").parse().unwrap_or(Decimal::ZERO),
-        low: row.get::<String, _>("low").parse().unwrap_or(Decimal::ZERO),
-        close: row.get::<String, _>("close").parse().unwrap_or(Decimal::ZERO),
-        volume: row.get::<i64, _>("volume") as u64,
-        adjusted_close: row.get::<String, _>("adjusted_close").parse().unwrap_or(Decimal::ZERO),
+        open: parse_or_warn(&row.get::<String, _>("open"), "open"),
+        high: parse_or_warn(&row.get::<String, _>("high"), "high"),
+        low: parse_or_warn(&row.get::<String, _>("low"), "low"),
+        close: parse_or_warn(&row.get::<String, _>("close"), "close"),
+        volume: vol.max(0) as u64,
+        adjusted_close: parse_or_warn(&row.get::<String, _>("adjusted_close"), "adjusted_close"),
     }
 }
 
@@ -296,7 +311,17 @@ impl SettingsRepository {
     }
 
     pub async fn get_model(&self) -> String {
-        self.get("deepseek_model").await.ok().flatten().unwrap_or_else(|| "deepseek-chat".to_string())
+        match self.get("deepseek_model").await {
+            Ok(Some(model)) => model,
+            Ok(None) => {
+                eprintln!("[storage] WARN: deepseek_model not set in DB, using default 'deepseek-chat'");
+                "deepseek-chat".to_string()
+            }
+            Err(e) => {
+                eprintln!("[storage] WARN: Failed to read deepseek_model from DB: {}, using default 'deepseek-chat'", e);
+                "deepseek-chat".to_string()
+            }
+        }
     }
 
     pub async fn set_model(&self, model: &str) -> Result<()> {
@@ -305,9 +330,20 @@ impl SettingsRepository {
 
     pub async fn get_cache_ttl(&self, cache_type: &str) -> i64 {
         let key = format!("cache_ttl_{}", cache_type);
-        self.get(&key).await.ok().flatten()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(3600)
+        match self.get(&key).await {
+            Ok(Some(v)) => v.parse().unwrap_or_else(|e| {
+                eprintln!("[storage] WARN: Failed to parse cache_ttl '{}' for {}: {}, using default 3600", key, cache_type, e);
+                3600
+            }),
+            Ok(None) => {
+                eprintln!("[storage] WARN: cache_ttl for {} not set in DB, using default 3600", cache_type);
+                3600
+            }
+            Err(e) => {
+                eprintln!("[storage] WARN: Failed to read cache_ttl for {} from DB: {}, using default 3600", cache_type, e);
+                3600
+            }
+        }
     }
 }
 
@@ -317,8 +353,43 @@ impl SettingsRepository {
 
 use domain::WatchlistItem;
 
+/// Domain-oriented watchlist repository.
+///
+/// Returns `WatchlistItem` domain objects with exchange auto-detection
+/// via `exchange_for_symbol()`. This is the active watchlist interface
+/// used by the application layer. Methods: get_all, add, remove,
+/// update_sort_order.
+///
+/// NOTE: There is also `WatchlistRepo` in `repositories/watchlist_repo.rs`
+/// which provides raw entity access (including group `name` support).
+/// That implementation is currently unused and marked as deprecated.
 pub struct WatchlistRepository {
     pool: DbPool,
+}
+
+/// Determine exchange based on stock code prefix for Chinese A/B-shares:
+/// - 6xx         -> SH (Shanghai A-shares)
+/// - 9xx         -> SH (Shanghai B-shares, e.g. 900xxx-901xxx)
+/// - 920xxx      -> BJ (Beijing Stock Exchange)
+/// - 0xx/3xx     -> SZ (Shenzhen A-shares / ChiNext)
+/// - 2xx/200xxx  -> SZ (Shenzhen B-shares)
+/// - 4xx/8xx     -> BJ (Beijing Stock Exchange / 老三板)
+fn exchange_for_symbol(symbol: &str) -> String {
+    if symbol.starts_with('6') || (symbol.starts_with('9') && !symbol.starts_with("920")) {
+        // 6xx = Shanghai A-shares, 9xx = Shanghai B-shares (900xxx-901xxx)
+        "SH".to_string()
+    } else if symbol.starts_with("920") {
+        // 920xxx = Beijing Stock Exchange
+        "BJ".to_string()
+    } else if symbol.starts_with('0') || symbol.starts_with('3') || symbol.starts_with('2') {
+        // 0xx = Shenzhen main board, 3xx = ChiNext, 2xx = Shenzhen B-shares
+        "SZ".to_string()
+    } else if symbol.starts_with('4') || symbol.starts_with('8') {
+        // 4xx/8xx = Beijing Stock Exchange (三板/北交所)
+        "BJ".to_string()
+    } else {
+        String::new() // unknown
+    }
 }
 
 impl WatchlistRepository {
@@ -334,7 +405,7 @@ impl WatchlistRepository {
             stock_id: r.get("symbol"),
             stock_code: r.get("symbol"),
             stock_name: r.get("symbol"),
-            exchange: "SH".to_string(),
+            exchange: exchange_for_symbol(r.get("symbol")),
             added_at: r.get("added_at"),
             alert_price: r.get("alert_price"),
             notes: r.get("notes"),
@@ -513,14 +584,18 @@ impl FundFlowRepository {
             .bind(symbol)
             .fetch_all(&self.pool)
             .await?;
-        let items = rows.iter().map(|r| FundFlow {
-            stock_id: r.get("symbol"),
-            date: r.get("date"),
-            main_inflow: r.get("main_inflow"),
-            retail_inflow: r.get("retail_inflow"),
-            large_order_inflow: r.get("large_order_inflow"),
-            medium_order_inflow: r.get("medium_order_inflow"),
-            small_order_inflow: r.get("small_order_inflow"),
+        let items = rows.iter().map(|r| {
+            use rust_decimal::Decimal;
+            let d = |v: Option<f64>| v.and_then(|x| Decimal::from_f64_retain(x));
+            FundFlow {
+                stock_id: r.get("symbol"),
+                date: r.get("date"),
+                main_inflow: d(r.get::<Option<f64>, _>("main_inflow")),
+                retail_inflow: d(r.get::<Option<f64>, _>("retail_inflow")),
+                large_order_inflow: d(r.get::<Option<f64>, _>("large_order_inflow")),
+                medium_order_inflow: d(r.get::<Option<f64>, _>("medium_order_inflow")),
+                small_order_inflow: d(r.get::<Option<f64>, _>("small_order_inflow")),
+            }
         }).collect();
         Ok(items)
     }
@@ -531,11 +606,11 @@ impl FundFlowRepository {
         )
         .bind(&item.stock_id)
         .bind(&item.date)
-        .bind(item.main_inflow)
-        .bind(item.retail_inflow)
-        .bind(item.large_order_inflow)
-        .bind(item.medium_order_inflow)
-        .bind(item.small_order_inflow)
+        .bind(item.main_inflow.map(|v| v.to_f64()))
+        .bind(item.retail_inflow.map(|v| v.to_f64()))
+        .bind(item.large_order_inflow.map(|v| v.to_f64()))
+        .bind(item.medium_order_inflow.map(|v| v.to_f64()))
+        .bind(item.small_order_inflow.map(|v| v.to_f64()))
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -561,15 +636,19 @@ impl MarketOverviewRepository {
         let row = sqlx::query("SELECT * FROM market_overview ORDER BY date DESC LIMIT 1")
             .fetch_optional(&self.pool)
             .await?;
-        Ok(row.map(|r| MarketOverview {
-            date: r.get("date"),
-            up_count: r.get("up_count"),
-            down_count: r.get("down_count"),
-            flat_count: r.get("flat_count"),
-            total_volume: r.get("total_volume"),
-            total_amount: r.get("total_amount"),
-            northbound_inflow: r.get("northbound_inflow"),
-            sentiment_index: r.get("sentiment_index"),
+        Ok(row.map(|r| {
+            use rust_decimal::Decimal;
+            let d = |v: Option<f64>| v.and_then(|x| Decimal::from_f64_retain(x));
+            MarketOverview {
+                date: r.get("date"),
+                up_count: r.get("up_count"),
+                down_count: r.get("down_count"),
+                flat_count: r.get("flat_count"),
+                total_volume: d(r.get::<Option<f64>, _>("total_volume")),
+                total_amount: d(r.get::<Option<f64>, _>("total_amount")),
+                northbound_inflow: d(r.get::<Option<f64>, _>("northbound_inflow")),
+                sentiment_index: r.get("sentiment_index"),
+            }
         }))
     }
 
@@ -581,9 +660,9 @@ impl MarketOverviewRepository {
         .bind(overview.up_count)
         .bind(overview.down_count)
         .bind(overview.flat_count)
-        .bind(overview.total_volume)
-        .bind(overview.total_amount)
-        .bind(overview.northbound_inflow)
+        .bind(overview.total_volume.map(|v| v.to_f64()))
+        .bind(overview.total_amount.map(|v| v.to_f64()))
+        .bind(overview.northbound_inflow.map(|v| v.to_f64()))
         .bind(overview.sentiment_index)
         .execute(&self.pool)
         .await?;
@@ -882,18 +961,18 @@ mod tests {
         let item = domain::FundFlow {
             stock_id: "600519".into(),
             date: NaiveDate::from_ymd_opt(2024, 6, 15).unwrap(),
-            main_inflow: Some(100.0),
-            retail_inflow: Some(-50.0),
-            large_order_inflow: Some(60.0),
-            medium_order_inflow: Some(30.0),
-            small_order_inflow: Some(10.0),
+            main_inflow: Some(Decimal::new(100, 0)),
+            retail_inflow: Some(Decimal::new(-50, 0)),
+            large_order_inflow: Some(Decimal::new(60, 0)),
+            medium_order_inflow: Some(Decimal::new(30, 0)),
+            small_order_inflow: Some(Decimal::new(10, 0)),
         };
 
         repo.insert(&item).await.unwrap();
 
         let flows = repo.get_by_symbol("600519").await.unwrap();
         assert_eq!(flows.len(), 1);
-        assert_eq!(flows[0].main_inflow, Some(100.0));
+        assert_eq!(flows[0].main_inflow, Some(Decimal::new(100, 0)));
     }
 
     // ============================
@@ -909,9 +988,9 @@ mod tests {
             up_count: 2500,
             down_count: 1800,
             flat_count: 200,
-            total_volume: Some(850.0),
-            total_amount: Some(850.0),
-            northbound_inflow: Some(5.0),
+            total_volume: Some(Decimal::new(850, 0)),
+            total_amount: Some(Decimal::new(850, 0)),
+            northbound_inflow: Some(Decimal::new(5, 0)),
             sentiment_index: Some(0.65),
         };
 

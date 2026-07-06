@@ -7,13 +7,27 @@ import {
   Zap, Globe, ShieldAlert, Calendar,
 } from 'lucide-react';
 import { useAnalyzeAll, useStockHistory, useRealtimeQuote, useStockFinance, useDeepSeekConfig, useStockDetail } from '@/hooks/useTauriQuery';
-import type { DeepSeekPrediction, MultiDimensionAnalysis, CardData, MarketEnvironment } from '@/types';
+import type { DeepSeekPrediction, MultiDimensionAnalysis, CardData, MarketEnvironment, Quote } from '@/types';
 import { fmtPrice, fmtPct } from '@/lib/format';
 
 // ── helpers ──
 function todayStr(): string { return new Date().toISOString().slice(0, 10); }
 function safePct(v: number): string { return Number.isFinite(v) ? (v * 100).toFixed(1) : '--'; }
 function fmtConfidence(v: number): string { return Number.isFinite(v) ? `${(v * 100).toFixed(0)}%` : '--'; }
+function fmtBars(quotes: Quote[] | undefined | null, take: number = 60): string {
+  return (quotes ?? []).slice(-take).map(q =>
+    `${q.date} O:${q.open} H:${q.high} L:${q.low} C:${q.close}`
+  ).join('\n');
+}
+function isValidMultiDim(obj: unknown): obj is MultiDimensionAnalysis {
+  if (!obj || typeof obj !== 'object') return false;
+  const o = obj as Record<string, unknown>;
+  return typeof o.technical === 'object' && o.technical !== null
+    && typeof o.capital_flow === 'object' && o.capital_flow !== null
+    && typeof o.fundamental === 'object' && o.fundamental !== null
+    && typeof o.sentiment === 'object' && o.sentiment !== null
+    && typeof o.composite === 'object' && o.composite !== null;
+}
 
 const DIR_ICON: Record<string, typeof TrendingUp> = { up: TrendingUp, down: TrendingDown, sideways: Minus };
 const DIR_COLOR: Record<string, string> = { up: 'text-red-700', down: 'text-blue-700', sideways: 'text-amber-600' };
@@ -23,7 +37,15 @@ const DIR_LABEL: Record<string, string> = { up: '看涨', down: '看跌', sidewa
 // ── History storage ──
 interface HistoryEntry { date: string; prediction: DeepSeekPrediction | null; multi: MultiDimensionAnalysis | null; card: CardData | null; market: MarketEnvironment | null; }
 function loadAllHistory(): Record<string, HistoryEntry> { try { return JSON.parse(localStorage.getItem('stockmate_pred_full') || '{}'); } catch { return {}; } }
-function saveHistoryEntry(stockId: string, entry: HistoryEntry) { const all = loadAllHistory(); all[stockId] = entry; localStorage.setItem('stockmate_pred_full', JSON.stringify(all)); }
+function saveHistoryEntry(stockId: string, entry: HistoryEntry) {
+  try {
+    const all = loadAllHistory();
+    all[stockId] = entry;
+    localStorage.setItem('stockmate_pred_full', JSON.stringify(all));
+  } catch (e) {
+    console.error('Failed to save prediction history:', e);
+  }
+}
 function getHistoryDates(stockId: string): string[] { const e = loadAllHistory()[stockId]; return e?.date ? [e.date] : []; }
 
 // ── Component ──
@@ -31,30 +53,39 @@ export default function PredictPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const stockId = searchParams.get('code') || '';
+  const isValidStock = stockId.includes('.');
+  const effectiveId = isValidStock ? stockId : '';
   const { data: config } = useDeepSeekConfig();
   const hasKey = config?.has_key ?? false;
 
   // Read cached data from stock detail page
-  const { data: stockDetail } = useStockDetail(stockId);
-  const { data: dailyQuotes } = useStockHistory(stockId.includes('.') ? stockId : '', 60, 'day');
-  const { data: weeklyQuotes } = useStockHistory(stockId.includes('.') ? stockId : '', 12, 'week');
-  const { data: monthlyQuotes } = useStockHistory(stockId.includes('.') ? stockId : '', 12, 'month');
-  const { data: realtimeQuote } = useRealtimeQuote(stockId.includes('.') ? stockId : '');
-  const { data: finance } = useStockFinance(stockId.includes('.') ? stockId : '');
+  const { data: stockDetail, error: detailError } = useStockDetail(effectiveId);
+  const { data: dailyQuotes, error: dailyError } = useStockHistory(effectiveId, 60, 'day');
+  const { data: weeklyQuotes, error: weeklyError } = useStockHistory(effectiveId, 12, 'week');
+  const { data: monthlyQuotes, error: monthlyError } = useStockHistory(effectiveId, 12, 'month');
+  const { data: realtimeQuote, error: quoteError } = useRealtimeQuote(effectiveId);
+  const { data: finance, error: financeError } = useStockFinance(effectiveId);
 
-  const fmtNum = (v: any) => { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0'; };
-  const fmtBars = (quotes: any[]) => (quotes ?? []).slice(-30).map((q: any) => `${q.date} O:${fmtNum(q.open)} H:${fmtNum(q.high)} L:${fmtNum(q.low)} C:${fmtNum(q.close)}`).join('\n');
-  const currentPrice = realtimeQuote?.current_price?.toString() || dailyQuotes?.[dailyQuotes.length - 1]?.close?.toString() || '0';
-  const prevClose = realtimeQuote?.prev_close?.toString() || dailyQuotes?.[dailyQuotes.length - 2]?.close?.toString() || '0';
+  const currentPrice = Number(realtimeQuote?.current_price ?? dailyQuotes?.[dailyQuotes.length - 1]?.close ?? 0);
 
   const stockName = stockDetail?.name || '';
   const ticker = stockDetail?.ticker || stockId.split('.').shift() || '';
 
-  const { data: allData, isLoading, error, refetch } = useAnalyzeAll(
-    stockId, stockName, ticker, currentPrice, prevClose,
-    fmtBars(dailyQuotes ?? []), fmtBars(weeklyQuotes ?? []), fmtBars(monthlyQuotes ?? []),
-    finance?.gross_margin, finance?.roe, finance?.debt_ratio,
-  );
+  const prevClose = Number(realtimeQuote?.prev_close ?? (dailyQuotes && dailyQuotes.length > 1 ? dailyQuotes[dailyQuotes.length - 2].close : currentPrice));
+
+  const { data: allData, isLoading, error, refetch } = useAnalyzeAll({
+    stockId,
+    name: stockName,
+    code: ticker,
+    price: currentPrice,
+    prevClose,
+    dailyText: fmtBars(dailyQuotes, 60),
+    weeklyText: fmtBars(weeklyQuotes, 12),
+    monthlyText: fmtBars(monthlyQuotes, 12),
+    grossMargin: finance?.gross_margin ?? null,
+    roe: finance?.roe ?? null,
+    debtRatio: finance?.debt_ratio ?? null,
+  });
 
   // Load/save history
   const [historyDates, setHistoryDates] = useState<string[]>(() => getHistoryDates(stockId));
@@ -66,8 +97,17 @@ export default function PredictPage() {
 
   // Extract data from unified response
   const prediction = allData?.prediction ?? null;
-  const multiDim = allData ? { technical: allData.technical, capital_flow: allData.capital_flow, fundamental: allData.fundamental, sentiment: allData.sentiment, composite: allData.composite ?? { overall: 0, recommendation: '' }, briefing: null } as any as MultiDimensionAnalysis : null;
-  const card: CardData | null = allData?.card_reason ? { stock_id: stockId, ticker, name: stockName, price: currentPrice, change_percent: 0, recommendation: allData.card_reason, buy_signal: false, late_rush: false, tags: [], generated_at: '' } : null;
+  let multiDim: MultiDimensionAnalysis | null = allData && isValidMultiDim(allData) ? allData : null;
+  // Synthesize briefing from card_reason when AI briefing is missing
+  if (multiDim && !multiDim.briefing && allData?.card_reason) {
+    multiDim.briefing = {
+      commentary: allData.card_reason,
+      key_numbers: [],
+      risk_warnings: [],
+      trading_notes: [],
+    };
+  }
+  const card: CardData | null = allData?.card_reason ? { stock_id: stockId, ticker, name: stockName, price: currentPrice, change_percent: realtimeQuote?.change_percent ?? 0, recommendation: allData.card_reason, buy_signal: allData?.prediction?.direction === 'up' && (allData?.prediction?.confidence ?? 0) > 0.6, late_rush: false, tags: allData?.card_tags ?? [], generated_at: new Date().toISOString() } : null;
   const marketEnv: MarketEnvironment | null = allData?.market ?? null;
 
   // Save latest data to history after each successful fetch
@@ -90,6 +130,7 @@ export default function PredictPage() {
 
   const anyLoading = isLoading;
   const errors = error ? [error] : [];
+  const dataErrors = [detailError, dailyError, weeklyError, monthlyError, quoteError, financeError].filter(Boolean);
 
   const refreshAll = useCallback(() => {
     setSelectedDate(''); setHistoryData(null);
@@ -127,17 +168,24 @@ export default function PredictPage() {
           {selectedDate && (
             <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300">历史: {selectedDate}</span>
           )}
-          {errors.length > 0 && (
-            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300">
-              {errors.length} 个查询失败
+          {dataErrors.length > 0 && (
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 border border-amber-300">
+              部分数据加载失败 ({dataErrors.length})
             </span>
           )}
-          {/* Debug: hook states */}
-          <span className="text-[10px] text-gray-400 font-mono">
-            pred={prediction?'ok':isLoading?'loading':error?'err':'--'}
-            card={card?.recommendation?'ok':isLoading?'loading':error?'err':'--'}
-            env={marketEnv?'ok':isLoading?'loading':'--'}
-          </span>
+          {errors.length > 0 && (
+            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300">
+              {errors.length === 1 ? '查询失败' : `${errors.length} 个查询失败`}
+            </span>
+          )}
+          {import.meta.env.DEV && (
+            /* Debug: hook states */
+            <span className="text-[10px] text-gray-400 font-mono">
+              pred={prediction?'ok':isLoading?'loading':error?'err':'--'}
+              card={card?.recommendation?'ok':isLoading?'loading':error?'err':'--'}
+              env={marketEnv?'ok':isLoading?'loading':'--'}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {!hasKey && (
@@ -153,15 +201,23 @@ export default function PredictPage() {
         </div>
       </div>
 
-      {!stockId ? (
+      {!isValidStock ? (
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-lg font-bold opacity-40" style={{ color: 'hsl(var(--ink))' }}>请先选择一只股票</p>
+          <p className="text-lg font-bold opacity-40" style={{ color: 'hsl(var(--ink))' }}>请先选择一只股票（格式：代码.交易所，如 000001.SZ）</p>
         </div>
       ) : !hasKey ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-2">
             <ShieldAlert size={40} className="mx-auto text-red-400" />
             <p className="text-lg font-bold" style={{ color: 'hsl(var(--ink))' }}>请先在设置页配置 DeepSeek API Key</p>
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-2">
+            <AlertTriangle size={40} className="mx-auto text-red-500" />
+            <p className="text-sm font-bold text-red-700 dark:text-red-400">加载失败</p>
+            <p className="text-xs text-gray-500">{error.message}</p>
           </div>
         </div>
       ) : (
@@ -237,25 +293,38 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
         <h3 className="text-sm font-black tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
           <Target size={14} /> 概率分布
         </h3>
-        {data ? (
-          <div className="space-y-2">
-            {[
-              { label: '大幅上涨', pct: (data.direction === 'up' ? data.confidence * 0.6 : data.direction === 'down' ? 0.1 : 0.2), color: 'bg-red-600' },
-              { label: '小幅上涨', pct: (data.direction === 'up' ? data.confidence * 0.3 : data.direction === 'down' ? 0.15 : 0.25), color: 'bg-red-400' },
-              { label: '震荡', pct: (data.direction === 'sideways' ? data.confidence * 0.5 : 0.25), color: 'bg-amber-400' },
-              { label: '小幅下跌', pct: (data.direction === 'down' ? data.confidence * 0.3 : data.direction === 'up' ? 0.15 : 0.2), color: 'bg-blue-400' },
-              { label: '大幅下跌', pct: (data.direction === 'down' ? data.confidence * 0.6 : data.direction === 'up' ? 0.1 : 0.1), color: 'bg-blue-600' },
-            ].map(b => (
-              <div key={b.label} className="flex items-center gap-2">
-                <span className="text-xs font-bold w-16 shrink-0">{b.label}</span>
-                <div className="flex-1 h-5 border border-gray-200">
-                  <div className={`h-full ${b.color} transition-all duration-500`} style={{ width: `${(b.pct * 100).toFixed(0)}%` }} />
+        {data ? (() => {
+          // 根据方向生成总和为 100% 的概率分布
+          let dist: number[];
+          if (data.direction === 'up') {
+            dist = [0.35, 0.30, 0.15, 0.12, 0.08];  // 总和 1.0
+          } else if (data.direction === 'down') {
+            dist = [0.08, 0.12, 0.15, 0.30, 0.35];  // 总和 1.0
+          } else {
+            dist = [0.10, 0.15, 0.50, 0.15, 0.10];  // 总和 1.0
+          }
+          // 乘以置信度后归一化，确保始终 100%
+          const weighted = dist.map(v => v * (data.confidence ?? 0.5));
+          const total = weighted.reduce((a, b) => a + b, 0);
+          const normalized = weighted.map(v => v / total);
+          const probs = normalized.map(v => Math.round(v * 100));
+          probs[4] = 100 - probs.slice(0, 4).reduce((a, b) => a + b, 0);
+          const labels = ['大幅上涨', '小幅上涨', '震荡', '小幅下跌', '大幅下跌'];
+          const colors = ['bg-red-600', 'bg-red-400', 'bg-amber-400', 'bg-blue-400', 'bg-blue-600'];
+          return (
+            <div className="space-y-2">
+              {labels.map((label, i) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className="text-xs font-bold w-16 shrink-0">{label}</span>
+                  <div className="flex-1 h-5 border border-gray-200">
+                    <div className={`h-full ${colors[i]} transition-all duration-500`} style={{ width: `${probs[i]}%` }} />
+                  </div>
+                  <span className="text-xs font-mono font-bold w-10 text-right">{probs[i]}%</span>
                 </div>
-                <span className="text-xs font-mono font-bold w-10 text-right">{(b.pct * 100).toFixed(0)}%</span>
-              </div>
-            ))}
-          </div>
-        ) : (
+              ))}
+            </div>
+          );
+        })() : (
           <p className="text-xs text-gray-400">等待数据…</p>
         )}
       </div>
@@ -327,8 +396,8 @@ function MultiDimPanel({ data, loading }: { data: MultiDimensionAnalysis | null;
               <h3 className="text-lg font-black mb-1" style={{ color: 'hsl(var(--ink))' }}>综合评分</h3>
               <p className="text-sm" style={{ color: 'hsl(var(--text-secondary))' }}>{data.composite.recommendation}</p>
               <div className="flex gap-3 mt-2 text-xs font-bold">
-                <span>技术 {data.composite.technical}</span><span>资金 {data.composite.capital_flow}</span>
-                <span>基本面 {data.composite.fundamental}</span><span>情绪 {data.composite.sentiment}</span>
+                <span>技术 {data.technical?.score ?? '--'}</span><span>资金 {data.capital_flow?.score ?? '--'}</span>
+                <span>基本面 {data.fundamental?.score ?? '--'}</span><span>情绪 {data.sentiment?.score ?? '--'}</span>
               </div>
             </div>
           </div>
@@ -558,26 +627,61 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
 
 // ── History Panel (localStorage) ──
 interface HistoryRecord { date: string; stockId: string; stockName: string; predicted: string; confidence: number; actual?: string; correct?: boolean; }
-function loadHistory(): HistoryRecord[] { try { return JSON.parse(localStorage.getItem('stockmate_pred_history') || '[]'); } catch { return []; } }
+function loadHistory(): HistoryRecord[] {
+  try {
+    const all = JSON.parse(localStorage.getItem('stockmate_pred_full') || '{}');
+    return Object.entries(all).map(([sid, entry]) => {
+      const e = entry as HistoryEntry;
+      return {
+        date: e.date,
+        stockId: sid,
+        stockName: '',
+        predicted: e.prediction?.direction ?? '',
+        confidence: e.prediction?.confidence ?? 0,
+        // TODO: correct 字段需要实际行情数据来验证预测结果，目前无法自动设置
+        correct: undefined,
+      };
+    });
+  } catch { return []; }
+}
 
 function HistoryPanel({ stockId }: { stockId: string }) {
   const records = loadHistory().filter(r => r.stockId === stockId);
+  const verifiedCount = records.filter(r => r.correct !== undefined).length;
   const correct = records.filter(r => r.correct === true).length;
-  const accuracy = records.length > 0 ? (correct / records.length * 100) : 0;
+  const accuracy = verifiedCount > 0 ? (correct / verifiedCount * 100) : 0;
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
       className="flex-1 overflow-auto space-y-3">
       <div className="glass-card p-5">
         <h3 className="text-sm font-black tracking-wider mb-4" style={{ color: 'hsl(var(--ink))' }}>历史预测准确率</h3>
         {records.length === 0 ? (
-          <p className="text-sm text-gray-400">暂无历史预测记录。进行AI预测后可在控制台记录结果。</p>
-        ) : (
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center bg-red-50">
+              <span className="text-2xl font-black text-red-700">--</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold">暂无预测记录</p>
+              <p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>进行AI预测后将在本地记录结果</p>
+            </div>
+          </div>
+        ) : verifiedCount === 0 ? (
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center bg-red-50">
+              <span className="text-2xl font-black text-red-700">--</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold">共 {records.length} 次预测（待验证）</p>
+              <p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>需要实际行情数据验证预测结果</p>
+            </div>
+          </div>
+        ) : records.length > 0 ? (
           <>
             <div className="flex items-center gap-4 mb-4">
               <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center bg-red-50">
                 <span className="text-2xl font-black text-red-700">{accuracy.toFixed(0)}%</span>
               </div>
-              <div><p className="text-sm font-bold">共 {records.length} 次预测</p><p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>{correct} 次正确 · {records.length - correct} 次错误</p></div>
+              <div><p className="text-sm font-bold">共 {records.length} 次预测</p><p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>{correct} 次正确 · {verifiedCount - correct} 次错误</p></div>
             </div>
             <div className="space-y-2">
               {[90,80,70,60,50].map(pct => {
@@ -605,7 +709,7 @@ function HistoryPanel({ stockId }: { stockId: string }) {
               ))}
             </div>
           </>
-        )}
+        ) : null}
       </div>
     </motion.div>
   );

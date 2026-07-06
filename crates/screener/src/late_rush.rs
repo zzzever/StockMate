@@ -38,12 +38,14 @@ pub fn detect_late_rush(quotes: &[Quote]) -> LateRushSignal {
     }
 
     // Condition 2: 放量
-    let last_5 = &quotes[quotes.len().saturating_sub(5)..quotes.len().saturating_sub(1)];
+    let last_5 = &quotes[quotes.len().saturating_sub(6)..quotes.len().saturating_sub(1)]; // 5 days before today
     if !last_5.is_empty() {
         let avg_vol = last_5.iter().map(|q| q.volume).sum::<u64>() / last_5.len() as u64;
-        if today.volume > avg_vol * 15 / 10 {
-            conditions += 1;
-            reasons.push("放量");
+        if let Some(threshold) = avg_vol.checked_mul(15).map(|v| v / 10) {
+            if today.volume > threshold {
+                conditions += 1;
+                reasons.push("放量");
+            }
         }
     }
 
@@ -73,6 +75,7 @@ mod tests {
         Quote {
             stock_id: "TEST".into(),
             date: NaiveDate::from_ymd_opt(2024, 1, day).unwrap_or_default(),
+            time: String::new(),
             open: o,
             high: c.max(o),
             low: c.min(o),

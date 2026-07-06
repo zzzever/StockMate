@@ -1,5 +1,6 @@
 /** Format a number or string to price with 2 decimal places. */
 export function fmtPrice(v: unknown): string {
+  if (typeof v === 'string' && v.trim() === '') return '--';
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(2) : '--';
 }

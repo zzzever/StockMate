@@ -36,12 +36,29 @@ function applyTheme(mode: ThemeMode) {
   }
 }
 
-// Listen for system theme changes when in 'system' mode
-if (typeof window !== 'undefined') {
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+// ── System theme listener ──
+// NOTE: No module-level side effects! Call initSystemThemeListener() explicitly
+// from a useEffect in Layout.tsx or main.tsx to avoid issues in SSR/test environments.
+
+/**
+ * Initialise the system theme listener explicitly.
+ * Returns a cleanup function to remove the listener.
+ * Call from a useEffect in Layout.tsx for safe SSR/test usage.
+ */
+export function initSystemThemeListener(): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const handler = () => {
     const mode = useAppStore.getState().theme;
     if (mode === 'system') applyTheme('system');
-  });
+  };
+  mq.addEventListener('change', handler);
+  return () => mq.removeEventListener('change', handler);
+}
+
+/** Clean up the system theme listener (deprecated — use the cleanup returned by initSystemThemeListener). */
+export function cleanupSystemThemeListener() {
+  // No-op: module-level auto-registration was removed. Use initSystemThemeListener() instead.
 }
 
 interface AppState {
@@ -79,12 +96,14 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedStock: (stock) => set({ selectedStock: stock }),
   setTheme: (theme) => {
     applyTheme(theme);
+    applyAccent(useAppStore.getState().accent);
     const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     set({ theme, darkMode: isDark });
   },
   toggleDarkMode: () => set((s) => {
     const next = s.theme === 'light' ? 'dark' : s.theme === 'dark' ? 'system' : 'light';
     applyTheme(next);
+    applyAccent(s.accent);
     const isDark = next === 'dark' || (next === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     return { theme: next, darkMode: isDark };
   }),

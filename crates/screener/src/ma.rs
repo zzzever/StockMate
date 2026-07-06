@@ -50,6 +50,7 @@ mod tests {
         Quote {
             stock_id: "TEST".into(),
             date: d,
+            time: String::new(),
             open: c,
             high: c,
             low: c,

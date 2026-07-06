@@ -1,88 +1,53 @@
 import { vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PredictPage from '@/pages/PredictPage';
-import { usePredictWithAI, useStockList } from '@/hooks/useTauriQuery';
 
+// Mock all hooks used by the new PredictPage
 vi.mock('@/hooks/useTauriQuery', () => ({
-  useHotSectors: vi.fn(),
-  useHotStocks: vi.fn(),
-  useStockList: vi.fn(),
-  useSearchStocks: vi.fn(),
-  useStockDetail: vi.fn(),
-  useStockFinance: vi.fn(),
-  useStockFundFlow: vi.fn(),
-  useStrategy: vi.fn(),
-  usePrediction: vi.fn(),
-  usePredictWithAI: vi.fn(),
-  useCardData: vi.fn(),
-  useMarketOverview: vi.fn(),
+  useDeepSeekConfig: vi.fn(() => ({ data: { has_key: true }, isLoading: false })),
+  useStockDetail: vi.fn(() => ({ data: null, isLoading: false })),
+  useStockHistory: vi.fn(() => ({ data: null, isLoading: false })),
+  useRealtimeQuote: vi.fn(() => ({ data: null, isLoading: false })),
+  useStockFinance: vi.fn(() => ({ data: null, isLoading: false })),
+  useAnalyzeAll: vi.fn(() => ({ data: null, isLoading: true, error: null, refetch: vi.fn() })),
 }));
 
-vi.mock('recharts', () => ({
-  PieChart: ({ children }: any) => <svg data-testid="pie-chart">{children}</svg>,
-  Pie: ({ children }: any) => <g>{children}</g>,
-  Cell: () => null,
-  ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
+vi.mock('lucide-react', () => ({
+  TrendingUp: () => null, TrendingDown: () => null, Minus: () => null,
+  Bot: () => null, ArrowLeft: () => null, RefreshCw: () => <svg>refresh</svg>,
+  Target: () => null, BarChart3: () => null, AlertTriangle: () => null,
+  CheckCircle2: () => null, Activity: () => null, Zap: () => null,
+  Globe: () => null, ShieldAlert: () => null, Calendar: () => null,
 }));
 
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
   },
   AnimatePresence: ({ children }: any) => <>{children}</>,
 }));
 
 describe('PredictPage', () => {
-  it('renders predict page with refresh button', () => {
-    vi.mocked(usePredictWithAI).mockReturnValue({ data: undefined, isLoading: true, error: null, refetch: vi.fn() } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
+  it('shows prompt when no stock is selected', () => {
     render(
-      <MemoryRouter initialEntries={['/predict?code=600519']}>
+      <MemoryRouter initialEntries={['/predict']}>
         <PredictPage />
       </MemoryRouter>
     );
-    // In loading state, the skeleton/loading UI is shown, not the AI conclusion title
-    expect(screen.getByText('预测中...')).toBeInTheDocument();
+    expect(screen.getByText(/请先选择一只股票/)).toBeInTheDocument();
   });
 
-  it('renders prediction result when data is loaded', () => {
-    vi.mocked(usePredictWithAI).mockReturnValue({
-      data: {
-        direction: 'up',
-        confidence: 0.82,
-        target_price: '1800-1900',
-        reasoning: '技术面显示均线多头排列',
-        time_frame: '1月',
-      },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
+  it('shows loading state when data is being fetched', () => {
     render(
-      <MemoryRouter initialEntries={['/predict?code=600519']}>
+      <MemoryRouter initialEntries={['/predict?code=600519.SH']}>
         <PredictPage />
       </MemoryRouter>
     );
-    expect(screen.getAllByText('上涨').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('82%')).toBeInTheDocument();
-    expect(screen.getByText('AI 预测结论')).toBeInTheDocument();
-  });
-
-  it('changes active strategy type on button click', () => {
-    vi.mocked(usePredictWithAI).mockReturnValue({ data: undefined, isLoading: true, error: null, refetch: vi.fn() } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
-    render(
-      <MemoryRouter initialEntries={['/predict?code=600519']}>
-        <PredictPage />
-      </MemoryRouter>
-    );
-    const refreshBtn = screen.getByText('预测中...');
-    // The button should still be in the document after click
-    expect(refreshBtn).toBeInTheDocument();
+    // The page header should be visible
+    expect(screen.getByText('AI 预测中心')).toBeInTheDocument();
+    // Refresh button should be present
+    expect(screen.getByText('刷新全部')).toBeInTheDocument();
   });
 });

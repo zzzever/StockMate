@@ -1,40 +1,32 @@
-//! data_fetcher - StockMate Sidecar Client with caching & fallback.
+//! data_fetcher - StockMate data fetching with caching & fallback.
 //!
-//! Three-tier fallback: Cache → Sidecar HTTP → SQLite → Mock.
+//! Three-tier fallback: Cache → Provider → SQLite → Mock.
 
 pub mod market_data;
 
-use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Datelike};
 use moka::future::Cache;
 use reqwest::Client;
 use rust_decimal::Decimal;
 use serde_json::Value;
 use sqlx::Row;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
-use tokio::sync::{RwLock, Semaphore};
-use tokio::time::{sleep, timeout};
+use tokio::sync::RwLock;
 
 use domain::{
     ApiError, CardData, FundFlow, HotSector, HotStock, MarketOverview, MovingAverage, Prediction,
-    Quote, StockFinance, StrategySignal, SupportResistance,
+    Quote, SignalAction, StockFinance, StrategySignal, SupportResistance, TrendDirection,
 };
 use storage::DbPool;
 
 // ============================================================
 // Constants
 // ============================================================
-const SIDEAR_HEALTH_RETRIES: u32 = 3;
-const SIDEAR_HEALTH_INTERVAL_SECS: u64 = 1;
-const SIDEAR_START_TIMEOUT_SECS: u64 = 3;
 const HTTP_TIMEOUT_SECS: u64 = 30;
-const CONCURRENCY_LIMIT: usize = 5;
 
 const TTL_REALTIME_SECS: u64 = 15 * 60;   // 15 min
 const TTL_HISTORICAL_SECS: u64 = 24 * 60 * 60; // 1 day
@@ -52,9 +44,7 @@ pub struct DataService {
 
 struct DataServiceInner {
     client: Client,
-    sidecar_url: RwLock<Option<String>>,
     db_pool: Option<DbPool>,
-    sem: Semaphore,
     spot_cache: Cache<String, Value>,
     sector_cache: Cache<String, Value>,
     finance_cache: Cache<String, Value>,
@@ -63,166 +53,54 @@ struct DataServiceInner {
     overview_cache: Cache<String, Value>,
     intraday_cache: Cache<String, Value>,
     sector_realtime: RwLock<Option<Vec<HotSector>>>,
+    refresh_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
+}
+
+/// Build a moka cache with the given TTL and capacity.
+fn build_cache<K, V>(ttl_secs: u64, capacity: u64) -> Cache<K, V>
+where
+    K: Hash + Eq + Send + Sync + 'static,
+    V: Clone + Send + Sync + 'static,
+{
+    Cache::builder()
+        .time_to_live(Duration::from_secs(ttl_secs))
+        .max_capacity(capacity)
+        .build()
 }
 
 impl DataService {
-    /// Create an offline DataService without HTTP client (pure SQLite + Mock fallback).
+    /// Create a new DataService with HTTP client and caching.
     pub fn new_offline(db_pool: Option<DbPool>) -> Self {
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_else(|e| {
+                tracing::error!("Failed to build offline HTTP client with timeout: {}", e);
+                Client::new()
+            });
         let inner = Arc::new(DataServiceInner {
             client,
-            sidecar_url: RwLock::new(None),
             db_pool,
-            sem: Semaphore::new(CONCURRENCY_LIMIT),
-            spot_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_REALTIME_SECS)).build(),
-            sector_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_REALTIME_SECS)).build(),
-            finance_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_FINANCE_SECS)).build(),
-            history_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_HISTORICAL_SECS)).build(),
-            fundflow_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_REALTIME_SECS)).build(),
-            overview_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_REALTIME_SECS)).build(),
-            intraday_cache: Cache::builder().time_to_live(Duration::from_secs(TTL_INTRADAY_SECS)).build(),
+            spot_cache: build_cache::<String, Value>(TTL_REALTIME_SECS, 10_000),
+            sector_cache: build_cache::<String, Value>(TTL_REALTIME_SECS, 10_000),
+            finance_cache: build_cache::<String, Value>(TTL_FINANCE_SECS, 10_000),
+            history_cache: build_cache::<String, Value>(TTL_HISTORICAL_SECS, 10_000),
+            fundflow_cache: build_cache::<String, Value>(TTL_REALTIME_SECS, 10_000),
+            overview_cache: build_cache::<String, Value>(TTL_REALTIME_SECS, 10_000),
+            intraday_cache: build_cache::<String, Value>(TTL_INTRADAY_SECS, 10_000),
             sector_realtime: RwLock::new(None),
+            refresh_handle: RwLock::new(None),
         });
         DataService { inner }
     }
 
-    /// Create a full DataService with HTTP client and optional sidecar.
-    pub async fn new_async(db_pool: Option<DbPool>) -> Result<Self, ApiError> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(HTTP_TIMEOUT_SECS))
-            .build()
-            .map_err(|e| ApiError {
-                code: 500,
-                message: format!("HTTP client build error: {}", e),
-                details: None,
-            })?;
-
-        let inner = Arc::new(DataServiceInner {
-            client,
-            sidecar_url: RwLock::new(None),
-            db_pool,
-            sem: Semaphore::new(CONCURRENCY_LIMIT),
-            spot_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_REALTIME_SECS))
-                .build(),
-            sector_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_REALTIME_SECS))
-                .build(),
-            finance_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_FINANCE_SECS))
-                .build(),
-            history_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_HISTORICAL_SECS))
-                .build(),
-            fundflow_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_REALTIME_SECS))
-                .build(),
-            overview_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_REALTIME_SECS))
-                .build(),
-            intraday_cache: Cache::builder()
-                .time_to_live(Duration::from_secs(TTL_INTRADAY_SECS))
-                .build(),
-            sector_realtime: RwLock::new(None),
-        });
-
-        let service = DataService { inner };
-
-        // Try to start sidecar; failure is non-fatal (fallback to SQLite/Mock)
-        if let Err(e) = service.start_sidecar().await {
-            tracing::warn!("Sidecar start failed: {}. Will use SQLite/Mock fallback.", e.message);
+    /// Shut down any background refresh tasks.
+    pub async fn shutdown(&self) {
+        // Abort the background refresh task if running
+        if let Some(handle) = self.inner.refresh_handle.write().await.take() {
+            tracing::info!("Aborting background refresh task...");
+            handle.abort();
         }
-
-        Ok(service)
-    }
-
-    // ============================================================
-    // Sidecar lifecycle
-    // ============================================================
-    async fn start_sidecar(&self) -> Result<(), ApiError> {
-        let script = locate_script().ok_or(ApiError {
-            code: 500,
-            message: "akshare_server.py not found".into(),
-            details: None,
-        })?;
-
-        let python = find_python_executable().await?;
-        let port = find_free_port().await?;
-
-        let mut child = Command::new(&python)
-            .arg(&script)
-            .arg("--port")
-            .arg(port.to_string())
-            .arg("--host")
-            .arg("127.0.0.1")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| ApiError {
-                code: 500,
-                message: format!("Failed to spawn sidecar: {}", e),
-                details: None,
-            })?;
-
-        let stdout = child.stdout.take().ok_or(ApiError {
-            code: 500,
-            message: "No stdout from sidecar".into(),
-            details: None,
-        })?;
-
-        let mut reader = BufReader::new(stdout).lines();
-        let mut actual_port = port;
-
-        while let Some(line) = reader
-            .next_line()
-            .await
-            .map_err(|e| ApiError {
-                code: 500,
-                message: e.to_string(),
-                details: None,
-            })?
-        {
-            if let Some(p) = line.strip_prefix("STOCKMATE_SIDECAR_PORT=") {
-                actual_port = p.parse().map_err(|e| ApiError {
-                    code: 500,
-                    message: format!("Invalid port: {}", e),
-                    details: None,
-                })?;
-                break;
-            }
-        }
-
-        let url = format!("http://127.0.0.1:{}", actual_port);
-
-        // Wait for sidecar health
-        let health_check = async {
-            for _ in 0..SIDEAR_HEALTH_RETRIES {
-                match self.inner.client.get(format!("{}/health", url)).send().await {
-                    Ok(resp) if resp.status().is_success() => return Ok(()),
-                    _ => sleep(Duration::from_secs(SIDEAR_HEALTH_INTERVAL_SECS)).await,
-                }
-            }
-            Err(ApiError {
-                code: 500,
-                message: "Sidecar health check failed".into(),
-                details: None,
-            })
-        };
-
-        timeout(
-            Duration::from_secs(SIDEAR_START_TIMEOUT_SECS),
-            health_check,
-        )
-        .await
-        .map_err(|e| ApiError {
-            code: 500,
-            message: format!("Health check timeout: {}", e),
-            details: None,
-        })??;
-
-        let mut lock = self.inner.sidecar_url.write().await;
-        *lock = Some(url);
-        Ok(())
     }
 
     // ============================================================
@@ -242,144 +120,101 @@ impl DataService {
             return Ok(v);
         }
 
-        // 2. Sidecar (with concurrency limit)
-        let _permit = match self.inner.sem.acquire().await {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::warn!("Semaphore acquire failed for {}: {}", endpoint, e);
-                return Ok(Value::Null);
-            }
-        };
-
-        if let Some(url) = self.inner.sidecar_url.read().await.clone() {
-            let mut req = self.inner.client.get(format!("{}{}", url, endpoint));
-            for (k, v) in params {
-                req = req.query(&[(k, v)]);
-            }
-            match req.send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    match resp.json::<Value>().await {
-                        Ok(json) => {
-                            if json
-                                .get("success")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false)
-                            {
-                                if let Some(data) = json.get("data") {
-                                    cache.insert(cache_key, data.clone()).await;
-                                    return Ok(data.clone());
-                                }
-                            }
-                            // sidecar returned success=false
-                            tracing::warn!("Sidecar success=false for {}", endpoint);
-                        }
-                        Err(e) => {
-                            tracing::warn!("Sidecar JSON error for {}: {}", endpoint, e);
-                        }
-                    }
-                }
-                Ok(resp) => {
-                    tracing::warn!("Sidecar HTTP {} for {}", resp.status(), endpoint);
-                }
-                Err(e) => {
-                    tracing::warn!("Sidecar request error for {}: {}", endpoint, e);
-                }
-            }
-        }
-
-        // 3. SQLite (handled per-endpoint in public methods)
-        // 4. Mock (handled per-endpoint in public methods)
+        // 2. SQLite (handled per-endpoint in public methods)
+        // 3. Mock (handled per-endpoint in public methods)
+        tracing::debug!("[FETCH_FALLBACK] endpoint={} returning Null (cache_key={})", endpoint, cache_key);
         Ok(Value::Null)
-    }
-
-    /// Returns the sidecar URL if the Python sidecar is running
-    pub async fn get_sidecar_url(&self) -> Option<String> {
-        self.inner.sidecar_url.read().await.clone()
     }
 
     /// Start background refresh — fetch all constituent stock prices from Tencent,
     /// compute per-sector averages, and update the in-memory cache.
     pub fn start_realtime_refresh(&self) {
         let inner = self.inner.clone();
+        let inner_for_task = inner.clone();
         tokio::spawn(async move {
-            let all_sectors = DataService::get_all_sector_stocks();
+            let handle = tokio::spawn(async move {
+                let all_sectors = DataService::get_all_sector_stocks();
 
-            // Collect unique stock codes
-            let mut unique_codes: Vec<&str> = Vec::new();
-            {
-                let mut seen = std::collections::HashSet::new();
-                for (_name, codes) in &all_sectors {
-                    for code in codes {
-                        if seen.insert(*code) { unique_codes.push(*code); }
-                    }
-                }
-            }
-            eprintln!("Sector refresh: {} sectors, {} unique stocks", all_sectors.len(), unique_codes.len());
-
-            // Build code→sector lookup
-            let mut code_to_sectors: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
-            for (si, (_name, codes)) in all_sectors.iter().enumerate() {
-                for code in codes {
-                    let numeric = code.split('.').next().unwrap_or("").to_string();
-                    code_to_sectors.entry(numeric).or_default().push(si);
-                }
-            }
-
-            loop {
-                // Fetch all stock prices in chunks
-                let mut all_prices: Vec<market_data::PriceData> = Vec::new();
-                for chunk in unique_codes.chunks(20) {
-                    let batch = market_data::fetch_realtime_batch(&chunk.to_vec()).await;
-                    all_prices.extend(batch);
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                }
-
-                // Aggregate per sector
-                let n = all_sectors.len();
-                let mut volumes: Vec<u64> = vec![0; n];
-                let mut counts: Vec<u32> = vec![0; n];
-                let mut sum_change: Vec<f64> = vec![0.0; n];
-                let mut top_name: Vec<String> = vec![String::new(); n];
-                let mut top_change: Vec<f64> = vec![f64::MIN; n];
-
-                for price in &all_prices {
-                    if let Some(si_list) = code_to_sectors.get(&price.ticker) {
-                        for &si in si_list {
-                            volumes[si] += price.volume;
-                            counts[si] += 1;
-                            sum_change[si] += price.change_percent;
-                            if price.change_percent > top_change[si] {
-                                top_change[si] = price.change_percent;
-                                top_name[si] = price.name.clone();
-                            }
+                // Collect unique stock codes
+                let mut unique_codes: Vec<&str> = Vec::new();
+                {
+                    let mut seen = std::collections::HashSet::new();
+                    for (_name, codes) in &all_sectors {
+                        for code in codes {
+                            if seen.insert(*code) { unique_codes.push(*code); }
                         }
                     }
                 }
+                tracing::info!("Sector refresh: {} sectors, {} unique stocks", all_sectors.len(), unique_codes.len());
 
-                // Build sector list (always all 47)
-                let mut sectors: Vec<HotSector> = all_sectors.iter().enumerate().map(|(si, (name, codes))| {
-                    let cnt = counts[si];
-                    let avg = if cnt > 0 { sum_change[si] / cnt as f64 } else { 0.0 };
-                    let ld_name = if top_change[si] > f64::MIN { top_name[si].clone() } else { String::new() };
-                    let ld_chg = if top_change[si] > f64::MIN { top_change[si] } else { 0.0 };
-                    HotSector {
-                        name: name.to_string(),
-                        change_percent: avg,
-                        volume: volumes[si],
-                        leading_stock: ld_name,
-                        leading_change: ld_chg,
-                        fund_flow: None,
-                        stock_count: Some(codes.len() as u32),
+                // Build code→sector lookup
+                let mut code_to_sectors: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+                for (si, (_name, codes)) in all_sectors.iter().enumerate() {
+                    for code in codes {
+                        let numeric = code.split('.').next().unwrap_or("").to_string();
+                        code_to_sectors.entry(numeric).or_default().push(si);
                     }
-                }).collect();
+                }
 
-                sectors.sort_by(|a, b| b.change_percent.partial_cmp(&a.change_percent).unwrap_or(std::cmp::Ordering::Equal));
-                let len = sectors.len();
-                *inner.sector_realtime.write().await = Some(sectors);
-                eprintln!("Realtime sectors: {} updated, {} prices fetched", len, all_prices.len());
+                loop {
+                    // Fetch all stock prices in chunks
+                    let mut all_prices: Vec<market_data::PriceData> = Vec::new();
+                    for chunk in unique_codes.chunks(20) {
+                        let batch = market_data::fetch_realtime_batch(&chunk.to_vec()).await;
+                        all_prices.extend(batch);
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
 
-                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-            }
+                    // Aggregate per sector
+                    let n = all_sectors.len();
+                    let mut volumes: Vec<u64> = vec![0; n];
+                    let mut counts: Vec<u32> = vec![0; n];
+                    let mut sum_change: Vec<f64> = vec![0.0; n];
+                    let mut top_name: Vec<String> = vec![String::new(); n];
+                    let mut top_change: Vec<f64> = vec![f64::MIN; n];
+
+                    for price in &all_prices {
+                        if let Some(si_list) = code_to_sectors.get(&price.ticker) {
+                            for &si in si_list {
+                                volumes[si] += price.volume;
+                                counts[si] += 1;
+                                sum_change[si] += price.change_percent;
+                                if price.change_percent > top_change[si] {
+                                    top_change[si] = price.change_percent;
+                                    top_name[si] = price.name.clone();
+                                }
+                            }
+                        }
+                    }
+
+                    // Build sector list (always all 47)
+                    let mut sectors: Vec<HotSector> = all_sectors.iter().enumerate().map(|(si, (name, codes))| {
+                        let cnt = counts[si];
+                        let avg = if cnt > 0 { sum_change[si] / cnt as f64 } else { 0.0 };
+                        let ld_name = if top_change[si] > f64::MIN { top_name[si].clone() } else { String::new() };
+                        let ld_chg = if top_change[si] > f64::MIN { top_change[si] } else { 0.0 };
+                        HotSector {
+                            name: name.to_string(),
+                            change_percent: Decimal::from_f64_retain(avg).unwrap_or_default(),
+                            volume: volumes[si],
+                            leading_stock: ld_name,
+                            leading_change: Decimal::from_f64_retain(ld_chg).unwrap_or_default(),
+                            fund_flow: None,
+                            stock_count: Some(codes.len() as u32),
+                        }
+                    }).collect();
+
+                    sectors.sort_by(|a, b| b.change_percent.partial_cmp(&a.change_percent).unwrap_or(std::cmp::Ordering::Equal));
+                    let len = sectors.len();
+                    *inner_for_task.sector_realtime.write().await = Some(sectors);
+                    tracing::info!("Realtime sectors: {} updated, {} prices fetched", len, all_prices.len());
+
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                }
+            });
+            // Store the JoinHandle so we can abort the refresh task on shutdown
+            // Stored in the same async block — no separate tokio::spawn, avoiding the race condition
+            *inner.refresh_handle.write().await = Some(handle);
         });
     }
 
@@ -468,12 +303,10 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
 
             let mut stocks = Vec::new();
             for item in arr.iter().take(100) {
+                let code = item.get("代码").and_then(|v| v.as_str()).unwrap_or("");
+                let suffix = if code.starts_with("920") { "BJ" } else if code.starts_with("6") || code.starts_with("9") { "SH" } else if code.starts_with("0") || code.starts_with("3") || code.starts_with("2") { "SZ" } else if code.starts_with("4") || code.starts_with("8") { "BJ" } else { "SH" };
                 stocks.push(HotStock {
-                    id: format!(
-                        "{}.{}",
-                        item.get("代码").and_then(|v| v.as_str()).unwrap_or(""),
-                        "SH"
-                    ),
+                    id: format!("{}.{}", code, suffix),
                     ticker: item.get("代码").and_then(|v| v.as_str()).unwrap_or("").into(),
                     name: item.get("名称").and_then(|v| v.as_str()).unwrap_or("").into(),
                     price: Decimal::ZERO,
@@ -568,7 +401,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         for price in &prices {
             stocks.push(HotStock {
                 id: {
-                    let suffix = if price.ticker.starts_with("6") || price.ticker.starts_with("9") { "SH" } else { "SZ" };
+                    let suffix = if price.ticker.starts_with("920") { "BJ" } else if price.ticker.starts_with("6") || price.ticker.starts_with("9") { "SH" } else if price.ticker.starts_with("0") || price.ticker.starts_with("3") || price.ticker.starts_with("2") { "SZ" } else if price.ticker.starts_with("4") || price.ticker.starts_with("8") { "BJ" } else { "SH" };
                     format!("{}.{}", price.ticker, suffix)
                 }, ticker: price.ticker.clone(), name: price.name.clone(),
                 price: Decimal::from_f64_retain(price.current_price).unwrap_or_default(),
@@ -590,7 +423,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             .await?;
 
         if val.is_null() {
-            // No sidecar → no real finance data available
+            // No data available from providers
             return Ok(None);
         }
 
@@ -655,11 +488,11 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     .and_then(|v| v.as_str())
                     .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
                     .unwrap_or_else(|| NaiveDate::from_ymd_opt(2024, 1, 1).unwrap_or_default()),
-                main_inflow: item.get("主力净流入").or(item.get("main_inflow")).or(item.get("net_main")).and_then(|v| v.as_f64()),
-                retail_inflow: item.get("散户净流入").or(item.get("retail_inflow")).or(item.get("net_retail")).and_then(|v| v.as_f64()),
-                large_order_inflow: item.get("大单净流入").or(item.get("large_order_inflow")).and_then(|v| v.as_f64()),
-                medium_order_inflow: item.get("中单净流入").or(item.get("medium_order_inflow")).and_then(|v| v.as_f64()),
-                small_order_inflow: item.get("小单净流入").or(item.get("small_order_inflow")).and_then(|v| v.as_f64()),
+                main_inflow: item.get("主力净流入").or(item.get("main_inflow")).or(item.get("net_main")).and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                retail_inflow: item.get("散户净流入").or(item.get("retail_inflow")).or(item.get("net_retail")).and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                large_order_inflow: item.get("大单净流入").or(item.get("large_order_inflow")).and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                medium_order_inflow: item.get("中单净流入").or(item.get("medium_order_inflow")).and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                small_order_inflow: item.get("小单净流入").or(item.get("small_order_inflow")).and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
             });
         }
         Ok(flows)
@@ -698,7 +531,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let is_empty = val.is_null() || val.as_array().map(|a| a.is_empty()).unwrap_or(true);
 
         if is_empty {
-            // Try real data from Tencent / Yahoo Finance first
+            // Try real data from Tencent / Yahoo Finance
             let provider = market_data::select_provider(stock_id);
             let history = provider.fetch_history(stock_id, period, days).await;
             if !history.is_empty() {
@@ -719,119 +552,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 return Ok(quotes);
             }
 
-            // Fallback: generate mock history from real-time price
-            if let Some(price_data) = market_data::tencent::fetch_realtime_price(stock_id).await {
-                let mut quotes = Vec::new();
-                let base = price_data.prev_close;
-                let mut state = {
-                    let mut hasher = DefaultHasher::new();
-                    stock_id.hash(&mut hasher);
-                    hasher.finish()
-                };
-                for i in (0..days).rev() {
-                    let date = chrono::Local::now().naive_local().date() - chrono::TimeDelta::try_days(i as i64).unwrap();
-                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                    let noise = ((state % 200) as f64 - 100.0) / 2000.0; // -5% to +5%
-                    let close = base * (1.0 + noise);
-                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                    let high_offset = ((state % 50) as f64) / 1000.0; // 0% to +5%
-                    let high = close * (1.0 + high_offset);
-                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                    let low_offset = ((state % 50) as f64) / 1000.0; // 0% to +5%
-                    let low = close * (1.0 - low_offset);
-                    let open = (high + low) / 2.0;
-                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                    let volume = (state % 10_000_000) as u64 + 1_000_000;
-                    quotes.push(Quote {
-                        stock_id: stock_id.into(),
-                        date,
-                        time: String::new(),
-                        open: Decimal::from_f64_retain(open).unwrap_or_default(),
-                        high: Decimal::from_f64_retain(high).unwrap_or_default(),
-                        low: Decimal::from_f64_retain(low).unwrap_or_default(),
-                        close: Decimal::from_f64_retain(close).unwrap_or_default(),
-                        volume,
-                        adjusted_close: Decimal::from_f64_retain(close).unwrap_or_default(),
-                    });
-                }
-                return Ok(quotes);
-            }
-
-            // Try SQLite fallback
-            if let Some(pool) = &self.inner.db_pool {
-                let rows = sqlx::query(
-                    "SELECT stock_id, date, open, high, low, close, volume, adjusted_close FROM quotes WHERE stock_id = ?1 ORDER BY date DESC LIMIT ?2"
-                )
-                .bind(stock_id)
-                .bind(days as i64)
-                .fetch_all(pool)
-                .await;
-
-                if let Ok(rows) = rows {
-                    let mut quotes = Vec::new();
-                    for row in rows {
-                        let date_str: String = row.try_get("date").unwrap_or_default();
-                        let open_str: String = row.try_get("open").unwrap_or_default();
-                        let high_str: String = row.try_get("high").unwrap_or_default();
-                        let low_str: String = row.try_get("low").unwrap_or_default();
-                        let close_str: String = row.try_get("close").unwrap_or_default();
-                        let adj_str: String = row.try_get("adjusted_close").unwrap_or_default();
-
-                        quotes.push(Quote {
-                            stock_id: row.try_get("stock_id").unwrap_or_default(),
-                            date: date_str.parse().unwrap_or_default(),
-                            time: String::new(),
-                            open: open_str.parse().unwrap_or_default(),
-                            high: high_str.parse().unwrap_or_default(),
-                            low: low_str.parse().unwrap_or_default(),
-                            close: close_str.parse().unwrap_or_default(),
-                            volume: row.try_get::<i64, _>("volume").unwrap_or_default() as u64,
-                            adjusted_close: adj_str.parse().unwrap_or_default(),
-                        });
-                    }
-                    if !quotes.is_empty() {
-                        quotes.reverse();
-                        return Ok(quotes);
-                    }
-                    // fall through to ultimate mock fallback
-                }
-            }
-
-            // Ultimate fallback: generate hardcoded mock history
-            let base_price = 100.0;
-            let mut state = {
-                let mut hasher = DefaultHasher::new();
-                stock_id.hash(&mut hasher);
-                hasher.finish()
-            };
-            let mut quotes = Vec::new();
-            for i in (0..days).rev() {
-                let date = chrono::Local::now().naive_local().date() - chrono::TimeDelta::try_days(i as i64).unwrap();
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let noise = ((state % 200) as f64 - 100.0) / 2000.0;
-                let close = base_price * (1.0 + noise);
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let high_offset = ((state % 50) as f64) / 1000.0;
-                let high = close * (1.0 + high_offset);
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let low_offset = ((state % 50) as f64) / 1000.0;
-                let low = close * (1.0 - low_offset);
-                let open = (high + low) / 2.0;
-                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let volume = (state % 10_000_000) as u64 + 1_000_000;
-                quotes.push(Quote {
-                    stock_id: stock_id.into(),
-                    date,
-                    time: String::new(),
-                    open: Decimal::from_f64_retain(open).unwrap_or_default(),
-                    high: Decimal::from_f64_retain(high).unwrap_or_default(),
-                    low: Decimal::from_f64_retain(low).unwrap_or_default(),
-                    close: Decimal::from_f64_retain(close).unwrap_or_default(),
-                    volume,
-                    adjusted_close: Decimal::from_f64_retain(close).unwrap_or_default(),
-                });
-            }
-            return Ok(quotes);
+            // No data available — return empty instead of falling back to SQLite/Mock
+            tracing::warn!("[get_stock_history] No data from provider for {} (period={}, days={})", stock_id, period, days);
+            return Ok(Vec::new());
         }
 
         let arr = val.as_array().ok_or(ApiError {
@@ -887,10 +610,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
     /// Fetch intraday (5-min K-line) data with multi-tier fallback.
     ///
     /// Tier 1: In-memory cache (60s TTL)
-    /// Tier 2: Sidecar (stored URL, then http://127.0.0.1:15678)
-    /// Tier 3: Tencent direct intraday API (mkline endpoint)
-    /// Tier 4: Last daily bar from get_stock_history
-    /// Tier 5: Hardcoded sample data — 48 deterministic bars (NEVER returns empty)
+    /// Tier 2: Provider-routed intraday (Tencent for A-shares)
+    /// Tier 3: Last daily bar from get_stock_history
+    /// Tier 4: Hardcoded sample data — 48 deterministic bars (NEVER returns empty)
     pub async fn get_intraday(&self, stock_id: &str) -> Result<Vec<Quote>, ApiError> {
         let ticker = stock_id.split('.').next().unwrap_or(stock_id);
         let cache_key = format!("intraday|{}", ticker);
@@ -905,77 +627,11 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             }
         }
 
-        // ── Tier 2: Sidecar (akshare via Python HTTP) ──
-        // Only try if sidecar URL is explicitly set (new_offline skips entirely)
-        if let Some(stored_url) = self.inner.sidecar_url.read().await.clone() {
-            let sidecar_urls = [stored_url, "http://127.0.0.1:15678".to_string()];
-
-            for sidecar_url in &sidecar_urls {
-                let url = format!("{}/intraday?symbol={}", sidecar_url, ticker);
-
-                let sidecar_result = tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    async {
-                    let resp = self.inner.client.get(&url).send().await
-                        .map_err(|e| format!("HTTP request: {}", e))?;
-                    if !resp.status().is_success() {
-                        return Err(format!("HTTP {}", resp.status()));
-                    }
-                    let json: serde_json::Value = resp.json().await
-                        .map_err(|e| format!("JSON: {}", e))?;
-                    if !json.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
-                        let msg = json.get("error").and_then(|v| v.as_str()).unwrap_or("unknown");
-                        return Err(format!("sidecar success=false: {}", msg));
-                    }
-                    let arr = json.get("data").and_then(|v| v.as_array())
-                        .cloned()
-                        .ok_or_else(|| "no data array".to_string())?;
-                    Ok(arr)
-                }).await;
-
-                // Parse the successful result
-                if let Ok(Ok(arr)) = &sidecar_result {
-                    if !arr.is_empty() {
-                        let arr = arr.clone();
-                        let quotes: Vec<Quote> = arr.iter().filter_map(|item| {
-                            let dt = item.get("时间").and_then(|v| v.as_str()).unwrap_or("");
-                            // Extract date + time: "2026-06-30 09:35:00" → date="2026-06-30", time="09:35"
-                            let date = NaiveDate::parse_from_str(
-                                &dt[..10.min(dt.len())], "%Y-%m-%d"
-                            ).unwrap_or_default();
-                            let time_str = if dt.len() >= 16 { dt[11..16].to_string() } else { String::new() };
-                            let f = |k: &str| item.get(k)
-                                .and_then(|v| v.as_f64()
-                                    .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok())))
-                                .unwrap_or(0.0);
-                            Some(Quote {
-                                stock_id: stock_id.to_string(),
-                                date,
-                                time: time_str,
-                                open: Decimal::from_f64_retain(f("开盘")).unwrap_or_default(),
-                                high: Decimal::from_f64_retain(f("最高")).unwrap_or_default(),
-                                low: Decimal::from_f64_retain(f("最低")).unwrap_or_default(),
-                                close: Decimal::from_f64_retain(f("收盘")).unwrap_or_default(),
-                                volume: f("成交量") as u64,
-                                adjusted_close: Decimal::from_f64_retain(f("收盘")).unwrap_or_default(),
-                            })
-                        }).collect();
-                        tracing::info!("[intraday] Sidecar ({}) returned {} bars for {}", sidecar_url, quotes.len(), stock_id);
-                        let value = serde_json::to_value(&quotes).unwrap_or_default();
-                        self.inner.intraday_cache.insert(cache_key, value).await;
-                        return Ok(quotes);
-                    }
-                }
-            }
-            // Reaching here means all sidecar URLs failed — fall through to Tier 3
-            tracing::warn!("[intraday] All sidecar attempts exhausted for {} (tried {} URLs)", stock_id, sidecar_urls.len());
-        }
-
-        // ── Tier 3: Tencent direct intraday API ──
-        tracing::info!("[intraday] Trying Tencent direct for {}", stock_id);
-        let tencent_data = market_data::fetch_intraday(stock_id).await;
-        if !tencent_data.is_empty() {
-            let quotes: Vec<Quote> = tencent_data.into_iter().map(|q| Quote {
+        // ── Tier 2: Provider-routed intraday (Tencent for A-shares, empty for US stocks) ──
+        tracing::info!("[intraday] Trying provider-routed fetch for {}", stock_id);
+        let intraday_data = market_data::fetch_intraday(stock_id).await;
+        if !intraday_data.is_empty() {
+            let quotes: Vec<Quote> = intraday_data.into_iter().map(|q| Quote {
                 stock_id: stock_id.to_string(),
                 date: q.date,
                 time: q.time,
@@ -986,92 +642,16 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 volume: q.volume,
                 adjusted_close: Decimal::from_f64_retain(q.close).unwrap_or_default(),
             }).collect();
-            tracing::info!("[intraday] Tencent direct returned {} bars for {}", quotes.len(), stock_id);
+            tracing::info!("[intraday] Provider-routed fetch returned {} bars for {}", quotes.len(), stock_id);
             let value = serde_json::to_value(&quotes).unwrap_or_default();
             self.inner.intraday_cache.insert(cache_key.clone(), value).await;
             return Ok(quotes);
         }
-        tracing::warn!("[intraday] Tencent direct returned no data for {}", stock_id);
+        tracing::warn!("[intraday] Provider-routed fetch returned no data for {}", stock_id);
 
-        // ── Tier 4: Expand last daily bar into 48 synthetic minute bars ──
-        tracing::info!("[intraday] Expanding last daily bar for {}", stock_id);
-        use rust_decimal::prelude::ToPrimitive;
-        if let Ok(history) = self.get_stock_history(stock_id, 1, "day").await {
-            if let Some(last) = history.first() {
-                let base = last.close.to_f64().unwrap_or(100.0);
-                let open = last.open.to_f64().unwrap_or(base);
-                let high = last.high.to_f64().unwrap_or(base);
-                let low = last.low.to_f64().unwrap_or(base);
-                let date = last.date;
-                let mut quotes = Vec::with_capacity(48);
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                std::hash::Hash::hash(stock_id, &mut h);
-                let seed = h.finish();
-                for i in 0..48 {
-                    let s = seed.wrapping_add(i as u64 * 7919);
-                    let bar_open = open + ((s % 30) as f64 - 15.0) / 100.0;
-                    let bar_close = base + ((s.wrapping_mul(3) % 40) as f64 - 20.0) / 100.0;
-                    quotes.push(Quote {
-                        stock_id: stock_id.to_string(), date, time: String::new(),
-                        open: Decimal::from_f64_retain(bar_open).unwrap_or_default(),
-                        high: Decimal::from_f64_retain(bar_open.max(bar_close) + ((s % 10) as f64 / 100.0)).unwrap_or_default(),
-                        low: Decimal::from_f64_retain(bar_open.min(bar_close) - ((s % 10) as f64 / 100.0)).unwrap_or_default(),
-                        close: Decimal::from_f64_retain(bar_close).unwrap_or_default(),
-                        volume: ((s % 50000) as u64 + 10000), adjusted_close: Decimal::from_f64_retain(bar_close).unwrap_or_default(),
-                    });
-                }
-                let value = serde_json::to_value(&quotes).unwrap_or_default();
-                self.inner.intraday_cache.insert(cache_key.clone(), value).await;
-                return Ok(quotes);
-            }
-        }
-
-        // ── Tier 5: Ultimate fallback — hardcoded sample intraday data ──
-        // NEVER returns empty. Uses deterministic seed from stock_id so each stock
-        // gets a consistent (but fake) intraday shape. No network call required.
-        tracing::error!("[intraday] ALL FALLBACKS EXHAUSTED for {}. Returning hardcoded sample data.", stock_id);
-        let today = chrono::Local::now().naive_local().date();
-
-        // Deterministic pseudo-random seed from stock_id bytes
-        let mut rng = stock_id.bytes().fold(0u64, |a, b| a.wrapping_mul(6364136223846793005).wrapping_add(b as u64));
-        let base_price = 50.0 + ((rng % 9500) as f64); // 50-9550 covers most A-shares
-        let intraday_bars: usize = 48; // full trading day (9:30-11:30, 13:00-15:00 = 48 5-min bars)
-
-        let mut sample_bars = Vec::with_capacity(intraday_bars);
-        for i in 0..intraday_bars {
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let trend = (i as f64 - (intraday_bars as f64 / 2.0)) / (intraday_bars as f64); // gradual intraday drift
-            let noise = ((rng % 200) as f64 - 100.0) / 10000.0; // -1% to +1% noise
-            let close = base_price * (1.0 + trend * 0.02 + noise);
-
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let high = close * (1.0 + ((rng % 30) as f64) / 10000.0);
-
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let low = close * (1.0 - ((rng % 30) as f64) / 10000.0);
-
-            let open = (high + low) / 2.0;
-
-            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
-            let volume = (rng % 500_000) as u64 + 50_000;
-
-            sample_bars.push(Quote {
-                stock_id: stock_id.to_string(),
-                date: today,
-                time: String::new(),
-                open: Decimal::from_f64_retain(open).unwrap_or_default(),
-                high: Decimal::from_f64_retain(high).unwrap_or_default(),
-                low: Decimal::from_f64_retain(low).unwrap_or_default(),
-                close: Decimal::from_f64_retain(close).unwrap_or_default(),
-                volume,
-                adjusted_close: Decimal::from_f64_retain(close).unwrap_or_default(),
-            });
-        }
-
-        let value = serde_json::to_value(&sample_bars).unwrap_or_default();
-        self.inner.intraday_cache.insert(cache_key, value).await;
-        tracing::warn!("[intraday] Returning {} hardcoded sample bars for {} (base_price={:.2})", sample_bars.len(), stock_id, base_price);
-        Ok(sample_bars)
+        // No intraday data available — return empty
+        tracing::warn!("[intraday] No data for {} — leaving blank", stock_id);
+        Ok(Vec::new())
     }
 
     pub async fn get_market_overview(&self) -> Result<MarketOverview, ApiError> {
@@ -1085,7 +665,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 return Ok(overview);
             }
 
-            // Sidecar format: object with specific keys
+            // Cached JSON format: object with specific keys
             let obj = val.as_object().ok_or(ApiError {
                 code: 500,
                 message: "Invalid overview format".into(),
@@ -1097,9 +677,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 up_count: obj.get("up").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                 down_count: obj.get("down").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                 flat_count: obj.get("flat").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                total_volume: obj.get("turnover").and_then(|v| v.as_f64()),
-                total_amount: obj.get("turnover").and_then(|v| v.as_f64()),
-                northbound_inflow: obj.get("northbound_inflow").and_then(|v| v.as_f64()),
+                total_volume: obj.get("turnover").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                total_amount: obj.get("turnover").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                northbound_inflow: obj.get("northbound_inflow").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
                 sentiment_index: Some(0.5),
             });
         }
@@ -1135,8 +715,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 up_count: ((sentiment * 4500.0) as u32).min(4500), // Estimate based on sentiment
                 down_count: (4500 - (sentiment * 4500.0) as u32).min(4500),
                 flat_count: 200,
-                total_volume: Some(total_volume),
-                total_amount: Some(total_amount),
+                total_volume: Decimal::from_f64_retain(total_volume),
+                total_amount: Decimal::from_f64_retain(total_amount),
                 northbound_inflow: None,
                 sentiment_index: Some(sentiment),
             });
@@ -1148,9 +728,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             up_count: 2500,
             down_count: 1800,
             flat_count: 200,
-            total_volume: Some(850_000_000_000.0),
-            total_amount: Some(850_000_000_000.0),
-            northbound_inflow: Some(5_000_000_000.0),
+            total_volume: Decimal::from_f64_retain(850_000_000_000.0),
+            total_amount: Decimal::from_f64_retain(850_000_000_000.0),
+            northbound_inflow: Decimal::from_f64_retain(5_000_000_000.0),
             sentiment_index: Some(0.65),
         })
     }
@@ -1175,6 +755,7 @@ impl CacheManager {
     pub fn new(pool: Option<DbPool>) -> Self {
         let l1 = Cache::builder()
             .time_to_live(Duration::from_secs(900)) // 15 min
+            .max_capacity(10_000)
             .build();
         Self { l1, pool }
     }
@@ -1261,49 +842,6 @@ impl CacheManager {
 // Helpers
 // ============================================================
 
-fn locate_script() -> Option<std::path::PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let candidates = [
-        // Relative to CWD
-        std::path::PathBuf::from("scripts").join("akshare_server.py"),
-        // Next to exe: target/debug/../scripts
-        exe.parent()?.join("scripts").join("akshare_server.py"),
-        // exe grandparent: target/debug/../../scripts (= stockmate/scripts)
-        exe.parent()?.parent()?.join("scripts").join("akshare_server.py"),
-        // exe great-grandparent: target/debug/../../../scripts
-        exe.parent()?.parent()?.parent()?.join("scripts").join("akshare_server.py"),
-    ];
-    candidates.iter().find(|p| p.exists()).cloned()
-}
-
-async fn find_python_executable() -> Result<String, ApiError> {
-    for cmd in ["python", "python3"] {
-        if Command::new(cmd).arg("--version").output().await.is_ok() {
-            return Ok(cmd.into());
-        }
-    }
-    Err(ApiError {
-        code: 500,
-        message: "Python executable not found".into(),
-        details: None,
-    })
-}
-
-async fn find_free_port() -> Result<u16, ApiError> {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.map_err(|e| ApiError {
-        code: 500,
-        message: format!("Cannot bind: {}", e),
-        details: None,
-    })?;
-    let port = listener.local_addr().map_err(|e| ApiError {
-        code: 500,
-        message: e.to_string(),
-        details: None,
-    })?.port();
-    drop(listener);
-    Ok(port)
-}
-
 fn serialize_params(params: &[(&str, &str)]) -> String {
     params
         .iter()
@@ -1321,7 +859,7 @@ pub fn mock_strategy_signal(stock_id: &str, strategy_type: &str) -> StrategySign
     StrategySignal {
         stock_id: stock_id.into(),
         strategy_type: strategy_type.into(),
-        action: "buy".into(),
+        action: SignalAction::Buy,
         entry_price: Some(Decimal::new(16800, 2)),
         stop_loss: Some(Decimal::new(16000, 2)),
         take_profit: Some(Decimal::new(18500, 2)),
@@ -1338,7 +876,7 @@ pub fn mock_prediction(stock_id: &str, strategy_type: &str) -> Prediction {
     Prediction {
         stock_id: stock_id.into(),
         strategy_type: strategy_type.into(),
-        direction: "up".into(),
+        direction: TrendDirection::Up,
         confidence: 0.65,
         suggestion: "轻仓试多，关注18000压力".into(),
         backtest_accuracy: Some(0.68),
@@ -1362,6 +900,128 @@ fn mock_five_day_change(ticker: &str, change_percent: f64) -> f64 {
     let seed = h.finish();
     let variation = ((seed % 160) as f64 - 80.0) / 10.0;
     (change_percent * 3.0 + variation).clamp(-25.0, 25.0)
+}
+
+/// Aggregate daily OHLCV quotes into period-level candles (week/month).
+/// Expects quotes in ascending date order.
+fn aggregate_quotes_by_period(quotes: &[Quote], period: &str) -> Vec<Quote> {
+    if quotes.is_empty() || period == "day" {
+        return quotes.to_vec();
+    }
+
+    let mut result: Vec<Quote> = Vec::new();
+    let mut group_start: usize = 0;
+
+    for i in 1..=quotes.len() {
+        let is_new_group = if i < quotes.len() {
+            period_group_key(&quotes[i].date, period) != period_group_key(&quotes[i - 1].date, period)
+        } else {
+            true
+        };
+
+        if is_new_group {
+            let group = &quotes[group_start..i];
+            if !group.is_empty() {
+                let first = &group[0];
+                let last = &group[group.len() - 1];
+
+                let mut high = Decimal::ZERO;
+                let mut low = Decimal::MAX;
+                let mut volume: u64 = 0;
+
+                for q in group {
+                    if q.high > high {
+                        high = q.high;
+                    }
+                    if q.low < low {
+                        low = q.low;
+                    }
+                    volume += q.volume;
+                }
+
+                result.push(Quote {
+                    stock_id: first.stock_id.clone(),
+                    date: first.date,
+                    time: String::new(),
+                    open: first.open,
+                    high,
+                    low,
+                    close: last.close,
+                    volume,
+                    adjusted_close: last.adjusted_close,
+                });
+            }
+            group_start = i;
+        }
+    }
+
+    result
+}
+
+/// Return a grouping key for a date based on the period granularity.
+fn period_group_key(date: &NaiveDate, period: &str) -> i32 {
+    match period {
+        "week" => {
+            let iso = date.iso_week();
+            iso.year() * 100 + iso.week() as i32
+        }
+        "month" => date.year() * 100 + date.month() as i32,
+        _ => date.year() * 10000 + date.month() as i32 * 100 + date.day() as i32,
+    }
+}
+
+/// Generate deterministic mock history quotes for a stock, given a base price and day count.
+/// When `period` is "week" or "month", generates enough daily data and aggregates it.
+fn generate_mock_history(stock_id: &str, base_price: f64, days: u32, period: &str) -> Vec<Quote> {
+    // For week/month, generate enough daily data then aggregate.
+    // Use 31 days per month (not 30) because consecutive calendar days
+    // can span at most 31 calendar days in a month, so days*31 guarantees
+    // we generate at least `days` monthly groups after aggregation.
+    let daily_count = match period {
+        "week" => days * 7,
+        "month" => days * 31,
+        _ => days,
+    };
+
+    let mut state = {
+        let mut hasher = DefaultHasher::new();
+        stock_id.hash(&mut hasher);
+        hasher.finish()
+    };
+    let mut quotes = Vec::new();
+    for i in (0..daily_count).rev() {
+        let date = chrono::Local::now().naive_local().date()
+            - chrono::TimeDelta::try_days(i as i64).unwrap();
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let noise = ((state % 200) as f64 - 100.0) / 2000.0;
+        let close = base_price * (1.0 + noise);
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let high_offset = ((state % 50) as f64) / 1000.0;
+        let high = close * (1.0 + high_offset);
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let low_offset = ((state % 50) as f64) / 1000.0;
+        let low = close * (1.0 - low_offset);
+        let open = (high + low) / 2.0;
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let volume = (state % 10_000_000) as u64 + 1_000_000;
+        quotes.push(Quote {
+            stock_id: stock_id.into(),
+            date,
+            time: String::new(),
+            open: Decimal::from_f64_retain(open).unwrap_or_default(),
+            high: Decimal::from_f64_retain(high).unwrap_or_default(),
+            low: Decimal::from_f64_retain(low).unwrap_or_default(),
+            close: Decimal::from_f64_retain(close).unwrap_or_default(),
+            volume,
+            adjusted_close: Decimal::from_f64_retain(close).unwrap_or_default(),
+        });
+    }
+    // Aggregate by period if needed and truncate to requested count
+    if period != "day" {
+        quotes = aggregate_quotes_by_period(&quotes, period);
+        quotes.truncate(days as usize);
+    }
+    quotes
 }
 
 

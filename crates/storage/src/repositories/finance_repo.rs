@@ -1,7 +1,7 @@
 use sqlx::Result;
 use crate::DbPool;
 
-/// Financial data entity matching the `financial_data` table schema
+/// Financial data entity matching the `stock_fundamentals` table schema
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct FinancialDataEntity {
     pub id: i64,
@@ -31,7 +31,7 @@ impl FinanceRepo {
 
     pub async fn get_by_symbol(&self, symbol: &str, limit: i64) -> Result<Vec<FinancialDataEntity>> {
         sqlx::query_as::<_, FinancialDataEntity>(
-            "SELECT id, symbol, report_date, report_type, revenue, net_profit, gross_margin, net_margin, roe, roa, eps, debt_ratio, operating_cash_flow, free_cash_flow FROM financial_data WHERE symbol = ?1 ORDER BY report_date DESC LIMIT ?2"
+            "SELECT id, symbol, report_date, report_type, revenue, net_profit, gross_margin, net_margin, roe, roa, eps, debt_ratio, operating_cash_flow, free_cash_flow FROM stock_fundamentals WHERE symbol = ?1 ORDER BY report_date DESC LIMIT ?2"
         )
         .bind(symbol)
         .bind(limit)
@@ -41,7 +41,7 @@ impl FinanceRepo {
 
     pub async fn get_latest(&self, symbol: &str) -> Result<Option<FinancialDataEntity>> {
         sqlx::query_as::<_, FinancialDataEntity>(
-            "SELECT id, symbol, report_date, report_type, revenue, net_profit, gross_margin, net_margin, roe, roa, eps, debt_ratio, operating_cash_flow, free_cash_flow FROM financial_data WHERE symbol = ?1 ORDER BY report_date DESC LIMIT 1"
+            "SELECT id, symbol, report_date, report_type, revenue, net_profit, gross_margin, net_margin, roe, roa, eps, debt_ratio, operating_cash_flow, free_cash_flow FROM stock_fundamentals WHERE symbol = ?1 ORDER BY report_date DESC LIMIT 1"
         )
         .bind(symbol)
         .fetch_optional(&self.pool)
@@ -50,7 +50,7 @@ impl FinanceRepo {
 
     pub async fn insert(&self, data: &FinancialDataEntity) -> Result<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO financial_data (symbol, report_date, report_type, revenue, net_profit, gross_margin, net_margin, roe, roa, eps, debt_ratio, operating_cash_flow, free_cash_flow) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"
+            "INSERT OR REPLACE INTO stock_fundamentals (symbol, report_date, report_type, revenue, net_profit, gross_margin, net_margin, roe, roa, eps, debt_ratio, operating_cash_flow, free_cash_flow) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"
         )
         .bind(&data.symbol)
         .bind(&data.report_date)
@@ -71,7 +71,7 @@ impl FinanceRepo {
     }
 
     pub async fn delete_by_symbol(&self, symbol: &str) -> Result<()> {
-        sqlx::query("DELETE FROM financial_data WHERE symbol = ?1")
+        sqlx::query("DELETE FROM stock_fundamentals WHERE symbol = ?1")
             .bind(symbol)
             .execute(&self.pool)
             .await?;

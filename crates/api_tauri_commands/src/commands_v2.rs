@@ -3,6 +3,68 @@ use rust_decimal::prelude::ToPrimitive;
 
 use crate::AppState;
 
+// ============================================================
+// Input validation helpers
+// ============================================================
+
+fn validate_stock_id(stock_id: &str) -> Result<(), domain::ApiError> {
+    if stock_id.trim().is_empty() {
+        return Err(domain::ApiError { code: 400, message: "stock_id must not be empty".into(), details: None });
+    }
+    if stock_id.len() > 30 {
+        return Err(domain::ApiError { code: 400, message: "stock_id exceeds max length of 30".into(), details: None });
+    }
+    Ok(())
+}
+
+fn validate_sector(sector: &str) -> Result<(), domain::ApiError> {
+    if sector.trim().is_empty() {
+        return Err(domain::ApiError { code: 400, message: "sector must not be empty".into(), details: None });
+    }
+    if sector.len() > 100 {
+        return Err(domain::ApiError { code: 400, message: "sector exceeds max length of 100".into(), details: None });
+    }
+    Ok(())
+}
+
+fn validate_days(days: u32) -> Result<(), domain::ApiError> {
+    if days == 0 {
+        return Err(domain::ApiError { code: 400, message: "days must be greater than 0".into(), details: None });
+    }
+    if days > 3650 {
+        return Err(domain::ApiError { code: 400, message: "days exceeds max of 3650".into(), details: None });
+    }
+    Ok(())
+}
+
+fn validate_period(period: &str) -> Result<(), domain::ApiError> {
+    let p = period.trim();
+    if p.is_empty() {
+        return Err(domain::ApiError { code: 400, message: "period must not be empty".into(), details: None });
+    }
+    if p.len() > 20 {
+        return Err(domain::ApiError { code: 400, message: "period exceeds max length of 20".into(), details: None });
+    }
+    if !["day", "week", "month"].contains(&p) {
+        return Err(domain::ApiError {
+            code: 400,
+            message: format!("invalid period '{}': must be one of day, week, month", p),
+            details: None,
+        });
+    }
+    Ok(())
+}
+
+fn validate_strategy_type(strategy_type: &str) -> Result<(), domain::ApiError> {
+    if strategy_type.trim().is_empty() {
+        return Err(domain::ApiError { code: 400, message: "strategy_type must not be empty".into(), details: None });
+    }
+    if strategy_type.len() > 100 {
+        return Err(domain::ApiError { code: 400, message: "strategy_type exceeds max length of 100".into(), details: None });
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn get_hot_sectors(state: State<'_, AppState>) -> Result<Vec<domain::HotSector>, domain::ApiError> {
     eprintln!("[CMD] get_hot_sectors: fetching hot sectors");
@@ -16,37 +78,44 @@ pub async fn get_hot_stocks(state: State<'_, AppState>) -> Result<Vec<domain::Ho
 
 #[tauri::command]
 pub async fn get_sector_stocks(sector: String, state: State<'_, AppState>) -> Result<Vec<domain::HotStock>, domain::ApiError> {
+    validate_sector(&sector)?;
     eprintln!("[CMD] get_sector_stocks: sector={}", sector);
     state.data_service.get_sector_stocks(&sector).await
 }
 
 #[tauri::command]
 pub async fn get_stock_finance(stock_id: String, state: State<'_, AppState>) -> Result<Option<domain::StockFinance>, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
     state.data_service.get_stock_finance(&stock_id).await
 }
 
 #[tauri::command]
 pub async fn get_stock_fund_flow(stock_id: String, state: State<'_, AppState>) -> Result<Vec<domain::FundFlow>, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
     state.data_service.get_stock_fund_flow(&stock_id).await
 }
 
 #[tauri::command]
 pub async fn get_stock_history(stock_id: String, days: u32, period: String, state: State<'_, AppState>) -> Result<Vec<domain::Quote>, domain::ApiError> {
-    let p = if period.is_empty() { "day" } else { &period };
-    eprintln!("[CMD] get_stock_history: stock_id={} days={} period={}", stock_id, days, p);
-    state.data_service.get_stock_history(&stock_id, days, p).await
+    validate_stock_id(&stock_id)?;
+    validate_days(days)?;
+    validate_period(&period)?;
+    eprintln!("[CMD] get_stock_history: stock_id={} days={} period={}", stock_id, days, period);
+    state.data_service.get_stock_history(&stock_id, days, &period).await
 }
 
 #[tauri::command]
 pub async fn get_intraday(stock_id: String, state: State<'_, AppState>) -> Result<Vec<domain::Quote>, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
     eprintln!("[CMD] get_intraday: stock_id={}", stock_id);
-    // Full multi-tier fallback (cache → sidecar → Tencent → daily bar → synthetic)
+    // Full multi-tier fallback (cache → provider → daily bar → synthetic)
     // is handled inside DataService::get_intraday — see data_fetcher/src/lib.rs.
     state.data_service.get_intraday(&stock_id).await
 }
 
 #[tauri::command]
 pub async fn get_realtime_quote(stock_id: String, state: State<'_, AppState>) -> Result<data_fetcher::market_data::PriceData, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
     eprintln!("[CMD] get_realtime_quote: stock_id={}", stock_id);
     state.data_service.get_realtime_quote(&stock_id).await
 }
@@ -58,6 +127,8 @@ pub async fn get_market_overview(state: State<'_, AppState>) -> Result<domain::M
 
 #[tauri::command]
 pub async fn calculate_ma(stock_id: String, days: u32, state: State<'_, AppState>) -> Result<Vec<domain::MovingAverage>, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
+    validate_days(days)?;
     use rust_decimal::Decimal;
     // Fetch enough history for all MA periods (MA250 needs at least 250 days)
     let fetch_days = days.max(250);
@@ -69,6 +140,7 @@ pub async fn calculate_ma(stock_id: String, days: u32, state: State<'_, AppState
     let closes: Vec<f64> = history.iter().map(|q| q.close.to_f64().unwrap_or(0.0)).collect();
     
     fn calc_sma(data: &[f64], period: usize) -> Vec<Option<f64>> {
+        if data.is_empty() { return Vec::new(); }
         let mut result = Vec::new();
         for i in 0..data.len() {
             if i < period - 1 {
@@ -108,6 +180,7 @@ pub async fn calculate_ma(stock_id: String, days: u32, state: State<'_, AppState
 
 #[tauri::command]
 pub async fn calculate_support_resistance(stock_id: String, state: State<'_, AppState>) -> Result<domain::SupportResistance, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
     use rust_decimal::Decimal;
 
     let history = state.data_service.get_stock_history(&stock_id, 60, "day").await?;
@@ -129,9 +202,9 @@ pub async fn calculate_support_resistance(stock_id: String, state: State<'_, App
     let mut lows: Vec<f64> = recent.iter().map(|q| q.low.to_f64().unwrap_or(0.0)).filter(|&v| v > 0.0).collect();
     let mut highs: Vec<f64> = recent.iter().map(|q| q.high.to_f64().unwrap_or(0.0)).filter(|&v| v > 0.0).collect();
 
-    lows.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    lows.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     lows.dedup_by(|a, b| (*b - *a).abs() < 0.01);
-    highs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    highs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     highs.dedup_by(|a, b| (*b - *a).abs() < 0.01);
 
     // Supports: lowest 2 unique lows
@@ -165,11 +238,15 @@ pub async fn calculate_support_resistance(stock_id: String, state: State<'_, App
 
 #[tauri::command]
 pub async fn generate_strategy(stock_id: String, strategy_type: String, _state: State<'_, AppState>) -> Result<domain::StrategySignal, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
+    validate_strategy_type(&strategy_type)?;
     Ok(data_fetcher::mock_strategy_signal(&stock_id, &strategy_type))
 }
 
 #[tauri::command]
 pub async fn predict_trend(stock_id: String, strategy_type: String, _state: State<'_, AppState>) -> Result<domain::Prediction, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
+    validate_strategy_type(&strategy_type)?;
     Ok(data_fetcher::mock_prediction(&stock_id, &strategy_type))
 }
 
@@ -266,25 +343,8 @@ async fn test_tencent_price(code: &str) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn generate_card_data(stock_id: String, _state: State<'_, AppState>) -> Result<domain::CardData, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
     Ok(data_fetcher::mock_card_data(&stock_id))
-}
-
-// ============================================================
-// Sidecar health check
-// ============================================================
-
-#[tauri::command]
-pub async fn check_sidecar_status(state: State<'_, AppState>) -> Result<String, domain::ApiError> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(2))
-        .no_proxy()
-        .build()
-        .map_err(|e| domain::ApiError { code: 500, message: format!("client: {}", e), details: None })?;
-    match client.get("http://127.0.0.1:15678/health").send().await {
-        Ok(resp) if resp.status().is_success() => Ok("running".into()),
-        Ok(resp) => Err(domain::ApiError { code: 500, message: format!("HTTP {}", resp.status()), details: None }),
-        Err(e) => Err(domain::ApiError { code: 500, message: e.to_string(), details: None }),
-    }
 }
 
 
@@ -293,6 +353,7 @@ mod tests {
     use super::*;
     use domain::MovingAverage;
     use domain::SupportResistance;
+    use domain::SignalAction;
     use domain::StrategySignal;
     use domain::Prediction;
     use domain::CardData;
@@ -336,7 +397,7 @@ mod tests {
         let json = serde_json::to_string(&signal).unwrap();
         let restored: StrategySignal = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.stock_id, "600519.SH");
-        assert_eq!(restored.action, "buy");
+        assert_eq!(restored.action, SignalAction::Buy);
     }
 
     #[test]

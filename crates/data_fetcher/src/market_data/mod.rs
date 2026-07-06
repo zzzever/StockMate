@@ -1,12 +1,11 @@
 //! Market data providers for real-time stock data.
 //!
-//! Providers:
-//! - Tencent: A-share (Shanghai/Shenzhen) real-time prices and K-line via QQ Finance API
+//! Providers (Tencent only for A-shares, EastMoney removed):
+//! - Tencent: A-share (Shanghai/Shenzhen/Beijing) real-time prices and K-line via QQ Finance API
 //! - YahooFinance: US stock prices via Yahoo Finance chart API
 
-pub mod eastmoney;
 pub mod yahoo;
-pub mod tencent; // legacy, unused
+pub mod tencent; // A-share (Shanghai/Shenzhen) real-time prices and K-line via QQ Finance API
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -42,10 +41,13 @@ pub struct HistoryQuote {
 }
 
 /// Select provider based on ticker suffix.
+///
+/// A-shares (.SH/.SZ/.BJ) use Tencent.
+/// US stocks / others use YahooFinance.
 pub fn select_provider(ticker: &str) -> Provider {
     let upper = ticker.to_ascii_uppercase();
     if upper.ends_with(".SH") || upper.ends_with(".SZ") || upper.ends_with(".BJ") {
-        Provider::EastMoney
+        Provider::Tencent
     } else {
         Provider::YahooFinance
     }
@@ -53,34 +55,48 @@ pub fn select_provider(ticker: &str) -> Provider {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Provider {
-    EastMoney,
+    Tencent,
     YahooFinance,
 }
 
 impl Provider {
     pub async fn fetch_realtime_price(&self, ticker: &str) -> Option<PriceData> {
         match self {
-            Provider::EastMoney => tencent::fetch_realtime_price(ticker).await,
+            Provider::Tencent => tencent::fetch_realtime_price(ticker).await,
             Provider::YahooFinance => yahoo::fetch_realtime_price(ticker).await,
         }
     }
 
     pub async fn fetch_history(&self, ticker: &str, period: &str, days: u32) -> Vec<HistoryQuote> {
         match self {
-            Provider::EastMoney => tencent::fetch_history(ticker, period, days).await,
+            Provider::Tencent => tencent::fetch_history(ticker, period, days).await,
             Provider::YahooFinance => yahoo::fetch_history(ticker, period, days).await,
+        }
+    }
+
+    pub async fn fetch_intraday(&self, ticker: &str) -> Vec<HistoryQuote> {
+        match self {
+            Provider::Tencent => tencent::fetch_intraday(ticker).await,
+            Provider::YahooFinance => {
+                tracing::warn!("[fetch_intraday] Yahoo Finance provider does not support intraday data for {}", ticker);
+                vec![]
+            },
         }
     }
 }
 
-/// Batch real-time: use Tencent (East Money API unreliable)
+/// Batch real-time: use Tencent API (fast, reliable for concurrent A-share pricing)
 pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
     tencent::fetch_realtime_batch(tickers).await
 }
 
-/// Intraday: Tencent mkline API is the most reliable free source
+/// Intraday (5-min K-line): routed through Provider selection.
+///
+/// - A-shares (.SH/.SZ/.BJ) -> Tencent
+/// - US stocks / others    -> Yahoo (returns empty; intraday unavailable via Yahoo API)
 pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
-    tencent::fetch_intraday(ticker).await
+    let provider = select_provider(ticker);
+    provider.fetch_intraday(ticker).await
 }
 
 
@@ -90,9 +106,9 @@ mod tests {
 
     #[test]
     fn test_select_provider_tencent() {
-        assert!(matches!(select_provider("600519.SH"), Provider::EastMoney));
-        assert!(matches!(select_provider("000001.SZ"), Provider::EastMoney));
-        assert!(matches!(select_provider("430047.BJ"), Provider::EastMoney));
+        assert!(matches!(select_provider("600519.SH"), Provider::Tencent));
+        assert!(matches!(select_provider("000001.SZ"), Provider::Tencent));
+        assert!(matches!(select_provider("430047.BJ"), Provider::Tencent));
     }
 
     #[test]

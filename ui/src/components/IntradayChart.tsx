@@ -17,9 +17,9 @@ function buildSlots() {
 }
 const ALL_SLOTS = buildSlots();
 
-// ── Design tokens ──
-const GREEN = { line: '#22c55e', top: 'rgba(34,197,94,0.28)', mid: 'rgba(34,197,94,0.08)', bottom: 'rgba(34,197,94,0.0)' };
-const RED = { line: '#ef4444', top: 'rgba(239,68,68,0.0)', mid: 'rgba(239,68,68,0.08)', bottom: 'rgba(239,68,68,0.28)' };
+// ── Design tokens — 红涨绿跌 (Chinese convention: red=up, green=down) ──
+const GREEN = { line: '#ef4444', top: 'rgba(239,68,68,0.28)', mid: 'rgba(239,68,68,0.08)', bottom: 'rgba(239,68,68,0.0)' };
+const RED = { line: '#22c55e', top: 'rgba(34,197,94,0.0)', mid: 'rgba(34,197,94,0.08)', bottom: 'rgba(34,197,94,0.28)' };
 const BASELINE = 'rgba(250,204,21,0.45)';
 const GRID = 'rgba(148,163,184,0.10)';
 const BORDER = 'rgba(148,163,184,0.15)';
@@ -110,7 +110,7 @@ export function IntradayChart({ data, prevClose, loading = false, className }: P
         <div className="flex items-center gap-3">
           {lastPrice !== null && <span className="text-sm font-mono font-bold text-slate-800 dark:text-zinc-100">¥{fmtPrice(lastPrice)}</span>}
           {changePct !== null && (
-            <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${changePct >= 0 ? 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10' : 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10'}`}>
+            <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${changePct >= 0 ? 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10' : 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10'}`}>
               {changePct >= 0 ? '+' : ''}{fmtPct(changePct)}%
             </span>
           )}
@@ -127,7 +127,7 @@ export function IntradayChart({ data, prevClose, loading = false, className }: P
             <div className="text-slate-400 text-[10px] mb-1">{tip.time}</div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-white text-sm">{fmtPrice(tip.price)}</span>
-              <span className={`text-xs font-bold ${tip.pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{tip.pct >= 0 ? '+' : ''}{fmtPct(tip.pct)}%</span>
+              <span className={`text-xs font-bold ${tip.pct >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{tip.pct >= 0 ? '+' : ''}{fmtPct(tip.pct)}%</span>
             </div>
           </div>
         )}

@@ -13,6 +13,17 @@ pub struct WatchlistEntity {
     pub added_at: Option<String>,
 }
 
+/// Raw entity-based watchlist repository.
+///
+/// Provides direct DB access via `WatchlistEntity`, with group (`name`)
+/// support for organizing symbols into named groups. Each row has its own
+/// `id` primary key.
+///
+/// **DEPRECATED**: This implementation is unused. Use `WatchlistRepository`
+/// in `crate::lib` instead, which returns `WatchlistItem` domain objects
+/// with automatic exchange assignment. If entity-level access is needed,
+/// consider extending `WatchlistRepository` rather than reviving this.
+#[deprecated(note = "Use WatchlistRepository (crate::lib) instead")]
 pub struct WatchlistRepo {
     pool: DbPool,
 }

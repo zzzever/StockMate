@@ -15,3 +15,4 @@ rust_decimal = { version = "1.35", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 deepseek = { path = "../deepseek" }
 reqwest = { version = "0.12", features = ["json"] }
+tracing = "0.1"

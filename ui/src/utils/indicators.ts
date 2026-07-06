@@ -3,9 +3,9 @@
 
 export interface MACDData {
   time: string;
-  dif: number;
-  dea: number;
-  histogram: number;
+  dif: number | null;
+  dea: number | null;
+  histogram: number | null;
 }
 
 export interface KDJData {
@@ -22,9 +22,9 @@ export interface RSIData {
 
 export interface BBData {
   time: string;
-  upper: number;
-  middle: number;
-  lower: number;
+  upper: number | null;
+  middle: number | null;
+  lower: number | null;
 }
 
 function sma(data: number[], period: number): (number | null)[] {
@@ -81,7 +81,7 @@ export function computeBollinger(
   for (let i = 0; i < closes.length; i++) {
     const m = middle[i];
     if (m === null || i < period - 1) {
-      result.push({ time: dates[i], upper: 0, middle: 0, lower: 0 });
+      result.push({ time: dates[i], upper: null, middle: null, lower: null });
       continue;
     }
     // Compute stddev over the window
@@ -89,7 +89,7 @@ export function computeBollinger(
     for (let j = i - period + 1; j <= i; j++) {
       sumSq += (closes[j] - m) ** 2;
     }
-    const stddev = Math.sqrt(sumSq / period);
+    const stddev = Math.sqrt(sumSq / (period - 1));
     result.push({
       time: dates[i],
       upper: m + multiplier * stddev,
@@ -110,39 +110,47 @@ export function computeMACD(
 ): MACDData[] {
   const emaFast = ema(closes, fast);
   const emaSlow = ema(closes, slow);
-  const dif: (number | null)[] = [];
   const result: MACDData[] = [];
 
+  // Compute DIF for each point (null when EMA not ready)
+  const dif: (number | null)[] = [];
   for (let i = 0; i < closes.length; i++) {
     const f = emaFast[i];
     const s = emaSlow[i];
-    if (f === null || s === null) {
-      dif.push(null);
-      result.push({ time: dates[i], dif: 0, dea: 0, histogram: 0 });
-    } else {
-      dif.push(f - s);
-      result.push({ time: dates[i], dif: 0, dea: 0, histogram: 0 });
+    dif.push(f !== null && s !== null ? f - s : null);
+  }
+
+  // Collect valid DIF values in timeline order
+  const validDifValues: number[] = [];
+  for (let i = 0; i < dif.length; i++) {
+    if (dif[i] !== null) {
+      validDifValues.push(dif[i]!);
     }
   }
 
-  // DEA = EMA9 of DIF
-  const difNums: number[] = dif.map((d) => d ?? 0);
-  const difNonNull = dif.map((d) => d !== null);
-  const dea = ema(difNums, signal);
+  // Compute DEA on valid DIF values only (keeps timeline order)
+  const validDea = validDifValues.length > 0 ? ema(validDifValues, signal) : [];
 
-  // Fill in results
+  // Build final result aligned to original timeline
+  let deaIdx = 0;
   for (let i = 0; i < closes.length; i++) {
     const d = dif[i];
-    const e = dea[i];
-    if (d === null || e === null || !difNonNull[i]) {
-      result[i] = { time: dates[i], dif: 0, dea: 0, histogram: 0 };
+    if (d === null) {
+      result.push({ time: dates[i], dif: null, dea: null, histogram: null });
     } else {
-      result[i] = {
-        time: dates[i],
-        dif: d,
-        dea: e,
-        histogram: (d - e) * 2,
-      };
+      const e = validDea[deaIdx];
+      deaIdx++;
+      if (e === null) {
+        // DIF available but DEA not yet ready (need signal periods)
+        result.push({ time: dates[i], dif: d, dea: null, histogram: null });
+      } else {
+        result.push({
+          time: dates[i],
+          dif: d,
+          dea: e,
+          histogram: (d - e) * 2,
+        });
+      }
     }
   }
 
@@ -227,8 +235,15 @@ export function computeRSI(
     result.push({ time: dates[i], rsi: 50 });
   }
 
-  const firstRSI = avgLoss < 1e-9 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
-  result[period] = { time: dates[period], rsi: Math.round(firstRSI * 100) / 100 };
+  if (avgLoss < 1e-9 && avgGain < 1e-9) {
+    // Flat market: RSI = 50 (neutral)
+    result[period] = { time: dates[period], rsi: 50 };
+  } else if (avgLoss < 1e-9) {
+    result[period] = { time: dates[period], rsi: 100 };
+  } else {
+    const firstRSI = 100 - 100 / (1 + avgGain / avgLoss);
+    result[period] = { time: dates[period], rsi: Math.round(firstRSI * 100) / 100 };
+  }
 
   // Wilder's smoothing
   for (let i = period + 1; i < closes.length; i++) {
@@ -239,7 +254,11 @@ export function computeRSI(
     avgLoss = (avgLoss * (period - 1) + loss) / period;
 
     let rsi: number;
-    if (avgLoss < 1e-9) {
+    if (avgLoss < 1e-9 && avgGain < 1e-9) {
+      // Flat market (no price movement): RSI = 50 (neutral)
+      rsi = 50;
+    } else if (avgLoss < 1e-9) {
+      // All gains, no losses: RSI = 100 (overbought)
       rsi = 100;
     } else {
       rsi = 100 - 100 / (1 + avgGain / avgLoss);

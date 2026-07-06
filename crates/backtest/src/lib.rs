@@ -62,6 +62,18 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
         };
     }
 
+    // Ensure quotes are sorted by date; sort if not
+    let mut quotes = quotes.to_vec();
+    let mut signals = signals.to_vec();
+    if quotes.windows(2).any(|w| w[0].date > w[1].date) {
+        let mut combined: Vec<(Quote, i8)> = quotes.drain(..).zip(signals.drain(..)).collect();
+        combined.sort_by(|a, b| a.0.date.cmp(&b.0.date));
+        for (q, s) in combined {
+            quotes.push(q);
+            signals.push(s);
+        }
+    }
+
     let mut capital = config.initial_capital;
     let mut position = Decimal::ZERO;
     let mut entry_price = Decimal::ZERO;
@@ -74,41 +86,32 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
         let signal = signals[i];
 
         if position > Decimal::ZERO {
-            // 检查止损 / 止盈
-            let price_change = if entry_price == Decimal::ZERO {
-                Decimal::ZERO
-            } else {
-                (q.close - entry_price) / entry_price
-            };
-            let mut exit = false;
+            // 检查止损 / 止盈（基于 bar 收盘价判断触发，下一根 bar 开盘价执行，避免前视偏差）
+            let sl_triggered = config.stop_loss.map_or(false, |sl| {
+                entry_price > Decimal::ZERO && (q.close - entry_price) / entry_price < -sl
+            });
+            let tp_triggered = config.take_profit.map_or(false, |tp| {
+                entry_price > Decimal::ZERO && (q.close - entry_price) / entry_price > tp
+            });
 
-            if let Some(sl) = config.stop_loss {
-                if price_change < -sl {
-                    exit = true;
-                }
-            }
-            if let Some(tp) = config.take_profit {
-                if price_change > tp {
-                    exit = true;
-                }
-            }
-
-            if exit || signal == -1 {
-                let exit_price = q.close * (Decimal::ONE - config.slippage);
-                let gross_pnl = (exit_price - entry_price) * position;
-                let commission_cost = (entry_price + exit_price) * position * config.commission;
-                let pnl = gross_pnl - commission_cost;
-                let pnl_pct = if entry_price == Decimal::ZERO || position == Decimal::ZERO {
-                    0.0
+            if sl_triggered || tp_triggered || signal == -1 {
+                // 使用下一根 bar 的开盘价执行（避免前视偏差）；最后一根 bar 用收盘价
+                let exit_price = if i + 1 < quotes.len() {
+                    quotes[i + 1].open * (Decimal::ONE - config.slippage)
                 } else {
-                    let raw = (pnl / (entry_price * position)) * Decimal::from(100u64);
-                    raw.to_f64().unwrap_or(0.0)
+                    q.close * (Decimal::ONE - config.slippage)
                 };
-
+                // exit_date 使用实际执行的 bar 日期（与 exit_price 来源一致）
+                let exit_date = if i + 1 < quotes.len() {
+                    quotes[i + 1].date
+                } else {
+                    q.date
+                };
+                let (pnl, pnl_pct) = calculate_trade_exit(exit_price, entry_price, position, config);
                 capital = capital + pnl;
                 trades.push(Trade {
                     entry_date,
-                    exit_date: q.date,
+                    exit_date,
                     entry_price,
                     exit_price,
                     side: "long".to_string(),
@@ -117,9 +120,10 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
                 });
                 position = Decimal::ZERO;
             }
-        } else if signal == 1 && position == Decimal::ZERO {
-            entry_price = q.close * (Decimal::ONE + config.slippage);
-            entry_date = q.date;
+        } else if signal == 1 && position == Decimal::ZERO && i + 1 < quotes.len() {
+            // Can't enter on the last bar - no subsequent bar to exit on
+            entry_price = quotes[i + 1].open * (Decimal::ONE + config.slippage);
+            entry_date = quotes[i + 1].date; // 实际执行 bar 的日期（与 entry_price 来源一致）
             position = if entry_price == Decimal::ZERO {
                 Decimal::ZERO
             } else {
@@ -127,7 +131,32 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
             };
         }
 
-        equity_curve.push((q.date, capital));
+        // Mark-to-market: 持仓期间计算权益 = 现金 + 持仓价值
+        let equity = if position > Decimal::ZERO {
+            capital - position * entry_price + position * q.close
+        } else {
+            capital
+        };
+        equity_curve.push((q.date, equity));
+    }
+
+    // 如果循环结束后仍有持仓，在最后一根 bar 收盘价强制平仓
+    if position > Decimal::ZERO {
+        let last_q = quotes.last().unwrap();
+        let exit_price = last_q.close * (Decimal::ONE - config.slippage);
+        let (pnl, pnl_pct) = calculate_trade_exit(exit_price, entry_price, position, config);
+        capital = capital + pnl;
+        trades.push(Trade {
+            entry_date,
+            exit_date: last_q.date,
+            entry_price,
+            exit_price,
+            side: "long".to_string(),
+            pnl,
+            pnl_pct,
+        });
+        position = Decimal::ZERO;
+        equity_curve.push((last_q.date, capital));
     }
 
     // 指标计算
@@ -194,6 +223,25 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
     }
 }
 
+/// Calculate PnL and PnL percentage for a trade exit.
+fn calculate_trade_exit(
+    exit_price: Decimal,
+    entry_price: Decimal,
+    position: Decimal,
+    config: &BacktestConfig,
+) -> (Decimal, f64) {
+    let gross_pnl = (exit_price - entry_price) * position;
+    let commission_cost = (entry_price + exit_price) * position * config.commission;
+    let pnl = gross_pnl - commission_cost;
+    let pnl_pct = if entry_price == Decimal::ZERO || position == Decimal::ZERO {
+        0.0
+    } else {
+        let raw = (pnl / (entry_price * position)) * Decimal::from(100u64);
+        raw.to_f64().unwrap_or(0.0)
+    };
+    (pnl, pnl_pct)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -204,6 +252,7 @@ mod tests {
         Quote {
             stock_id: "TEST".into(),
             date: NaiveDate::from_ymd_opt(2024, 1, day).unwrap_or_default(),
+            time: String::new(),
             open: c,
             high: c,
             low: c,

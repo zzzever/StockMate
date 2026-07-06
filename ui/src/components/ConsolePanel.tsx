@@ -8,21 +8,40 @@ let listeners: (() => void)[] = [];
 
 function notify() { listeners.forEach(fn => fn()); }
 
-// Intercept console methods
-const orig = { log: console.log, warn: console.warn, error: console.error };
-console.log = (...args: any[]) => { logs.push({ type: 'log', msg: args.map(String).join(' '), time: new Date().toLocaleTimeString() }); orig.log(...args); notify(); };
-console.warn = (...args: any[]) => { logs.push({ type: 'warn', msg: args.map(String).join(' '), time: new Date().toLocaleTimeString() }); orig.warn(...args); notify(); };
-console.error = (...args: any[]) => { logs.push({ type: 'error', msg: args.map(String).join(' '), time: new Date().toLocaleTimeString() }); orig.error(...args); notify(); };
+// Store original console methods so we can restore them on unmount
+const origConsole = { log: console.log, warn: console.warn, error: console.error };
+let consoleOverridden = false;
 
-// Also catch unhandled errors
-window.addEventListener('error', (e) => {
+function installConsoleOverride() {
+  if (consoleOverridden) return;
+  consoleOverridden = true;
+  const addLog = (type: LogEntry['type'], args: any[]) => {
+    logs.push({ type, msg: args.map(String).join(' '), time: new Date().toLocaleTimeString() });
+    while (logs.length > 1000) logs.shift();
+    origConsole[type](...args);
+    notify();
+  };
+  console.log = (...args: any[]) => addLog('log', args);
+  console.warn = (...args: any[]) => addLog('warn', args);
+  console.error = (...args: any[]) => addLog('error', args);
+}
+
+function restoreConsoleOverride() {
+  if (!consoleOverridden) return;
+  consoleOverridden = false;
+  console.log = origConsole.log;
+  console.warn = origConsole.warn;
+  console.error = origConsole.error;
+}
+
+const windowErrorHandler = (e: ErrorEvent) => {
   logs.push({ type: 'error', msg: `${e.message} (${e.filename}:${e.lineno})`, time: new Date().toLocaleTimeString() });
   notify();
-});
-window.addEventListener('unhandledrejection', (e) => {
+};
+const windowRejectionHandler = (e: PromiseRejectionEvent) => {
   logs.push({ type: 'error', msg: `Promise rejected: ${e.reason}`, time: new Date().toLocaleTimeString() });
   notify();
-});
+};
 
 export function ConsolePanel() {
   const [, setTick] = useState(0);
@@ -34,6 +53,18 @@ export function ConsolePanel() {
     const fn = () => setTick(t => t + 1);
     listeners.push(fn);
     return () => { listeners = listeners.filter(l => l !== fn); };
+  }, []);
+
+  // Manage console override and global error listeners lifecycle
+  useEffect(() => {
+    installConsoleOverride();
+    window.addEventListener('error', windowErrorHandler);
+    window.addEventListener('unhandledrejection', windowRejectionHandler);
+    return () => {
+      restoreConsoleOverride();
+      window.removeEventListener('error', windowErrorHandler);
+      window.removeEventListener('unhandledrejection', windowRejectionHandler);
+    };
   }, []);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [logs.length, open]);
@@ -66,14 +97,14 @@ export function ConsolePanel() {
           <span className="text-[10px] text-zinc-500">{logs.length}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setFilter('all')} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'all' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500'}`}>全部</button>
-          <button onClick={() => setFilter('error')} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'error' ? 'bg-red-500/20 text-red-400' : 'text-zinc-500'}`}>{errCount} 错误</button>
-          <button onClick={() => setFilter('warn')} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'warn' ? 'bg-amber-500/20 text-amber-400' : 'text-zinc-500'}`}>{warnCount} 警告</button>
+          <button onClick={() => setFilter('all')} aria-pressed={filter === 'all'} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'all' ? 'bg-violet-500/20 text-violet-300' : 'text-zinc-500'}`}>全部</button>
+          <button onClick={() => setFilter('error')} aria-pressed={filter === 'error'} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'error' ? 'bg-red-500/20 text-red-400' : 'text-zinc-500'}`}>{errCount} 错误</button>
+          <button onClick={() => setFilter('warn')} aria-pressed={filter === 'warn'} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'warn' ? 'bg-amber-500/20 text-amber-400' : 'text-zinc-500'}`}>{warnCount} 警告</button>
           <button onClick={clear} title="清空"><Trash2 size={12} className="text-zinc-500 hover:text-zinc-300" /></button>
           <button onClick={() => setOpen(false)} title="关闭"><X size={14} className="text-zinc-500 hover:text-zinc-300" /></button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto p-2 space-y-0.5 font-mono text-[11px]">
+      <div className="flex-1 overflow-auto p-2 space-y-0.5 font-mono text-[11px]" aria-live="polite" role="log">
         {last50.length === 0 && <div className="text-zinc-600 text-center py-4">无日志</div>}
         {last50.map((l, i) => (
           <div key={i} className={`leading-relaxed ${l.type === 'error' ? 'text-red-400' : l.type === 'warn' ? 'text-amber-400' : 'text-zinc-400'}`}>

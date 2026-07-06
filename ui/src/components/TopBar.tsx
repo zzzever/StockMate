@@ -3,7 +3,7 @@ import { Search, Sun, Moon, Monitor } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const themeIcon: Record<ThemeMode, typeof Sun> = { light: Sun, dark: Moon, system: Monitor };
+const themeIcon: Record<ThemeMode, React.ComponentType<any>> = { light: Sun, dark: Moon, system: Monitor };
 const themeLabel: Record<ThemeMode, string> = { light: '昼', dark: '夜', system: '自' };
 
 export default function TopBar() {
@@ -17,7 +17,13 @@ export default function TopBar() {
   const handleSearch = (e: React.KeyboardEvent) => {
     if (e.key !== 'Enter' || !search.trim()) return;
     const q = search.trim();
-    if (/^\d{6}$/.test(q)) { navigate(`/stock?code=${q}.SH`); }
+    if (/^\d{6}$/.test(q)) {
+      let suffix = 'SH';
+      if (q.startsWith('0') || q.startsWith('3')) suffix = 'SZ';
+      else if (q.startsWith('4') || q.startsWith('8')) suffix = 'BJ';
+      else if (q.startsWith('9')) suffix = q.startsWith('920') ? 'BJ' : 'SH';
+      navigate(`/stock?code=${q}.${suffix}`);
+    }
     else if (/^\d{6}\.(SH|SZ|BJ)$/i.test(q)) { navigate(`/stock?code=${q.toUpperCase()}`); }
     else { navigate(`/stock?code=${encodeURIComponent(q)}`); }
   };
@@ -40,7 +46,7 @@ export default function TopBar() {
         <div className="flex items-center gap-1.5 border-2 px-2.5 py-1 w-56" style={{ borderColor: 'hsl(var(--ink))' }}>
           <Search size={14} style={{ color: 'hsl(var(--text-tertiary))' }} />
           <input type="text" placeholder="輸入代碼…" value={search}
-            onChange={(e) => setSearch(e.target.value)} onKeyDown={handleSearch}
+            onChange={(e) => setSearch(e.target.value)} onKeyDown={handleSearch} aria-label="搜索股票代码"
             className="bg-transparent text-sm outline-none w-full font-bold"
             style={{ fontFamily: "'Noto Sans SC', sans-serif", color: 'hsl(var(--ink))' }}
           />

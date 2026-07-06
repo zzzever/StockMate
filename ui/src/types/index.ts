@@ -14,12 +14,12 @@ export interface Quote {
   stock_id: string;
   date: string;
   time: string;
-  open: string;
-  high: string;
-  low: string;
-  close: string;
+  open: number | string;
+  high: number | string;
+  low: number | string;
+  close: number | string;
   volume: number;
-  adjusted_close: string;
+  adjusted_close: number | string;
 }
 
 export interface ApiError {
@@ -44,7 +44,7 @@ export interface PriceData {
   turnover_rate: number; // 换手率
 }
 
-export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'settings';
+export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'indicatorLab' | 'settings';
 
 // v0.2.0 new types
 export interface HotSector {
@@ -75,8 +75,8 @@ export interface HotStock {
   id: string;
   ticker: string;
   name: string;
-  price: string;
-  change: string;
+  price: number;
+  change: number;
   change_percent: number;
   volume: number;
   turnover?: string;
@@ -160,7 +160,7 @@ export interface CardData {
   stock_id: string;
   ticker: string;
   name: string;
-  price: string;
+  price: number | string;
   change_percent: number;
   recommendation: string;
   buy_signal: boolean;
@@ -193,6 +193,16 @@ export interface StrategyScript {
   code: string;
   params: Record<string, unknown>;
   explanation: string;
+  signals?: SignalPoint[];
+  support_levels?: number[];
+  resistance_levels?: number[];
+}
+
+export interface SignalPoint {
+  date: string;
+  action: 'buy' | 'sell';
+  price: number;
+  reason: string;
 }
 
 export interface DeepSeekPrediction {
@@ -222,12 +232,12 @@ export interface ScoredSignal {
 
 export interface DimensionScore {
   score: number;       // 0-100
-  label: string;       // "技术面" / "资金面" / "基本面" / "情绪面"
+  label?: string;      // "技术面" / "资金面" / "基本面" / "情绪面"
   summary: string;
   key_points: string[];
   signals: ScoredSignal[];
-  recommendation: string;
-  confidence: number;
+  recommendation?: string;
+  confidence?: number;
 }
 
 export interface CompositeWeights {
@@ -239,13 +249,13 @@ export interface CompositeWeights {
 
 export interface CompositeScore {
   overall: number;
-  technical: number;
-  capital_flow: number;
-  fundamental: number;
-  sentiment: number;
-  weights: CompositeWeights;
   recommendation: string;
-  risk_reward_ratio: number;
+  technical?: number;
+  capital_flow?: number;
+  fundamental?: number;
+  sentiment?: number;
+  weights?: CompositeWeights;
+  risk_reward_ratio?: number;
 }
 
 export interface KeyNumber {
@@ -269,7 +279,7 @@ export interface MultiDimensionAnalysis {
   fundamental: DimensionScore;
   sentiment: DimensionScore;
   composite: CompositeScore;
-  briefing: AIBriefing;
+  briefing?: AIBriefing;
   generated_at: string;
   is_offline: boolean;
   cache_hit: boolean;
@@ -313,36 +323,15 @@ export interface MarketEnvironment {
   is_offline: boolean;
 }
 
-// ── Great Wall Line Design (DeepSeek-designed adaptive support formula) ──
-export interface GreatWallParams {
-  base_ema_period: number;
-  anchor_lookback: number;
-  anchor_volume_threshold: number;
-  anchor_price_threshold: number;
-  anchor_weight: number;
-  momentum_period: number;
-  momentum_panic_threshold: number;
-  momentum_surge_threshold: number;
-  smooth_alpha: number;
-  decay_halflife: number;
-  atr_period: number;
-  atr_buffer_mult: number;
-  psychology_floor: number;
-  psychology_ceil: number;
-}
-
-export interface GreatWallCorrection {
-  name: string;
-  condition: string;
-  adjustment: string;
-  magnitude: number;
-}
-
-export interface GreatWallDesign {
-  name: string;
-  version: string;
-  description: string;
-  params: GreatWallParams;
-  corrections: GreatWallCorrection[];
-  algorithm_notes: string;
+export interface AnalyzeAllResponse {
+  prediction: DeepSeekPrediction;
+  technical: DimensionScore;
+  capital_flow: DimensionScore;
+  fundamental: DimensionScore;
+  sentiment: DimensionScore;
+  composite: CompositeScore;
+  card_reason: string;
+  card_change?: number;
+  card_tags?: string[];
+  market: MarketEnvironment;
 }

@@ -7,7 +7,6 @@
 //! - range: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
 
 use chrono::{NaiveDate, TimeZone};
-use reqwest::Client;
 use serde::Deserialize;
 
 use super::{HistoryQuote, PriceData};
@@ -62,15 +61,21 @@ fn ticker_to_yahoo(ticker: &str) -> String {
     ticker.split('.').next().unwrap_or(ticker).to_string()
 }
 
+fn build_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .user_agent("StockMate/1.0")
+        .timeout(std::time::Duration::from_secs(10))
+        .no_proxy()
+        .build()
+        .expect("Failed to build Yahoo HTTP client")
+}
+
 /// Fetch real-time price from Yahoo Finance.
 pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
     let symbol = ticker_to_yahoo(ticker);
-    let client = Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .ok()?;
+    let client = build_client();
 
-    let resp = client
+    let resp = match client
         .get(format!("{}/{}", YAHOO_BASE, symbol))
         .query(&[
             ("interval", "1d"),
@@ -78,10 +83,35 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
         ])
         .send()
         .await
-        .ok()?;
+    {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("Yahoo real-time request failed for {}: {}", symbol, e);
+            return None;
+        }
+    };
 
-    let json: YahooResponse = resp.json().await.ok()?;
-    let result = json.chart.result?.into_iter().next()?;
+    let json: YahooResponse = match resp.json().await {
+        Ok(j) => j,
+        Err(e) => {
+            tracing::warn!("Yahoo real-time JSON parse failed for {}: {}", symbol, e);
+            return None;
+        }
+    };
+    let result = match json.chart.result {
+        Some(r) => r.into_iter().next(),
+        None => {
+            tracing::warn!("Yahoo real-time API returned no chart results for {}", symbol);
+            return None;
+        }
+    };
+    let result = match result {
+        Some(r) => r,
+        None => {
+            tracing::warn!("Yahoo real-time API returned empty results for {}", symbol);
+            return None;
+        }
+    };
     let meta = result.meta;
     let prev = meta.previous_close.unwrap_or(0.0);
     let current = meta.regular_market_price.unwrap_or(0.0);
@@ -109,16 +139,30 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
 /// period: "day" (1d), "week" (1wk), "month" (1mo)
 pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<HistoryQuote> {
     let symbol = ticker_to_yahoo(ticker);
-    let range = if days <= 5 {
+
+    // Approximate calendar days for range selection
+    let approx_calendar_days = match period {
+        "week" => days.saturating_mul(7),
+        "month" => days.saturating_mul(30),
+        _ => days,
+    };
+
+    let range = if approx_calendar_days <= 5 {
         "5d"
-    } else if days <= 30 {
+    } else if approx_calendar_days <= 30 {
         "1mo"
-    } else if days <= 90 {
+    } else if approx_calendar_days <= 90 {
         "3mo"
-    } else if days <= 180 {
+    } else if approx_calendar_days <= 180 {
         "6mo"
-    } else {
+    } else if approx_calendar_days <= 365 {
         "1y"
+    } else if approx_calendar_days <= 730 {
+        "2y"
+    } else if approx_calendar_days <= 1825 {
+        "5y"
+    } else {
+        "10y"
     };
 
     // Map our period strings to Yahoo interval format
@@ -128,13 +172,7 @@ pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<History
         _ => "1d",
     };
 
-    let client = match Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
+    let client = build_client();
 
     let resp = match client
         .get(format!("{}/{}", YAHOO_BASE, symbol))
@@ -146,28 +184,43 @@ pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<History
         .await
     {
         Ok(r) => r,
-        Err(_) => return Vec::new(),
+        Err(e) => {
+            tracing::warn!("Yahoo history request failed for {}: {}", symbol, e);
+            return Vec::new();
+        }
     };
 
     let json: YahooResponse = match resp.json().await {
         Ok(j) => j,
-        Err(_) => return Vec::new(),
+        Err(e) => {
+            tracing::warn!("Yahoo history JSON parse failed for {}: {}", symbol, e);
+            return Vec::new();
+        }
     };
 
     let result = match json.chart.result {
         Some(r) => r.into_iter().next(),
-        None => return Vec::new(),
+        None => {
+            tracing::warn!("Yahoo history API returned no chart results for {}", symbol);
+            return Vec::new();
+        }
     };
     let result = match result {
         Some(r) => r,
-        None => return Vec::new(),
+        None => {
+            tracing::warn!("Yahoo history API returned empty results for {}", symbol);
+            return Vec::new();
+        }
     };
 
     let timestamps = result.timestamp;
     let quote = result.indicators.quote.into_iter().next();
     let quote = match quote {
         Some(q) => q,
-        None => return Vec::new(),
+        None => {
+            tracing::warn!("Yahoo history API returned no quote data for {}", symbol);
+            return Vec::new();
+        }
     };
 
     let mut quotes = Vec::new();

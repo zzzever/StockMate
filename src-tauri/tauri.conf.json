@@ -7,7 +7,7 @@
   },
   "bundle": {
     "active": true,
-    "category": "DeveloperTool",
+    "category": "Finance",
     "copyright": "",
     "targets": "all",
     "icon": [
@@ -37,7 +37,7 @@
   "plugins": {},
   "app": {
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:15678 https://web.ifzq.gtimg.cn https://qt.gtimg.cn http://ifzq.gtimg.cn"
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:15678 https://web.ifzq.gtimg.cn https://qt.gtimg.cn http://ifzq.gtimg.cn"
     },
     "windows": [
       {

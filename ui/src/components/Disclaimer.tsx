@@ -47,7 +47,7 @@ export function DisclaimerModal() {
               <h2 className="text-lg font-bold">免责声明</h2>
             </div>
 
-            <div className="text-sm text-slate-700 dark:text-slate-700 dark:text-zinc-300 space-y-2 max-h-60 overflow-y-auto">
+            <div className="text-sm text-slate-700 dark:text-zinc-300 space-y-2 max-h-60 overflow-y-auto">
               <p>欢迎使用 StockMate！在使用本软件前，请仔细阅读以下条款：</p>
               <p><strong>1. 投资有风险：</strong>本软件提供的所有分析、策略、预测仅供参考，不构成任何投资建议。股市有风险，投资需谨慎。</p>
               <p><strong>2. 数据准确性：</strong>软件数据来源于第三方公开接口，我们不保证数据的实时性、准确性和完整性。</p>
@@ -59,7 +59,7 @@ export function DisclaimerModal() {
             <div className="flex justify-end gap-3 pt-2">
               <button
                 onClick={handleAgree}
-                className="px-4 py-2 rounded-lg bg-violet-500/20 text-violet-700 dark:text-violet-700 dark:text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 text-sm font-medium transition-colors"
+                className="px-4 py-2 rounded-lg bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 text-sm font-medium transition-colors"
               >
                 我已阅读并同意
               </button>
@@ -71,17 +71,13 @@ export function DisclaimerModal() {
   );
 }
 
-export function StrategyDisclaimer() {
+function DismissibleAlert({ message, icon }: { message: string; icon?: React.ReactNode }) {
   const [dismissed, setDismissed] = useState(false);
-
   if (dismissed) return null;
-
   return (
     <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-start gap-3">
-      <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
-      <div className="flex-1 text-xs text-amber-200/80">
-        策略信号仅供参考，不构成投资建议。请结合自身风险承受能力谨慎决策。
-      </div>
+      {icon ?? <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />}
+      <div className="flex-1 text-xs text-amber-200/80">{message}</div>
       <button onClick={() => setDismissed(true)} className="text-amber-400/60 hover:text-amber-400 shrink-0">
         <X size={14} />
       </button>
@@ -89,20 +85,10 @@ export function StrategyDisclaimer() {
   );
 }
 
+export function StrategyDisclaimer() {
+  return <DismissibleAlert message="策略信号仅供参考，不构成投资建议。请结合自身风险承受能力谨慎决策。" />;
+}
+
 export function PredictDisclaimer() {
-  const [dismissed, setDismissed] = useState(false);
-
-  if (dismissed) return null;
-
-  return (
-    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 flex items-start gap-3">
-      <AlertTriangle size={16} className="text-amber-400 mt-0.5 shrink-0" />
-      <div className="flex-1 text-xs text-amber-200/80">
-        走势预测基于历史数据模型，结果具有不确定性，不构成投资建议。
-      </div>
-      <button onClick={() => setDismissed(true)} className="text-amber-400/60 hover:text-amber-400 shrink-0">
-        <X size={14} />
-      </button>
-    </div>
-  );
+  return <DismissibleAlert message="走势预测基于历史数据模型，结果具有不确定性，不构成投资建议。" />;
 }

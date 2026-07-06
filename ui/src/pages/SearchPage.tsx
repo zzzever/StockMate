@@ -5,6 +5,9 @@ import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2
 import { useSearchStocks } from '@/hooks/useTauriQuery';
 import type { Stock } from '@/types';
 
+// Minimal type matching only the Stock fields addToHistory actually uses
+type SearchResult = Pick<Stock, 'id' | 'ticker' | 'name'> & { stock_type: string };
+
 // ─── Search history (localStorage) ───
 const HISTORY_KEY = 'stockmate_search_history';
 const MAX_HISTORY = 15;
@@ -22,7 +25,7 @@ function saveHistory(items: HistoryItem[]) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
 }
 
-function addToHistory(stock: Stock) {
+function addToHistory(stock: SearchResult) {
   const items = loadHistory().filter((h) => h.id !== stock.id);
   items.unshift({ id: stock.id, ticker: stock.ticker, name: stock.name, stockType: stock.stock_type });
   saveHistory(items);
@@ -51,6 +54,7 @@ export default function SearchPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [showResults, setShowResults] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
 
   // Debounce input
@@ -59,7 +63,7 @@ export default function SearchPage() {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data: results, isLoading } = useSearchStocks(debouncedQuery);
+  const { data: results, isLoading, error } = useSearchStocks(debouncedQuery);
 
   // Auto-focus on mount
   useEffect(() => {
@@ -80,7 +84,7 @@ export default function SearchPage() {
   const handleHistorySelect = useCallback(
     (item: HistoryItem) => {
       // Move to top of history
-      addToHistory({ id: item.id, ticker: item.ticker, name: item.name, stock_type: item.stockType } as any);
+      addToHistory({ id: item.id, ticker: item.ticker, name: item.name, stock_type: item.stockType });
       setHistory(loadHistory());
       navigate(`/stock?code=${encodeURIComponent(item.id)}`, { state: { stockName: item.name } });
     },
@@ -140,6 +144,8 @@ export default function SearchPage() {
           <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'hsl(var(--text-tertiary))' }} />
           <input ref={inputRef} type="text" value={query}
             onChange={(e) => setQuery(e.target.value)} onKeyDown={handleKeyDown}
+            onFocus={() => setShowResults(true)}
+            onBlur={() => setTimeout(() => setShowResults(false), 200)}
             placeholder="輸入代碼或名稱…"
             className="w-full h-14 pl-12 pr-12 bg-transparent text-lg outline-none font-bold"
             style={{ fontFamily: "'Noto Sans SC', sans-serif", color: 'hsl(var(--ink))' }}
@@ -157,7 +163,19 @@ export default function SearchPage() {
       {/* Results */}
       <div className="w-full max-w-xl">
         <AnimatePresence mode="wait">
-          {isLoading && (
+          {showResults && error && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="p-4 text-red-500 border border-red-300 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20"
+            >
+              搜索失败: {error.message}
+            </motion.div>
+          )}
+
+          {showResults && isLoading && (
             <motion.div
               key="loading"
               initial={{ opacity: 0 }}
@@ -170,7 +188,7 @@ export default function SearchPage() {
             </motion.div>
           )}
 
-          {!isLoading && debouncedQuery && results && results.length === 0 && (
+          {showResults && !isLoading && debouncedQuery && results && results.length === 0 && (
             <motion.div
               key="empty"
               initial={{ opacity: 0, y: 8 }}
@@ -184,7 +202,7 @@ export default function SearchPage() {
             </motion.div>
           )}
 
-          {!isLoading && results && results.length > 0 && (
+          {showResults && !isLoading && results && results.length > 0 && (
             <motion.div
               key="results"
               initial={{ opacity: 0, y: 8 }}

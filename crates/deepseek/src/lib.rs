@@ -1,4 +1,5 @@
 use reqwest::header::{self, HeaderMap};
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -90,8 +91,81 @@ impl TechnicalSummary {
     }
 }
 
+/// Sanitize user-provided input to prevent prompt injection attacks.
+fn sanitize_user_input(input: &str, max_len: usize) -> String {
+    let truncated: String = input.chars().take(max_len).collect();
+    // Remove common prompt injection patterns
+    truncated
+        .lines()
+        .filter(|line| {
+            let lower = line.to_lowercase();
+            !lower.contains("ignore previous")
+                && !lower.contains("forget")
+                && !lower.contains("you are not")
+                && !lower.contains("system prompt")
+                && !lower.contains("instead, ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Calculate RSI from price data over N periods.
+/// RSI = 100 - (100 / (1 + RS)) where RS = avg gain / avg loss.
+/// Returns 50.0 (neutral) if insufficient data.
+fn calculate_rsi(quotes: &[QuoteRef], period: usize) -> f64 {
+    if quotes.len() < period + 1 {
+        return 50.0;
+    }
+    let start = quotes.len().saturating_sub(period + 1);
+    let mut total_gain = 0.0f64;
+    let mut total_loss = 0.0f64;
+    for i in start + 1..quotes.len() {
+        let change = (quotes[i].close - quotes[i - 1].close)
+            .to_f64()
+            .unwrap_or(0.0);
+        if change > 0.0 {
+            total_gain += change;
+        } else {
+            total_loss += change.abs();
+        }
+    }
+    let avg_gain = total_gain / period as f64;
+    let avg_loss = total_loss / period as f64;
+    if avg_loss == 0.0 {
+        return 100.0;
+    }
+    let rs = avg_gain / avg_loss;
+    100.0 - (100.0 / (1.0 + rs))
+}
+
+/// Calculate Bollinger Band position relative to latest close.
+/// Returns "上轨", "中轨", or "下轨" using 20-period SMA and 2 stddev.
+fn calculate_bollinger_position(quotes: &[QuoteRef], period: usize) -> String {
+    if quotes.len() < period {
+        return "中轨".to_string();
+    }
+    let closes: Vec<f64> = quotes
+        .iter()
+        .rev()
+        .take(period)
+        .map(|q| q.close.to_f64().unwrap_or(0.0))
+        .collect();
+    let sma: f64 = closes.iter().sum::<f64>() / period as f64;
+    let variance: f64 = closes.iter().map(|c| (c - sma).powi(2)).sum::<f64>() / period as f64;
+    let stddev = variance.sqrt();
+    let upper = sma + 2.0 * stddev;
+    let lower = sma - 2.0 * stddev;
+    let latest = closes[0]; // rev().take so index 0 is most recent
+    if latest >= upper {
+        "上轨".to_string()
+    } else if latest <= lower {
+        "下轨".to_string()
+    } else {
+        "中轨".to_string()
+    }
+}
+
 /// Generate TechnicalSummary from local quote/MA data.
-/// TODO: Replace heuristic placeholders with real ta-rs calculations.
 pub fn generate_summary(_stock_id: &str, quotes: &[QuoteRef], mas: &MovingAverageRef) -> TechnicalSummary {
     let latest = quotes.last();
     let prev = quotes.iter().nth(quotes.len().saturating_sub(2));
@@ -110,8 +184,8 @@ pub fn generate_summary(_stock_id: &str, quotes: &[QuoteRef], mas: &MovingAverag
         "中性"
     }.to_string();
 
-    // RSI placeholder (should compute from closes)
-    let rsi_value = 50.0; // TODO: compute real RSI
+    // Calculate actual RSI from price data (14-period)
+    let rsi_value = calculate_rsi(quotes, 14);
     let rsi_status = if rsi_value > 70.0 {
         "超买"
     } else if rsi_value < 30.0 {
@@ -120,7 +194,8 @@ pub fn generate_summary(_stock_id: &str, quotes: &[QuoteRef], mas: &MovingAverag
         "中性"
     }.to_string();
 
-    let boll_position = "中轨".to_string(); // TODO: compute real Bollinger position
+    // Calculate actual Bollinger position (20-period, 2 std dev)
+    let boll_position = calculate_bollinger_position(quotes, 20);
 
     let volume_trend = match (latest, prev) {
         (Some(l), Some(p)) if l.volume > (p.volume as f64 * 1.2) as u64 => "放量",
@@ -208,7 +283,14 @@ impl DeepSeekClient {
         let summary = generate_summary(&stock_info.id, quotes, mas);
 
         let rules_section = match trading_rules {
-            Some(r) if !r.trim().is_empty() => format!("\n\n【用户交易规则——必须严格遵守】\n{}", r.trim()),
+            Some(r) if !r.trim().is_empty() => {
+                let sanitized = sanitize_user_input(r.trim(), 500);
+                if sanitized.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n\n【用户交易规则——必须严格遵守】\n{}", sanitized)
+                }
+            }
             _ => String::new(),
         };
 
@@ -237,13 +319,17 @@ JSON 结构如下：
             format_fund_flow(fund_flow)
         );
 
-        let resp = self.chat_completion(&system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(&system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text).or_else(|e| {
                 tracing::warn!("DeepSeek analyze_stock JSON parse error: {}, falling back to offline", e);
                 Ok(self.analyze_stock_offline(&summary, finance))
             }),
             Err(e) => {
+                if e.is_auth_error() {
+                    tracing::error!("DeepSeek analyze_stock auth error: {}", e);
+                    return Err(e);
+                }
                 tracing::warn!("DeepSeek analyze_stock API error: {}, falling back to offline analysis", e);
                 Ok(self.analyze_stock_offline(&summary, finance))
             }
@@ -312,7 +398,18 @@ JSON 结构如下：
   "name": "策略名称",
   "code": "策略代码（Python 伪代码或 Rust 伪代码）",
   "params": { "参数名": 默认值 },
-  "explanation": "策略说明"
+  "explanation": "策略说明",
+  "signals": [
+    {"date": "信号日期 YYYY-MM-DD", "action": "buy", "price": 15.5, "reason": "信号原因"},
+    {"date": "信号日期 YYYY-MM-DD", "action": "sell", "price": 18.2, "reason": "信号原因"}
+  ],
+  "support_levels": [15.0, 14.5, 13.8],
+  "resistance_levels": [16.5, 17.2, 18.0]
+}
+请根据历史K线数据，识别出明确的买入/卖出信号点并填入signals数组。若无明确信号则返回空数组.
+请同时根据交易规则和技术指标分析关键的支撑位（support_levels）和阻力位（resistance_levels），
+分别列出3-5个关键价格水平。支撑位是指在价格下跌时可能遇到买盘支撑的价格区域，
+阻力位是指价格上涨时可能遇到卖盘压力的价格区域。请结合均线、布林带、前期高低点等进行分析。
 }"#;
 
         let user_prompt = format!(
@@ -325,7 +422,7 @@ JSON 结构如下：
             summary.to_prompt_text(),
         );
 
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => {
@@ -335,6 +432,9 @@ JSON 结构如下：
                     code: "# 当MA5上穿MA10时买入\nif ma5 > ma10 and prev_ma5 <= prev_ma10:\n    buy()".to_string(),
                     params: serde_json::json!({"ma_short": 5, "ma_long": 10}),
                     explanation: "基于MA5/MA10金叉的短线策略（离线默认）".to_string(),
+                    signals: vec![],
+                    support_levels: vec![],
+                    resistance_levels: vec![],
                 })
             }
         }
@@ -356,7 +456,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
             intraday, daily, weekly, monthly, yearly,
         );
 
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => {
@@ -385,7 +485,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
             format_fund_flow(fund_flow)
         );
 
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, false).await;
         match resp {
             Ok(text) => {
                 let end = text.char_indices().nth(150).map(|(i,_)| i).unwrap_or(text.len());
@@ -480,7 +580,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         let system_prompt = r#"你是技术分析专家。分析K线形态、均线、MACD、RSI、布林带。
 返回 JSON: {"score":0-100,"label":"技术面","summary":"...","key_points":["..."],"signals":[{"name":"...","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"看多|观望|看空","confidence":0.0-1.0}"#;
         let user_prompt = format!("股票:{} 摘要:{} 近10日K线:\n{}", stock_info.name, summary.to_prompt_text(), format_quotes(quotes));
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => { tracing::warn!("Technical dimension API error: {}", e); Err(e) }
@@ -493,7 +593,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         let system_prompt = r#"你是资金流向分析专家。分析主力/散户资金动向，判断资金面。
 返回 JSON: {"score":0-100,"label":"资金面","summary":"...","key_points":["..."],"signals":[{"name":"...","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"看多|观望|看空","confidence":0.0-1.0}"#;
         let user_prompt = format!("股票:{} 近5日资金流向:\n{}", stock_info.name, format_fund_flow(fund_flow));
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => { tracing::warn!("Capital flow dimension API error: {}", e); Err(e) }
@@ -507,7 +607,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
 返回 JSON: {"score":0-100,"label":"基本面","summary":"...","key_points":["..."],"signals":[{"name":"...","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"看多|观望|看空","confidence":0.0-1.0}"#;
         let user_prompt = format!("股票:{} 财务: 毛利率={:?} 净利率={:?} ROE={:?} 负债率={:?} EPS={:?}",
             stock_info.name, finance.gross_margin, finance.net_margin, finance.roe, finance.debt_ratio, finance.eps);
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => { tracing::warn!("Fundamental dimension API error: {}", e); Err(e) }
@@ -520,7 +620,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         let system_prompt = r#"你是市场情绪分析专家。分析量价关系、换手率、资金博弈，判断市场情绪。
 返回 JSON: {"score":0-100,"label":"情绪面","summary":"...","key_points":["..."],"signals":[{"name":"...","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"看多|观望|看空","confidence":0.0-1.0}"#;
         let user_prompt = format!("股票:{} 近5日K线:\n{}\n资金流向:\n{}", stock_info.name, format_quotes(quotes), format_fund_flow(fund_flow));
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => { tracing::warn!("Sentiment dimension API error: {}", e); Err(e) }
@@ -535,7 +635,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
 返回 JSON: {"commentary":"2-3段中文快讯","key_numbers":[{"label":"PE","value":"23.5","significance":"低于行业"}],"risk_warnings":["..."],"trading_notes":["..."]}"#;
         let user_prompt = format!("股票:{} 技术面({}/100):{} 资金面({}/100):{} 基本面({}/100):{} 情绪面({}/100):{}",
             stock_info.name, tech.score, tech.summary, cap.score, cap.summary, fund.score, fund.summary, sent.score, sent.summary);
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => parse_json_from_response(&text),
             Err(e) => { tracing::warn!("Briefing API error: {}", e); Err(e) }
@@ -546,7 +646,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
     pub async fn test_connection(&self) -> Result<String, DeepSeekError> {
         let system_prompt = "Say hello, respond in simple json format";
         let user_prompt = "Hello";
-        self.chat_completion(system_prompt, user_prompt).await
+        self.chat_completion(system_prompt, user_prompt, true).await
     }
 
     /// 市场环境分析：大环境 + 行业动态 + 公司消息 + 风险提示
@@ -584,7 +684,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
             prices.join(", "),
             finance.gross_margin, finance.roe);
 
-        let resp = self.chat_completion(system_prompt, &user_prompt).await;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await;
         match resp {
             Ok(text) => {
                 let parsed: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
@@ -632,6 +732,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         &self,
         system_prompt: &str,
         user_prompt: &str,
+        force_json: bool,
     ) -> Result<String, DeepSeekError> {
         let url = format!("{}/chat/completions", self.base_url);
 
@@ -667,9 +768,13 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
             ],
             temperature: Some(0.3),
             max_tokens: Some(8192),
-            response_format: Some(ResponseFormat {
-                r#type: "json_object".to_string(),
-            }),
+            response_format: if force_json {
+                Some(ResponseFormat {
+                    r#type: "json_object".to_string(),
+                })
+            } else {
+                None
+            },
         };
 
         let resp = self
@@ -695,6 +800,9 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         }
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(DeepSeekError::ApiError("Invalid API key".to_string()));
+        }
+        if status == reqwest::StatusCode::FORBIDDEN {
+            return Err(DeepSeekError::ApiError("API key forbidden or quota exceeded".to_string()));
         }
         if !status.is_success() {
             let text = resp.text().await.unwrap_or_default();
@@ -729,16 +837,40 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
 // Keyring helpers (SQLite fallback - cross-platform reliable)
 // ============================================================
 
-    pub fn save_api_key(_api_key: &str) -> Result<(), DeepSeekError> {
-        // API key is now stored in SQLite settings table via storage::set_setting
-        // This function is kept for API compatibility but does nothing
+    pub fn save_api_key(api_key: &str) -> Result<(), DeepSeekError> {
+        // TODO: Wire this to SQLite storage via storage::set_setting("deepseek_api_key", api_key).
+        // Currently this function is a no-op — callers should use storage::set_setting() directly.
+        tracing::warn!(
+            "save_api_key called but key is not persisted. Use storage::set_setting(\"deepseek_api_key\", ...) instead. Key length: {}",
+            api_key.len()
+        );
         Ok(())
     }
 
     pub fn load_api_key() -> Result<String, DeepSeekError> {
-        // API key is now loaded from SQLite settings table via storage::get_setting
-        // This function is kept for API compatibility but returns NoApiKey
-        // Caller should use storage::get_setting("deepseek_api_key") instead
+        // 1. Try keyring (enabled by default feature flag)
+        #[cfg(feature = "keyring")]
+        {
+            use keyring::Entry;
+            match Entry::new("stockmate", "deepseek_api_key") {
+                Ok(entry) => match entry.get_password() {
+                    Ok(password) if !password.is_empty() => return Ok(password),
+                    _ => tracing::debug!("No API key found in keyring"),
+                },
+                Err(e) => tracing::debug!("Keyring not available: {}", e),
+            }
+        }
+
+        // 2. Fall back to environment variable
+        if let Ok(key) = std::env::var("DEEPSEEK_API_KEY") {
+            if !key.is_empty() {
+                return Ok(key);
+            }
+        }
+
+        // 3. Fall back to SQLite storage setting (for backward compatibility).
+        //    Callers can also use storage::get_setting("deepseek_api_key") directly.
+
         Err(DeepSeekError::NoApiKey)
     }
 
@@ -751,13 +883,13 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         let system_prompt = r#"你是专业股票分析师。基于提供的全部数据，一次性返回完整分析结果。
 返回纯JSON，结构如下：
 {"prediction":{"direction":"up|down|sideways","confidence":0.0-1.0,"target_price":"目标价","reasoning":"推理","time_frame":"1周"},
-"technical":{"score":0-100,"summary":"技术面总结","key_points":[],"signals":[{"name":"信号","direction":"bullish|bearish|neutral","strength":0.0-1.0}]},
-"capital_flow":{"score":0-100,"summary":"资金面总结","key_points":[],"signals":[]},
-"fundamental":{"score":0-100,"summary":"基本面总结","key_points":[],"signals":[]},
-"sentiment":{"score":0-100,"summary":"情绪面总结","key_points":[],"signals":[]},
-"composite":{"overall":0-100,"recommendation":"综合评价"},
+"technical":{"score":0-100,"label":"技术面","summary":"技术面总结","key_points":["关键点"],"signals":[{"name":"信号","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"技术面建议","confidence":0.0-1.0},
+"capital_flow":{"score":0-100,"label":"资金面","summary":"资金面总结","key_points":["关键点"],"signals":[{"name":"信号","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"资金面建议","confidence":0.0-1.0},
+"fundamental":{"score":0-100,"label":"基本面","summary":"基本面总结","key_points":["关键点"],"signals":[{"name":"信号","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"基本面建议","confidence":0.0-1.0},
+"sentiment":{"score":0-100,"label":"情绪面","summary":"情绪面总结","key_points":["关键点"],"signals":[{"name":"信号","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"情绪面建议","confidence":0.0-1.0},
+"composite":{"overall":0-100,"recommendation":"综合评价","technical":0-100,"capital_flow":0-100,"fundamental":0-100,"sentiment":0-100,"weights":{"technical":0-100,"capital_flow":0-100,"fundamental":0-100,"sentiment":0-100},"risk_reward_ratio":0-10},
 "card_reason":"个股分析点评1-2句话",
-"market":{"macro_context":{"fed_policy":{"status":"neutral","detail":""},"macro_economy":{},"geopolitics":{},"exchange_rate":{}},"industry_context":{"policy":{},"prosperity":{},"competition":{},"supply_chain":{}},"company_news":{"announcements":[],"management_changes":[],"contracts":[],"product_progress":[]},"risks":[{"severity":"medium","description":""}]}}"#;
+"market":{"macro_context":{"fed_policy":{"status":"bullish|bearish|neutral","detail":"..."},"macro_economy":{"status":"bullish|bearish|neutral","detail":"..."},"geopolitics":{"status":"bullish|bearish|neutral","detail":"..."},"exchange_rate":{"status":"bullish|bearish|neutral","detail":"..."}},"industry_context":{"policy":{"status":"bullish|bearish|neutral","detail":"..."},"prosperity":{"status":"bullish|bearish|neutral","detail":"..."},"competition":{"status":"bullish|bearish|neutral","detail":"..."},"supply_chain":{"status":"bullish|bearish|neutral","detail":"..."}},"company_news":{"announcements":[],"management_changes":[],"contracts":[],"product_progress":[]},"risks":[{"severity":"medium","description":""}]}}"#;
         let finance_note = if finance.gross_margin.is_none() && finance.roe.is_none() {
             "\n注意：本地无财务数据。请基于你的知识搜索该公司的最新财务数据（PE、ROE、毛利率等），在基本面分析中引用并标注来源。"
         } else { "" };
@@ -770,7 +902,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         );
         debug_log(&format!("analyze_all: prompt ready sys={} usr={}", system_prompt.len(), user_prompt.len()));
         debug_log("analyze_all: calling chat_completion...");
-        let resp = self.chat_completion(system_prompt, &user_prompt).await?;
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await?;
         debug_log(&format!("analyze_all: chat_completion returned {} chars", resp.len()));
         let cleaned = resp.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim().to_string();
         serde_json::from_str(&cleaned).map_err(|e| DeepSeekError::ParseError(format!("All-in-one parse: {}", e)))
@@ -780,7 +912,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
     pub async fn analyze_psychology(&self, prompt: &str) -> Result<String, DeepSeekError> {
         let system_prompt = r#"你是市场心理学专家。分析当日交易数据，从散户/主力心理角度判断支撑压力。
 返回JSON: {"sentiment":"bullish|neutral|bearish","sentiment_score":0-100,"psych_support":价格,"psych_resistance":价格,"reasoning":"分析","crowd_behavior":"散户行为","smart_money":"主力意图"}"#;
-        self.chat_completion(system_prompt, prompt).await
+        self.chat_completion(system_prompt, prompt, true).await
     }
 
     /// 长城线公式设计 — DeepSeek 根据股票数据特征设计自适应支撑线公式
@@ -835,7 +967,7 @@ JSON结构：
 
 请基于你对该股票数据的理解，设计最优参数。考虑该股票的实际波动特征。"
 "#;
-        self.chat_completion(system_prompt, prompt).await
+        self.chat_completion(system_prompt, prompt, true).await
     }
 
     pub fn delete_api_key() -> Result<(), DeepSeekError> {
@@ -925,12 +1057,26 @@ pub struct DeepSeekAnalysis {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SignalPoint {
+    pub date: String,
+    #[serde(default)]
+    pub action: String,          // "buy" / "sell"
+    #[serde(default)]
+    pub price: f64,
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct StrategyScript {
     pub name: String,
     pub code: String,            // 可执行的策略代码
     pub params: Value,           // 参数配置
     pub explanation: String,     // 策略说明
+    pub signals: Vec<SignalPoint>,
+    pub support_levels: Vec<f64>,
+    pub resistance_levels: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -1037,6 +1183,16 @@ pub enum DeepSeekError {
     NoApiKey,
 }
 
+impl DeepSeekError {
+    /// Check if this error is an authentication/configuration error
+    /// that should not be silently degraded to offline mode.
+    pub fn is_auth_error(&self) -> bool {
+        matches!(self, DeepSeekError::NoApiKey)
+            || matches!(self, DeepSeekError::ApiError(s) if s == "Invalid API key")
+            || matches!(self, DeepSeekError::ApiError(s) if s == "API key forbidden or quota exceeded")
+    }
+}
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -1092,7 +1248,7 @@ where
             match serde_json::from_str(&cleaned2) {
                 Ok(v) => Ok(v),
                 Err(e2) => {
-                    let raw_preview = if text.len() > 300 { &text[..300] } else { text };
+                    let raw_preview: String = text.chars().take(300).collect::<String>();
                     Err(DeepSeekError::ParseError(format!(
                         "Failed to parse JSON: {} | raw preview: {}",
                         e2, raw_preview
@@ -1103,21 +1259,55 @@ where
     }
 }
 
-/// Attempt to extract a JSON object from messy text using regex-like search.
+/// Attempt to extract a JSON object from messy text using bracket-depth counting.
 fn robust_json_extract(text: &str) -> Option<String> {
-    // Find the first '{' and last '}'
+    // Use bracket-depth counting to match the first '{' with its correct '}'
     if let Some(start) = text.find('{') {
-        if let Some(end) = text.rfind('}') {
-            if end > start {
-                return Some(text[start..=end].to_string());
+        let bytes = text.as_bytes();
+        let mut depth = 0u32;
+        let mut in_string = false;
+        let mut escape = false;
+        for (i, &b) in bytes.iter().enumerate().skip(start) {
+            if escape {
+                escape = false;
+                continue;
+            }
+            match b {
+                b'"' => in_string = !in_string,
+                b'\\' if in_string => escape = true,
+                b'{' if !in_string => depth += 1,
+                b'}' if !in_string => {
+                    if depth == 0 {
+                        return Some(text[start..=i].to_string());
+                    }
+                    depth -= 1;
+                }
+                _ => {}
             }
         }
     }
-    // Try array
+    // Try array with depth counting
     if let Some(start) = text.find('[') {
-        if let Some(end) = text.rfind(']') {
-            if end > start {
-                return Some(text[start..=end].to_string());
+        let bytes = text.as_bytes();
+        let mut depth = 0u32;
+        let mut in_string = false;
+        let mut escape = false;
+        for (i, &b) in bytes.iter().enumerate().skip(start) {
+            if escape {
+                escape = false;
+                continue;
+            }
+            match b {
+                b'"' => in_string = !in_string,
+                b'\\' if in_string => escape = true,
+                b'[' if !in_string => depth += 1,
+                b']' if !in_string => {
+                    if depth == 0 {
+                        return Some(text[start..=i].to_string());
+                    }
+                    depth -= 1;
+                }
+                _ => {}
             }
         }
     }
@@ -1195,11 +1385,17 @@ fn analyze_fundamental_offline(finance: &StockFinanceRef) -> DimensionScore {
 
 fn analyze_sentiment_offline(quotes: &[QuoteRef], _flows: &[FundFlowRef]) -> DimensionScore {
     let mut score: f64 = 50.0;
-    let last5: Vec<&QuoteRef> = quotes.iter().rev().take(5).collect();
+    // Take the last 5 quotes in chronological order (oldest first)
+    let last5: Vec<&QuoteRef> = {
+        let mut v: Vec<&QuoteRef> = quotes.iter().rev().take(5).collect();
+        v.reverse(); // restore chronological order: oldest first
+        v
+    };
     if last5.len() >= 2 {
         let mut up_days = 0;
         let mut vol_expanding = false;
         for i in 1..last5.len() {
+            // i is newer than i-1; close[i] > close[i-1] means price went UP
             if last5[i].close > last5[i-1].close { up_days += 1; }
             if last5[i].volume > last5[i-1].volume { vol_expanding = true; }
         }

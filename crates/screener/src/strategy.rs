@@ -1,4 +1,4 @@
-use domain::{MovingAverage, Quote, StrategySignal, SupportResistance};
+use domain::{MovingAverage, Quote, SignalAction, StrategySignal, SupportResistance};
 use rust_decimal::Decimal;
 use chrono::Local;
 
@@ -14,7 +14,7 @@ pub fn generate_strategy(
         return StrategySignal {
             stock_id: stock_id.into(),
             strategy_type: strategy_type.into(),
-            action: "hold".into(),
+            action: SignalAction::Hold,
             entry_price: None,
             stop_loss: None,
             take_profit: None,
@@ -34,7 +34,7 @@ pub fn generate_strategy(
     };
     let current_price = quotes.last().unwrap().close;
 
-    let mut action = "hold".to_string();
+    let mut action = SignalAction::Hold;
     let mut confidence = 0.5;
     let mut reason = "无明确信号".to_string();
     let mut ma_signals = Vec::new();
@@ -43,10 +43,10 @@ pub fn generate_strategy(
     let mut take_profit = None;
 
     // 金叉 / 死叉检测
-    if let (Some(ma5), Some(ma10)) = (last.ma5, prev.ma10) {
-        if let (Some(prev_ma5), Some(prev_ma10)) = (prev.ma5, last.ma10) {
+    if let (Some(ma5), Some(ma10)) = (last.ma5, last.ma10) {
+        if let (Some(prev_ma5), Some(prev_ma10)) = (prev.ma5, prev.ma10) {
             if prev_ma5 <= prev_ma10 && ma5 > ma10 {
-                action = "buy".to_string();
+                action = SignalAction::Buy;
                 confidence = 0.72;
                 reason = "MA5/MA10 金叉，支撑位附近放量".to_string();
                 ma_signals.push("MA5上穿MA10".to_string());
@@ -54,7 +54,7 @@ pub fn generate_strategy(
                 stop_loss = sr.nearest_support.map(|s| s * Decimal::from(98u64) / Decimal::from(100u64));
                 take_profit = sr.nearest_resistance;
             } else if prev_ma5 >= prev_ma10 && ma5 < ma10 {
-                action = "sell".to_string();
+                action = SignalAction::Sell;
                 confidence = 0.68;
                 reason = "MA5/MA10 死叉".to_string();
                 ma_signals.push("MA5下穿MA10".to_string());
@@ -66,10 +66,12 @@ pub fn generate_strategy(
     if quotes.len() >= 2 {
         let today_vol = quotes.last().unwrap().volume;
         let yesterday_vol = quotes[quotes.len() - 2].volume;
-        if today_vol > yesterday_vol * 15 / 10 {
-            ma_signals.push("成交量放大1.5倍".to_string());
-            if action == "buy" {
-                confidence = (confidence + 0.05f64).min(0.95f64);
+        if let Some(threshold) = yesterday_vol.checked_mul(15).map(|v| v / 10) {
+            if today_vol > threshold {
+                ma_signals.push("成交量放大1.5倍".to_string());
+                if action == SignalAction::Buy {
+                    confidence = (confidence + 0.05f64).min(0.95f64);
+                }
             }
         }
     }
@@ -101,6 +103,7 @@ mod tests {
         Quote {
             stock_id: "TEST".into(),
             date: NaiveDate::from_ymd_opt(2024, 1, day).unwrap_or_default(),
+            time: String::new(),
             open: c,
             high: c,
             low: c,
@@ -145,7 +148,7 @@ mod tests {
         ];
         let sr = dummy_sr();
         let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
-        assert_eq!(sig.action, "buy");
+        assert_eq!(sig.action, SignalAction::Buy);
         assert!(sig.entry_price.is_some());
         assert!(sig.stop_loss.is_some());
     }
@@ -153,6 +156,6 @@ mod tests {
     #[test]
     fn empty_data_returns_hold() {
         let sig = generate_strategy("TEST", "trend", &[], &[], &dummy_sr());
-        assert_eq!(sig.action, "hold");
+        assert_eq!(sig.action, SignalAction::Hold);
     }
 }

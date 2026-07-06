@@ -3,7 +3,27 @@ use chrono::{NaiveDate, NaiveDateTime};
 use rust_decimal::Decimal;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+// ── Strategy & Prediction enums (replaces string fields) ──
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SignalAction {
+    Buy,
+    Sell,
+    #[default]
+    Hold,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TrendDirection {
+    Up,
+    Down,
+    #[default]
+    Sideways,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct Stock {
     pub id: String,
     pub ticker: String,
@@ -19,10 +39,12 @@ pub struct Stock {
 
 fn default_stock_type() -> String { "stock".to_string() }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Quote {
     pub stock_id: String,
     pub date: NaiveDate,
+    /// TODO: Change to NaiveTime for proper time handling.
+    /// Currently kept as String for legacy compatibility.
     pub time: String,
     pub open: Decimal,
     pub high: Decimal,
@@ -107,18 +129,18 @@ pub struct ApiError {
 // New v0.2.0 types
 // ============================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct HotSector {
     pub name: String,
-    pub change_percent: f64,
+    pub change_percent: Decimal,
     pub volume: u64,
     pub leading_stock: String,
-    pub leading_change: f64,
-    pub fund_flow: Option<f64>,
+    pub leading_change: Decimal,
+    pub fund_flow: Option<Decimal>,
     pub stock_count: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct HotStock {
     pub id: String,
     pub ticker: String,
@@ -133,7 +155,7 @@ pub struct HotStock {
     pub five_day_change: Option<f64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct StockFinance {
     pub stock_id: String,
     pub gross_margin: Option<f64>,
@@ -149,15 +171,15 @@ pub struct StockFinance {
     pub total_market_cap: Option<Decimal>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FundFlow {
     pub stock_id: String,
     pub date: NaiveDate,
-    pub main_inflow: Option<f64>,
-    pub retail_inflow: Option<f64>,
-    pub large_order_inflow: Option<f64>,
-    pub medium_order_inflow: Option<f64>,
-    pub small_order_inflow: Option<f64>,
+    pub main_inflow: Option<Decimal>,
+    pub retail_inflow: Option<Decimal>,
+    pub large_order_inflow: Option<Decimal>,
+    pub medium_order_inflow: Option<Decimal>,
+    pub small_order_inflow: Option<Decimal>,
 }
 
 impl Default for FundFlow {
@@ -174,7 +196,7 @@ impl Default for FundFlow {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MovingAverage {
     pub stock_id: String,
     pub date: NaiveDate,
@@ -201,7 +223,7 @@ impl Default for MovingAverage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct SupportResistance {
     pub stock_id: String,
     pub supports: Vec<Decimal>,
@@ -210,11 +232,11 @@ pub struct SupportResistance {
     pub nearest_resistance: Option<Decimal>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StrategySignal {
     pub stock_id: String,
     pub strategy_type: String,
-    pub action: String, // "buy", "sell", "hold"
+    pub action: SignalAction,
     pub entry_price: Option<Decimal>,
     pub stop_loss: Option<Decimal>,
     pub take_profit: Option<Decimal>,
@@ -230,7 +252,7 @@ impl Default for StrategySignal {
         Self {
             stock_id: String::new(),
             strategy_type: String::new(),
-            action: String::new(),
+            action: SignalAction::default(),
             entry_price: None,
             stop_loss: None,
             take_profit: None,
@@ -243,11 +265,11 @@ impl Default for StrategySignal {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Prediction {
     pub stock_id: String,
     pub strategy_type: String,
-    pub direction: String, // "up", "down", "sideways"
+    pub direction: TrendDirection,
     pub confidence: f64,
     pub suggestion: String,
     pub backtest_accuracy: Option<f64>,
@@ -261,7 +283,7 @@ impl Default for Prediction {
         Self {
             stock_id: String::new(),
             strategy_type: String::new(),
-            direction: String::new(),
+            direction: TrendDirection::default(),
             confidence: 0.0,
             suggestion: String::new(),
             backtest_accuracy: None,
@@ -272,7 +294,7 @@ impl Default for Prediction {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CardData {
     pub stock_id: String,
     pub ticker: String,
@@ -303,15 +325,15 @@ impl Default for CardData {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MarketOverview {
     pub date: NaiveDate,
     pub up_count: u32,
     pub down_count: u32,
     pub flat_count: u32,
-    pub total_volume: Option<f64>,
-    pub total_amount: Option<f64>,
-    pub northbound_inflow: Option<f64>,
+    pub total_volume: Option<Decimal>,
+    pub total_amount: Option<Decimal>,
+    pub northbound_inflow: Option<Decimal>,
     pub sentiment_index: Option<f64>,
 }
 
@@ -330,7 +352,7 @@ impl Default for MarketOverview {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WatchlistItem {
     pub stock_id: String,
     pub stock_code: String,
@@ -344,13 +366,13 @@ pub struct WatchlistItem {
 
 // ── Market Environment (DeepSeek-powered) ──
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct MarketContextItem {
     pub status: String,   // "bullish" | "bearish" | "neutral"
     pub detail: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct MacroContext {
     pub fed_policy: MarketContextItem,
     pub macro_economy: MarketContextItem,
@@ -358,7 +380,7 @@ pub struct MacroContext {
     pub exchange_rate: MarketContextItem,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct IndustryContext {
     pub policy: MarketContextItem,
     pub prosperity: MarketContextItem,
@@ -366,7 +388,7 @@ pub struct IndustryContext {
     pub supply_chain: MarketContextItem,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct CompanyNews {
     pub announcements: Vec<String>,
     pub management_changes: Vec<String>,
@@ -374,13 +396,13 @@ pub struct CompanyNews {
     pub product_progress: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RiskItem {
     pub severity: String,  // "high" | "medium" | "low"
     pub description: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct MarketEnvironment {
     pub stock_id: String,
     pub stock_name: String,
@@ -632,10 +654,10 @@ mod tests {
     fn hot_sector_roundtrip() {
         let original = HotSector {
             name: "AI / Semiconductor".into(),
-            change_percent: 3.45,
+            change_percent: Decimal::new(345, 2),
             volume: 50_000_000,
             leading_stock: "NVDA".into(),
-            leading_change: 5.12,
+            leading_change: Decimal::new(512, 2),
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: HotSector = serde_json::from_str(&json).unwrap();
@@ -648,10 +670,10 @@ mod tests {
     fn hot_sector_debug_clone() {
         let h = HotSector {
             name: "X".into(),
-            change_percent: 1.0,
+            change_percent: Decimal::new(1, 0),
             volume: 1,
             leading_stock: "Y".into(),
-            leading_change: 2.0,
+            leading_change: Decimal::new(2, 0),
         };
         let _dbg = format!("{:?}", h);
         let _cloned = h.clone();
@@ -763,11 +785,11 @@ mod tests {
         let original = FundFlow {
             stock_id: "stock_001".into(),
             date: sample_date(),
-            main_inflow: Some(10000000.0),
-            retail_inflow: Some(2000000.0),
-            large_order_inflow: Some(5000000.0),
-            medium_order_inflow: Some(3000000.0),
-            small_order_inflow: Some(1000000.0),
+            main_inflow: Some(Decimal::new(10000000, 0)),
+            retail_inflow: Some(Decimal::new(2000000, 0)),
+            large_order_inflow: Some(Decimal::new(5000000, 0)),
+            medium_order_inflow: Some(Decimal::new(3000000, 0)),
+            small_order_inflow: Some(Decimal::new(1000000, 0)),
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: FundFlow = serde_json::from_str(&json).unwrap();
@@ -901,7 +923,7 @@ mod tests {
         let original = StrategySignal {
             stock_id: "stock_001".into(),
             strategy_type: "trend_follow".into(),
-            action: "buy".into(),
+            action: SignalAction::Buy,
             entry_price: Some(sample_decimal("150.00")),
             stop_loss: Some(sample_decimal("140.00")),
             take_profit: Some(sample_decimal("170.00")),
@@ -931,7 +953,7 @@ mod tests {
         let original = StrategySignal {
             stock_id: "stock_002".into(),
             strategy_type: "mean_revert".into(),
-            action: "hold".into(),
+            action: SignalAction::Hold,
             entry_price: None,
             stop_loss: None,
             take_profit: None,
@@ -952,7 +974,7 @@ mod tests {
         let s = StrategySignal {
             stock_id: "1".into(),
             strategy_type: "t".into(),
-            action: "a".into(),
+            action: SignalAction::Buy,
             entry_price: None,
             stop_loss: None,
             take_profit: None,
@@ -974,7 +996,7 @@ mod tests {
         let original = Prediction {
             stock_id: "stock_001".into(),
             strategy_type: "ml_regress".into(),
-            direction: "up".into(),
+            direction: TrendDirection::Up,
             confidence: 0.78,
             suggestion: "Accumulate on dips".into(),
             backtest_accuracy: Some(0.72),
@@ -995,7 +1017,7 @@ mod tests {
         let original = Prediction {
             stock_id: "stock_002".into(),
             strategy_type: "random".into(),
-            direction: "sideways".into(),
+            direction: TrendDirection::Sideways,
             confidence: 0.33,
             suggestion: "Wait".into(),
             backtest_accuracy: None,
@@ -1014,7 +1036,7 @@ mod tests {
         let p = Prediction {
             stock_id: "1".into(),
             strategy_type: "t".into(),
-            direction: "d".into(),
+            direction: TrendDirection::Up,
             confidence: 0.0,
             suggestion: "s".into(),
             backtest_accuracy: None,
@@ -1078,9 +1100,9 @@ mod tests {
             up_count: 2500,
             down_count: 1800,
             flat_count: 200,
-            total_volume: Some(850000000000.0),
-            total_amount: Some(850000000000.0),
-            northbound_inflow: Some(5000000000.0),
+            total_volume: Some(Decimal::new(850000000000i64, 0)),
+            total_amount: Some(Decimal::new(850000000000i64, 0)),
+            northbound_inflow: Some(Decimal::new(5000000000i64, 0)),
             sentiment_index: Some(0.65),
         };
         let json = serde_json::to_string(&original).unwrap();
@@ -1248,7 +1270,7 @@ mod tests {
     fn hot_sector_default() {
         let h = HotSector::default();
         assert_eq!(h.name, "");
-        assert_eq!(h.change_percent, 0.0);
+        assert_eq!(h.change_percent, Decimal::ZERO);
     }
 
     #[test]
@@ -1290,7 +1312,7 @@ mod tests {
     fn strategy_signal_default() {
         let s = StrategySignal::default();
         assert_eq!(s.stock_id, "");
-        assert_eq!(s.action, "");
+        assert_eq!(s.action, SignalAction::Hold);
     }
 
     #[test]

@@ -142,8 +142,7 @@ async fn get_stock_detail(id: String, state: State<'_, AppState>) -> Result<Opti
             stock_type: "stock".into(),
         };
         let _ = sqlx::query("INSERT OR IGNORE INTO stocks (id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type) VALUES (?1,?2,?3,?4,NULL,NULL,NULL,?5,?6)")
-            .bind(&stock.stock_type)
-            .bind(&stock.id).bind(&stock.ticker).bind(&stock.exchange).bind(&stock.name).bind(&stock.currency)
+            .bind(&stock.id).bind(&stock.ticker).bind(&stock.exchange).bind(&stock.name).bind(&stock.currency).bind(&stock.stock_type)
             .execute(&state.db_pool).await;
         return Ok(Some(stock));
     }
@@ -188,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Seed minimal stock registry for name→ticker lookup (no price data)
     seed_stock_registry(&pool).await?;
-    // P0-5: DataService offline — uses Tencent API directly for real-time sector data.
+    // Start DataService with HTTP client and caching
     let data_service = data_fetcher::DataService::new_offline(Some(pool.clone()));
     // Start background real-time sector data refresh (every 5 seconds)
     data_service.start_realtime_refresh();
@@ -196,8 +195,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // P0-5: Initialize CacheManager and clean expired on startup
     let cache_manager = data_fetcher::CacheManager::new(Some(pool.clone()));
     let cleaned = cache_manager.clean_expired().await;
-    println!("Cleaned {} expired cache entries on startup", cleaned);
-    
+    tracing::info!("Cleaned {} expired cache entries on startup", cleaned);
+
     // P0-5: Hourly cache cleanup task
     let cache_manager_clone = cache_manager.clone();
     tokio::spawn(async move {
@@ -205,7 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             interval.tick().await;
             let cleaned = cache_manager_clone.clean_expired().await;
-            println!("Hourly cache cleanup: removed {} expired entries", cleaned);
+            tracing::info!("Hourly cache cleanup: removed {} expired entries", cleaned);
         }
     });
     
@@ -236,7 +235,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::calculate_ma,
             api_tauri_commands::commands_v2::calculate_support_resistance,
             api_tauri_commands::commands_v2::test_network_connectivity,
-            api_tauri_commands::commands_v2::check_sidecar_status,
             api_tauri_commands::commands_v2::generate_strategy,
             api_tauri_commands::commands_v2::predict_trend,
             api_tauri_commands::commands_v2::generate_card_data,
@@ -263,6 +261,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn seed_stock_registry(pool: &DbPool) -> Result<(), sqlx::Error> {
     // (ticker, name, stock_type)
+    // TODO: Move this data to a separate data file (e.g., src-tauri/stocks.json)
+    // loaded at runtime, to reduce binary size and enable easier updates.
     let stocks: &[(&str, &str, &str)] = &[
         // ── A-share stocks ──
         ("688981","中芯国际","stock"),("688012","中微公司","stock"),("603501","韦尔股份","stock"),("002371","北方华创","stock"),("688396","华润微","stock"),
@@ -382,7 +382,13 @@ async fn seed_stock_registry(pool: &DbPool) -> Result<(), sqlx::Error> {
         ("563000","中国A50ETF","etf"),("563300","中证2000ETF","etf"),
         ("561500","生物医药ETF","etf"),("562500","机器人ETF","etf"),("562800","稀有金属ETF","etf"),
     ];
+    // Deduplicate by ticker to avoid redundant INSERT OR IGNORE operations
+    let mut seen = std::collections::HashSet::new();
     for (ticker, name, stock_type) in stocks {
+        if !seen.insert(ticker) {
+            tracing::debug!("Skipping duplicate stock entry: {} ({})", name, ticker);
+            continue;
+        }
         let (id, exchange) = if ticker.starts_with("6") || ticker.starts_with("9") {
             (format!("{}.SH", ticker), "SSE")
         } else if ticker.starts_with("5") && (ticker.starts_with("51") || ticker.starts_with("56") || ticker.starts_with("58")) {

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Database, Palette, Trash2, Wifi, Server, Bot, Eye, EyeOff, Save, TestTube, CheckCircle, XCircle, AlertCircle, BarChart3 } from 'lucide-react';
+import { Database, Palette, Trash2, Wifi, Bot, Eye, EyeOff, Save, TestTube, CheckCircle, XCircle, AlertCircle, BarChart3, RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDeepSeekConfig } from '@/hooks/useTauriQuery';
 import { useAppStore } from '@/store/useAppStore';
 import { chartThemes, type ChartStyle } from '@/config/chartThemes';
 
 export default function SettingsPage() {
-  const { data: config, refetch } = useDeepSeekConfig();
+  const { data: config, isLoading: configLoading, error: configError, refetch } = useDeepSeekConfig();
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState('deepseek-v4-pro');
@@ -32,19 +32,15 @@ export default function SettingsPage() {
   }, [saveToast]);
 
   const handleSave = async () => {
+    if (!apiKey.trim()) {
+      setSaveToast({ type: 'error', message: 'API Key 不能为空，请输入后重试' });
+      return;
+    }
     setSaving(true);
     setSaveToast(null);
-    console.log('[SettingsPage] config save start:', { model, hasApiKey: apiKey.trim().length > 0 });
     try {
-      // P0-3: allow saving model only, conditionally save key
-      if (apiKey.trim()) {
-        await invoke('save_deepseek_config', { apiKey: apiKey.trim(), model });
-      } else {
-        // Only save model to settings when key is empty
-        await invoke('save_deepseek_config', { apiKey: '', model });
-      }
+      await invoke('save_deepseek_config', { apiKey: apiKey.trim(), model });
       await refetch();
-      console.log('[SettingsPage] config save success');
       setSaveToast({ type: 'success', message: '配置已保存' });
       setTestStatus(null);
     } catch (e) {
@@ -56,11 +52,15 @@ export default function SettingsPage() {
   };
 
   const handleTest = async () => {
+    if (!apiKey.trim()) {
+      setTestStatus({ success: false, message: '请先输入 API Key 再测试连接' });
+      return;
+    }
     setTesting(true);
     setTestStatus(null);
     console.log('[SettingsPage] test connection start');
     try {
-      const result = await invoke<{ success: boolean; message: string }>('test_deepseek_connection');
+      const result = await invoke<{ success: boolean; message: string }>('test_deepseek_connection', { apiKey: apiKey.trim(), model });
       console.log('[SettingsPage] test connection result:', result);
       setTestStatus(result);
     } catch (e) {
@@ -74,6 +74,18 @@ export default function SettingsPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-900 dark:text-white">设置</h1>
+
+      {configLoading && (
+        <div className="flex items-center justify-center p-8">
+          <RefreshCw className="animate-spin" size={24} />
+        </div>
+      )}
+
+      {configError && (
+        <div className="p-4 text-red-500 border border-red-300 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
+          加载配置失败: {configError.message}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4">
         {/* DeepSeek Config */}
@@ -133,7 +145,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleTest}
                 disabled={testing}
-                className="flex items-center gap-2 bg-slate-100 dark:bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-200 dark:border-white/10 px-4 py-2 rounded-lg text-xs text-slate-700 dark:text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:bg-slate-200 dark:bg-white/10 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 bg-slate-100 dark:bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-200 dark:border-white/10 px-4 py-2 rounded-lg text-xs text-slate-700 dark:text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
               >
                 <TestTube size={12} />
                 {testing ? '测试中...' : '连接测试'}
@@ -185,23 +197,6 @@ export default function SettingsPage() {
                 </span>
               </div>
             ))}
-          </div>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Server size={16} className="text-cyan-600" />
-            <h2 className="text-sm font-black tracking-wider" style={{ color: 'hsl(var(--ink))' }}>Python 桥接 (akshare)</h2>
-          </div>
-          <p className="text-xs mb-3 leading-relaxed" style={{ color: 'hsl(var(--text-secondary))' }}>
-            akshare 是 Python 开源金融数据库。启用后可获取更全面的板块指数、分钟级K线、财务数据等。
-            需安装 <code className="text-[11px] bg-gray-100 dark:bg-white/5 px-1">Python 3</code> 并执行
-            <code className="text-[11px] bg-gray-100 dark:bg-white/5 px-1">pip install akshare flask</code>，
-            运行 <code className="text-[11px] bg-gray-100 dark:bg-white/5 px-1">python scripts/akshare_server.py</code> 启动（端口 15678）。
-          </p>
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold" style={{ color: 'hsl(var(--text-secondary))' }}>状态：</span>
-            <PythonStatus />
           </div>
         </motion.div>
 
@@ -302,36 +297,6 @@ function AccentColorPicker() {
           />
         );
       })}
-    </div>
-  );
-}
-
-function PythonStatus() {
-  const [status, setStatus] = useState<'idle' | 'testing' | 'running' | 'stopped'>('idle');
-  const test = async () => {
-    setStatus('testing');
-    try {
-      await invoke<string>('check_sidecar_status');
-      setStatus('running');
-    } catch { setStatus('stopped'); }
-  };
-  return (
-    <div className="flex items-center gap-2">
-      {status === 'idle' ? (
-        <button onClick={test} className="text-xs font-bold border px-2 py-0.5 hover:bg-black/5 transition-colors"
-          style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>测试连接</button>
-      ) : status === 'testing' ? (
-        <span className="text-xs font-bold text-amber-600">检测中…</span>
-      ) : status === 'running' ? (
-        <span className="text-xs font-black flex items-center gap-1.5 text-emerald-600">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> 运行中 ✓
-        </span>
-      ) : (
-        <span className="text-xs font-black flex items-center gap-1.5 text-amber-600">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" /> 未运行
-          <button onClick={test} className="text-[10px] underline ml-1" style={{ color: 'hsl(var(--text-tertiary))' }}>重试</button>
-        </span>
-      )}
     </div>
   );
 }

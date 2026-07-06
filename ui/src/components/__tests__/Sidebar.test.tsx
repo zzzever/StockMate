@@ -6,12 +6,14 @@ import Sidebar from '@/components/Sidebar';
 const toggleSidebar = vi.fn();
 const mockStore = {
   sidebarOpen: true,
-  currentPage: 'dashboard' as const,
+  currentPage: 'search' as const,
   darkMode: true,
   setPage: vi.fn(),
   toggleSidebar,
   toggleDarkMode: vi.fn(),
   setSelectedStock: vi.fn(),
+  selectedStock: null,
+  theme: 'dark' as const,
 };
 
 vi.mock('@/store/useAppStore', () => ({
@@ -33,12 +35,16 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    expect(screen.getByText('StockMate')).toBeInTheDocument();
-    expect(screen.getByText('板块排名')).toBeInTheDocument();
-    expect(screen.getByText('AI分析')).toBeInTheDocument();
-    expect(screen.getByText('策略回测')).toBeInTheDocument();
-    expect(screen.getByText('走势预测')).toBeInTheDocument();
-    expect(screen.getByText('设置')).toBeInTheDocument();
+    // Sidebar shows "股王" as logo text (updated from old "StockMate")
+    expect(screen.getByText('股王')).toBeInTheDocument();
+    // Updated nav items reflecting the new sidebar structure
+    expect(screen.getByText('搜尋')).toBeInTheDocument();
+    expect(screen.getByText('行情')).toBeInTheDocument();
+    expect(screen.getByText('回測')).toBeInTheDocument();
+    expect(screen.getByText('預測')).toBeInTheDocument();
+    expect(screen.getByText('規則')).toBeInTheDocument();
+    expect(screen.getByText('支撐線')).toBeInTheDocument();
+    expect(screen.getByText('設置')).toBeInTheDocument();
   });
 
   it('calls toggleSidebar when collapse button is clicked', () => {
@@ -58,15 +64,19 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    const stockLink = screen.getByText('AI分析').closest('a');
+    const searchLink = screen.getByText('搜尋').closest('a');
+    expect(searchLink).toHaveAttribute('href', '/search');
+    const stockLink = screen.getByText('行情').closest('a');
     expect(stockLink).toHaveAttribute('href', '/stock');
-    const backtestLink = screen.getByText('策略回测').closest('a');
+    const backtestLink = screen.getByText('回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
-    const predictLink = screen.getByText('走势预测').closest('a');
+    const predictLink = screen.getByText('預測').closest('a');
     expect(predictLink).toHaveAttribute('href', '/predict');
-    const settingsLink = screen.getByText('设置').closest('a');
+    const rulesLink = screen.getByText('規則').closest('a');
+    expect(rulesLink).toHaveAttribute('href', '/rules');
+    const indicatorLink = screen.getByText('支撐線').closest('a');
+    expect(indicatorLink).toHaveAttribute('href', '/indicator-lab');
+    const settingsLink = screen.getByText('設置').closest('a');
     expect(settingsLink).toHaveAttribute('href', '/settings');
-    const sectorsLink = screen.getByText('板块排名').closest('a');
-    expect(sectorsLink).toHaveAttribute('href', '/sectors');
   });
 });

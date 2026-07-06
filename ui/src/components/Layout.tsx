@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAppStore } from '@/store/useAppStore';
+import { useAppStore, initSystemThemeListener } from '@/store/useAppStore';
 import Sidebar from '@/components/Sidebar';
 import TitleBar from '@/components/TitleBar';
 import TopBar from '@/components/TopBar';
 import { useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
+import type { Page } from '@/types';
 
 interface LayoutProps { children: React.ReactNode; }
 
@@ -15,12 +16,19 @@ export default function Layout({ children }: LayoutProps) {
 
   useEffect(() => {
     const path = location.pathname.replace('/', '') || 'search';
-    const pageMap: Record<string, string> = {
+    const pageMap: Record<string, Page> = {
       search: 'search', sector: 'sector', stock: 'stockDetail',
-      backtest: 'backtest', predict: 'predict', settings: 'settings',
+      backtest: 'backtest', predict: 'predict', rules: 'rules',
+      'indicator-lab': 'indicatorLab', settings: 'settings',
     };
-    if (pageMap[path]) setPage(pageMap[path] as any);
+    if (pageMap[path]) setPage(pageMap[path]);
   }, [location, setPage]);
+
+  // Initialise the system theme listener (reacts to OS dark/light changes)
+  useEffect(() => {
+    const cleanup = initSystemThemeListener();
+    return () => cleanup();
+  }, []);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'hsl(var(--bg-root))' }}>

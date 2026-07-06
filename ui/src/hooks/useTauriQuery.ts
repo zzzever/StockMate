@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
-import { type Stock, type HotSector, type SectorStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis } from '@/types';
+import { type Stock, type HotSector, type SectorStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse } from '@/types';
 
 export function useStockList() {
   return useQuery<Stock[], Error>({
@@ -12,7 +13,7 @@ export function useStockList() {
         console.log('[useStockList] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useStockList] error:', error);
+        console.error('[useStockList] error:', error);
         throw error;
       }
     },
@@ -29,7 +30,7 @@ export function useSearchStocks(query: string) {
         console.log('[useSearchStocks] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useSearchStocks] error:', error);
+        console.error('[useSearchStocks] error:', error);
         throw error;
       }
     },
@@ -47,7 +48,7 @@ export function useStockDetail(id: string) {
         console.log('[useStockDetail] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useStockDetail] error:', error);
+        console.error('[useStockDetail] error:', error);
         throw error;
       }
     },
@@ -65,7 +66,7 @@ export function useSectorStocks(sector: string) {
         console.log('[useSectorStocks] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useSectorStocks] error:', error);
+        console.error('[useSectorStocks] error:', error);
         throw error;
       }
     },
@@ -84,7 +85,7 @@ export function useHotSectors() {
         console.log('[useHotSectors] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useHotSectors] error:', error);
+        console.error('[useHotSectors] error:', error);
         throw error;
       }
     },
@@ -101,7 +102,7 @@ export function useHotStocks() {
         console.log('[useHotStocks] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useHotStocks] error:', error);
+        console.error('[useHotStocks] error:', error);
         throw error;
       }
     },
@@ -122,7 +123,7 @@ export function useStockFinance(stock_id: string) {
         console.log('[useStockFinance] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useStockFinance] error:', error);
+        console.error('[useStockFinance] error:', error);
         throw error;
       }
     },
@@ -142,7 +143,7 @@ export function useStockFundFlow(stock_id: string) {
         console.log('[useStockFundFlow] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useStockFundFlow] error:', error);
+        console.error('[useStockFundFlow] error:', error);
         throw error;
       }
     },
@@ -160,11 +161,11 @@ export function useStrategy(stock_id: string, strategy_type: string) {
         console.log('[useStrategy] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useStrategy] error:', error);
+        console.error('[useStrategy] error:', error);
         throw error;
       }
     },
-    enabled: stock_id.length > 0,
+    enabled: stock_id.length > 0 && strategy_type.length > 0,
   });
 }
 
@@ -178,11 +179,11 @@ export function usePrediction(stock_id: string, strategy_type: string) {
         console.log('[usePrediction] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[usePrediction] error:', error);
+        console.error('[usePrediction] error:', error);
         throw error;
       }
     },
-    enabled: stock_id.length > 0,
+    enabled: stock_id.length > 0 && strategy_type.length > 0,
   });
 }
 
@@ -196,7 +197,7 @@ export function useCardData(stock_id: string) {
         console.log('[useCardData] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useCardData] error:', error);
+        console.error('[useCardData] error:', error);
         throw error;
       }
     },
@@ -214,7 +215,7 @@ export function useMarketOverview() {
         console.log('[useMarketOverview] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useMarketOverview] error:', error);
+        console.error('[useMarketOverview] error:', error);
         throw error;
       }
     },
@@ -231,7 +232,7 @@ export function useIntraday(stock_id: string) {
         console.log('[useIntraday] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useIntraday] error:', error);
+        console.error('[useIntraday] error:', error);
         throw error;
       }
     },
@@ -251,7 +252,7 @@ export function useRealtimeQuote(stock_id: string) {
         console.log('[useRealtimeQuote] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useRealtimeQuote] error:', error);
+        console.error('[useRealtimeQuote] error:', error);
         throw error;
       }
     },
@@ -271,7 +272,7 @@ export function useStockHistory(stock_id: string, days: number = 60, period: str
         console.log('[useStockHistory] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useStockHistory] error:', error);
+        console.error('[useStockHistory] error:', error);
         throw error;
       }
     },
@@ -291,7 +292,7 @@ export function useMovingAverage(stock_id: string, days: number = 60) {
         console.log('[useMovingAverage] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useMovingAverage] error:', error);
+        console.error('[useMovingAverage] error:', error);
         throw error;
       }
     },
@@ -311,7 +312,7 @@ export function useSupportResistance(stock_id: string) {
         console.log('[useSupportResistance] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useSupportResistance] error:', error);
+        console.error('[useSupportResistance] error:', error);
         throw error;
       }
     },
@@ -332,7 +333,7 @@ export function useDeepSeekConfig() {
         console.log('[useDeepSeekConfig] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useDeepSeekConfig] error:', error);
+        console.error('[useDeepSeekConfig] error:', error);
         throw error;
       }
     },
@@ -350,7 +351,7 @@ export function useAnalyzeStockWithAI(stock_id: string) {
         console.log('[useAnalyzeStockWithAI] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useAnalyzeStockWithAI] error:', error);
+        console.error('[useAnalyzeStockWithAI] error:', error);
         throw error;
       }
     },
@@ -358,52 +359,52 @@ export function useAnalyzeStockWithAI(stock_id: string) {
   });
 }
 
-export function useGenerateStrategyWithAI(stock_id: string, description: string) {
-  return useQuery<StrategyScript, Error>({
-    queryKey: ['stocks', 'ai_strategy', stock_id, description],
-    queryFn: async () => {
-      console.log('[useGenerateStrategyWithAI] fired, stock_id:', stock_id, 'description:', description);
-      try {
-        const data = await invoke<StrategyScript>('generate_strategy_with_ai', { stockId: stock_id, description });
-        console.log('[useGenerateStrategyWithAI] data arrived:', data);
-        return data;
-      } catch (error) {
-        console.log('[useGenerateStrategyWithAI] error:', error);
-        throw error;
-      }
+export function useGenerateStrategyWithAI() {
+  return useMutation({
+    mutationFn: async (params: { stockId: string; rules: string }) => {
+      console.log('[useGenerateStrategyWithAI] fired, stockId:', params.stockId);
+      return invoke<StrategyScript>('generate_strategy_with_ai', params);
     },
-    enabled: false,
   });
 }
 
 // ── Unified: frontend passes cached K-line data, no backend re-fetch ──
-export function useAnalyzeAll(
-  stock_id: string,
-  stock_name: string,
-  ticker: string,
-  current_price: string,
-  prev_close: string,
-  daily_text: string,
-  weekly_text: string,
-  monthly_text: string,
-  gross_margin?: number | null,
-  roe?: number | null,
-  debt_ratio?: number | null,
-) {
-  return useQuery<any, Error>({
-    queryKey: ['stocks', 'analyze_all', stock_id],
+export interface AnalyzeAllParams {
+  stockId: string;
+  name: string;
+  code: string;
+  price: number;
+  prevClose: number;
+  dailyText: string;
+  weeklyText: string;
+  monthlyText: string;
+  grossMargin?: number | null;
+  roe?: number | null;
+  debtRatio?: number | null;
+}
+
+export function useAnalyzeAll(params: AnalyzeAllParams) {
+  return useQuery<AnalyzeAllResponse, Error>({
+    queryKey: ['stocks', 'analyze_all', params.stockId],
     queryFn: async () => {
-      console.log('[useAnalyzeAll] fired, stock_id:', stock_id);
-      const data = await invoke<any>('analyze_all', {
-        stockId: stock_id, stockName: stock_name, ticker,
-        currentPrice: current_price, prevClose: prev_close,
-        dailyText: daily_text, weeklyText: weekly_text, monthlyText: monthly_text,
-        grossMargin: gross_margin ?? null, roe: roe ?? null, debtRatio: debt_ratio ?? null,
+      console.log('[useAnalyzeAll] fired, stock_id:', params.stockId);
+      const data = await invoke<AnalyzeAllResponse>('analyze_all', {
+        stockId: params.stockId,
+        stockName: params.name,
+        ticker: params.code,
+        currentPrice: params.price.toString(),
+        prevClose: params.prevClose.toString(),
+        dailyText: params.dailyText,
+        weeklyText: params.weeklyText,
+        monthlyText: params.monthlyText,
+        grossMargin: params.grossMargin ?? null,
+        roe: params.roe ?? null,
+        debtRatio: params.debtRatio ?? null,
       });
       console.log('[useAnalyzeAll] data arrived:', data);
       return data;
     },
-    enabled: stock_id.length > 0 && daily_text.length > 0,
+    enabled: params.stockId.length > 0 && params.name.length > 0 && params.code.length > 0,
   });
 }
 
@@ -417,7 +418,7 @@ export function usePredictWithAI(stock_id: string) {
         console.log('[usePredictWithAI] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[usePredictWithAI] error:', error);
+        console.error('[usePredictWithAI] error:', error);
         throw error;
       }
     },
@@ -435,7 +436,7 @@ export function useGenerateCardWithAI(stock_id: string, enabled: boolean = true)
         console.log('[useGenerateCardWithAI] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useGenerateCardWithAI] error:', error);
+        console.error('[useGenerateCardWithAI] error:', error);
         throw error;
       }
     },
@@ -454,7 +455,7 @@ export function useMultiDimensionAnalysis(stock_id: string) {
         console.log('[useMultiDimensionAnalysis] data arrived:', data);
         return data;
       } catch (error) {
-        console.log('[useMultiDimensionAnalysis] error:', error);
+        console.error('[useMultiDimensionAnalysis] error:', error);
         throw error;
       }
     },
@@ -463,50 +464,16 @@ export function useMultiDimensionAnalysis(stock_id: string) {
 }
 
 export function useMarketEnvironment(stock_id: string) {
-  return useQuery<import('@/types').MarketEnvironment, Error>({
+  return useQuery<MarketEnvironment, Error>({
     queryKey: ['stocks', 'market_env', stock_id],
     queryFn: async () => {
       console.log('[useMarketEnvironment] fired, stock_id:', stock_id);
       try {
-        const data = await invoke<import('@/types').MarketEnvironment>('analyze_market_environment', { stockId: stock_id });
+        const data = await invoke<MarketEnvironment>('analyze_market_environment', { stockId: stock_id });
         console.log('[useMarketEnvironment] data arrived:', data);
         return data;
-      } catch (error) { console.log('[useMarketEnvironment] error:', error); throw error; }
+      } catch (error) { console.error('[useMarketEnvironment] error:', error); throw error; }
     },
     enabled: stock_id.length > 0,
   });
-}
-
-// Great Wall Line Design — DeepSeek designs adaptive support line formula
-export function useGreatWallDesign(
-  stock_id: string,
-  stock_name: string,
-  ticker: string,
-  daily_text: string,
-) {
-  const { data: cached, isLoading: cachedLoading } = useQuery<import('@/types').GreatWallDesign, Error>({
-    queryKey: ['stocks', 'great_wall_design', stock_id],
-    queryFn: async () => {
-      console.log('[useGreatWallDesign] fired, stock_id:', stock_id);
-      try {
-        const data = await invoke<import('@/types').GreatWallDesign>('design_great_wall', {
-          stockId: stock_id,
-          stockName: stock_name,
-          ticker: ticker,
-          dailyText: daily_text,
-        });
-        console.log('[useGreatWallDesign] data arrived:', data);
-        return data;
-      } catch (error) {
-        console.log('[useGreatWallDesign] error:', error);
-        throw error;
-      }
-    },
-    enabled: stock_id.length > 0 && daily_text.length > 0,
-    staleTime: 24 * 60 * 60 * 1000, // cache for 24h — formula doesn't need frequent refresh
-    retry: 2,
-    retryDelay: 2000,
-  });
-
-  return { data: cached, isLoading: cachedLoading };
 }
