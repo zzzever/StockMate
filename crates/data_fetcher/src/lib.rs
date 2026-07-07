@@ -493,7 +493,26 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             .await?;
 
         if val.is_null() {
-            // No data available from providers
+            // Try Tencent first for PE data
+            if let Some((pe, pb)) = market_data::tencent::fetch_finance(stock_id).await {
+                return Ok(Some(StockFinance {
+                    stock_id: stock_id.into(),
+                    gross_margin: None, net_margin: None, roe: None,
+                    revenue: None, net_profit: None, debt_ratio: None, eps: None,
+                    report_date: None, pe: Some(pe), pb: Some(pb),
+                    total_market_cap: None,
+                }));
+            }
+            // Fallback to EastMoney for PE/PB
+            if let Some((pe, pb)) = market_data::eastmoney::fetch_finance(stock_id).await {
+                return Ok(Some(StockFinance {
+                    stock_id: stock_id.into(),
+                    gross_margin: None, net_margin: None, roe: None,
+                    revenue: None, net_profit: None, debt_ratio: None, eps: None,
+                    report_date: None, pe: Some(pe), pb: Some(pb),
+                    total_market_cap: None,
+                }));
+            }
             return Ok(None);
         }
 
@@ -601,10 +620,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             }
         }
 
-        // Tier 3: Fresh fetch from network
+        // Tier 3: Fresh fetch from network (Tencent for A-shares, Yahoo for US)
         let provider = market_data::select_provider(stock_id);
         if let Some(data) = provider.fetch_realtime_price(stock_id).await {
-            // Store in HTTP cache for subsequent fast polls
             if let Ok(json) = serde_json::to_value(&data) {
                 self.inner.realtime_http_cache.insert(stock_id.to_string(), json).await;
             }
@@ -612,7 +630,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         }
         Err(ApiError {
             code: 500,
-            message: format!("Failed to fetch real-time quote for {}", stock_id),
+            message: format!("Failed to fetch real-time quote for {} (provider returned no data)", stock_id),
             details: None,
         })
     }
@@ -635,9 +653,10 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let is_empty = val.is_null() || val.as_array().map(|a| a.is_empty()).unwrap_or(true);
 
         if is_empty {
-            // Try real data from Tencent / Yahoo Finance
+            // Try primary provider (Tencent for A-shares, Yahoo for US)
             let provider = market_data::select_provider(stock_id);
             let history = provider.fetch_history(stock_id, period, days).await;
+
             if !history.is_empty() {
                 let quotes: Vec<Quote> = history
                     .into_iter()
@@ -657,7 +676,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             }
 
             // No data available — return empty instead of falling back to SQLite/Mock
-            tracing::warn!("[get_stock_history] No data from provider for {} (period={}, days={})", stock_id, period, days);
+            tracing::warn!("[get_stock_history] No data from any provider for {} (period={}, days={})", stock_id, period, days);
             return Ok(Vec::new());
         }
 

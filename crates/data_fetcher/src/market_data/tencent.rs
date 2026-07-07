@@ -329,7 +329,7 @@ pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
                     let change = current_price - prev_close;
                     let change_percent = if prev_close > 0.0 { (change / prev_close) * 100.0 } else { 0.0 };
                     let turnover_rate = parts[38].parse::<f64>().unwrap_or(0.0);
-                    let ratio = parts[41].parse::<f64>().unwrap_or(0.0);
+                    let ratio = parts[40].parse::<f64>().unwrap_or(0.0);
                     results.push(PriceData { ticker: ticker_str, name, current_price, prev_close, change, change_percent, volume, amount, ratio, turnover_rate, high, low, open });
                 }
             }
@@ -346,13 +346,21 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
 
     let url = format!("{}={}", TENCENT_PRICE, code);
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .ok()?;
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("[Tencent] Realtime price HTTP error for {}: {}", ticker, e);
+            return None;
+        }
+    };
 
-    let bytes = resp.bytes().await.ok()?;
+    let bytes = match resp.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("[Tencent] Realtime price body error for {}: {}", ticker, e);
+            return None;
+        }
+    };
     // Tencent API returns GBK-encoded text, decode properly
     let (text, _, had_errors) = encoding_rs::GBK.decode(&bytes);
     if had_errors {
@@ -389,7 +397,7 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
         0.0
     };
     let turnover_rate = parts[38].parse::<f64>().unwrap_or(0.0); // 换手率
-    let ratio = parts[41].parse::<f64>().unwrap_or(0.0);       // 量比
+    let ratio = parts[40].parse::<f64>().unwrap_or(0.0);       // 量比
 
     Some(PriceData {
         ticker: ticker_str,
@@ -406,4 +414,46 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
         low,
         open,
     })
+}
+
+/// Fetch financial indicators from Tencent real-time API.
+/// Returns (pe, pb) — market cap is excluded as the API index is unreliable.
+/// Field indices: PE=39, PB=46 (may be unreliable for some stocks).
+pub async fn fetch_finance(ticker: &str) -> Option<(f64, f64)> {
+    let code = to_tencent_code(ticker)?;
+    let client = match build_client() {
+        Some(c) => c,
+        None => { tracing::warn!("[Tencent] fetch_finance: build_client failed for {}", ticker); return None; }
+    };
+    let url = format!("{}={}", TENCENT_PRICE, code);
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => { tracing::warn!("[Tencent] fetch_finance HTTP error for {}: {}", ticker, e); return None; }
+    };
+    let bytes = match resp.bytes().await {
+        Ok(b) => b,
+        Err(e) => { tracing::warn!("[Tencent] fetch_finance body error for {}: {}", ticker, e); return None; }
+    };
+    let (text, _, _) = encoding_rs::GBK.decode(&bytes);
+    let text = text.into_owned();
+    let prefix = format!("v_{}=\"", code);
+    let start = match text.find(&prefix) {
+        Some(s) => s + prefix.len(),
+        None => { tracing::warn!("[Tencent] fetch_finance: prefix not found for {}", ticker); return None; }
+    };
+    let end = match text[start..].find('"') {
+        Some(e) => e,
+        None => { tracing::warn!("[Tencent] fetch_finance: closing quote not found for {}", ticker); return None; }
+    };
+    let inner = &text[start..start + end];
+    let parts: Vec<&str> = inner.split('~').collect();
+    tracing::debug!("[Tencent] fetch_finance for {}: {} fields", ticker, parts.len());
+    if parts.len() < 40 {
+        tracing::warn!("[Tencent] fetch_finance: too few fields ({}) for {}, returning defaults", parts.len(), ticker);
+        return Some((0.0, 0.0));
+    }
+    let pe = parts[39].parse::<f64>().unwrap_or(0.0);
+    let pb = 0.0; // PB index unreliable, default to 0
+    tracing::info!("[Tencent] finance for {}: PE={} ({} fields)", ticker, pe, parts.len());
+    Some((pe, pb))
 }

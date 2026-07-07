@@ -70,6 +70,7 @@ interface AppState {
   accent: AccentColor;
   debugOpen: boolean;
   chartStyle: ChartStyle;
+  deepseekEnabled: boolean;
 
   setPage: (page: Page) => void;
   toggleSidebar: () => void;
@@ -79,6 +80,7 @@ interface AppState {
   toggleDarkMode: () => void;
   toggleDebug: () => void;
   setChartStyle: (style: ChartStyle) => void;
+  toggleDeepseek: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -90,6 +92,7 @@ export const useAppStore = create<AppState>((set) => ({
   accent: 'red',
   debugOpen: false,
   chartStyle: defaultChartStyle,
+  deepseekEnabled: true,
 
   setPage: (page) => set({ currentPage: page }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
@@ -110,4 +113,5 @@ export const useAppStore = create<AppState>((set) => ({
   toggleDebug: () => set((s) => ({ debugOpen: !s.debugOpen })),
   setAccent: (accent) => { applyAccent(accent); set({ accent }); },
   setChartStyle: (style) => set({ chartStyle: style }),
+  toggleDeepseek: () => set((s) => ({ deepseekEnabled: !s.deepseekEnabled })),
 }));

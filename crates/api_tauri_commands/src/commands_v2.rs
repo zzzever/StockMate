@@ -250,6 +250,16 @@ pub async fn predict_trend(stock_id: String, strategy_type: String, _state: Stat
     Ok(data_fetcher::mock_prediction(&stock_id, &strategy_type))
 }
 
+/// Diagnose all data sources and return structured results.
+/// Tests each provider's connectivity, measures response time, and reports status.
+#[tauri::command]
+pub async fn diagnose_data_sources() -> Result<Vec<data_fetcher::market_data::DataSourceResult>, domain::ApiError> {
+    eprintln!("[CMD] diagnose_data_sources: testing all data sources");
+    Ok(data_fetcher::market_data::diagnose_all_sources().await)
+}
+
+/// Legacy connectivity test — kept for backward compatibility.
+/// Returns a human-readable string summary.
 #[tauri::command]
 pub async fn test_network_connectivity() -> Result<String, domain::ApiError> {
     let mut results = Vec::new();

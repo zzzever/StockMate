@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, type SeriesMarker, LineStyle, type LineWidth } from 'lightweight-charts';
 import {
@@ -9,11 +10,13 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStockFundFlow, useRealtimeQuote, useIntraday, useDeepSeekConfig, useAnalyzeStockWithAI, useGenerateStrategyWithAI, useSupportResistance, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove } from '@/hooks/useTauriQuery';
 import { IntradayChart } from '@/components/IntradayChart';
+import DailyReport from '@/components/DailyReport';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume, fmtAmount } from '@/lib/format';
 import { getChartTheme, type ChartThemeConfig } from '@/config/chartThemes';
 import { computeMACD, computeKDJ, computeRSI } from '@/utils/indicators';
-import { type StrategyScript } from '@/types';
+import { type StrategyScript, type SignalPoint } from '@/types';
+import { getCachedStrategyResult, cacheStrategyResult } from '@/hooks/useStrategyCache';
 
 function safeNumber(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
@@ -99,12 +102,14 @@ interface KLineCrosshairData {
   rsi?: number | null;
 }
 
-function KLineChart({ data, indicator, period, onCrosshairMove, markers, strategyResult, height = 500 }: {
+function KLineChart({ data, indicator, period, onCrosshairMove, markers, strategyResult, focusTime, height = 500, onMarkerClick }: {
   data: any[]; indicator: string; period: string;
   onCrosshairMove?: (data: KLineCrosshairData | null) => void;
   markers?: SeriesMarker<Time>[];
   strategyResult?: StrategyScript | null;
+  focusTime?: string | null;
   height?: number | string;
+  onMarkerClick?: (data: { signal: SignalPoint; strategyName: string }) => void;
 }) {
   const chartStyle = useAppStore((s) => s.chartStyle);
   const T = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
@@ -117,6 +122,13 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
   const periodRef = useRef(period);
   periodRef.current = period;
   const cleanupRef = useRef<number | null>(null);
+
+  const markersRef = useRef(markers);
+  markersRef.current = markers;
+  const strategyResultRef = useRef(strategyResult);
+  strategyResultRef.current = strategyResult;
+  const onMarkerClickRef = useRef(onMarkerClick);
+  onMarkerClickRef.current = onMarkerClick;
 
   const arr = Array.isArray(data) ? data.filter((q: any) => q && q.date) : [];
   const items = useMemo(() => arr.map((q: any) => ({ time: String(q.date), open: Number(q.open) || 0, high: Number(q.high) || 0, low: Number(q.low) || 0, close: Number(q.close) || 0 })), [data]);
@@ -283,6 +295,20 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
       const candle = mc.addCandlestickSeries({
         upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor,
         wickUpColor: T.wickUpColor ?? 'rgba(148,163,184,0.5)', wickDownColor: T.wickDownColor ?? 'rgba(148,163,184,0.5)',
+      });
+      // Marker click handler on the main chart
+      mc.subscribeClick((param: MouseEventParams) => {
+        if (!param.time) return;
+        const timeStr = typeof param.time === 'string' ? param.time : String(param.time);
+        const currentMarkers = markersRef.current || [];
+        const hasMarker = currentMarkers.some(m => String(m.time) === timeStr);
+        if (hasMarker) {
+          const currentStrategy = strategyResultRef.current;
+          const signal = currentStrategy?.signals?.find(s => s.date === timeStr);
+          if (signal && currentStrategy) {
+            onMarkerClickRef.current?.({ signal, strategyName: currentStrategy.name });
+          }
+        }
       });
       const addLine = (c: string) => mc.addLineSeries({ color: c, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid, priceLineVisible: false, lastValueVisible: false });
       const ma5 = addLine(T.ma5Color); const ma10 = addLine(T.ma10Color); const ma20 = addLine(T.ma20Color); const ma60 = addLine(T.ma60Color);
@@ -558,6 +584,23 @@ function KLineChart({ data, indicator, period, onCrosshairMove, markers, strateg
     };
   }, [items, ma5d, ma10d, ma20d, ma60d, volItems, macdData, kdjData, rsiData, bbD, indicator, markers, strategyResult]);
 
+  // Scroll to signal when focusTime changes
+  useEffect(() => {
+    if (!focusTime || !charts.current?.mc || !items.length) return;
+    const idx = items.findIndex(i => String(i.time) === focusTime);
+    if (idx < 0) return;
+    const total = items.length;
+    const from = Math.max(0, idx - 40);
+    const to = Math.min(total - 1, idx + 10);
+    try {
+      const c = charts.current!;
+      const range = { from: items[from].time as Time, to: items[to].time as Time };
+      c.mc.timeScale().setVisibleRange(range);
+      c.vc.timeScale().setVisibleRange(range);
+      c.ic.timeScale().setVisibleRange(range);
+    } catch (e) { /* ignore */ }
+  }, [focusTime, items]);
+
   return (
     <div className="flex flex-col relative" style={{ height }}>
       {/* MA color legend above main chart */}
@@ -704,6 +747,105 @@ function InfoPanel({ data, indicator, T }: {
   );
 }
 
+// ── Strategy Panel (collapsible, next to K-line chart) ──
+function StrategyPanel({ strategyResult, showMarkers, collapsed, onToggleCollapsed, onToggleMarkers, onSignalClick }: {
+  strategyResult: StrategyScript;
+  showMarkers: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  onToggleMarkers: () => void;
+  onSignalClick: (date: string) => void;
+}) {
+  const signals = strategyResult.signals || [];
+  const buyCount = signals.filter(s => s.action === 'buy').length;
+  const sellCount = signals.filter(s => s.action === 'sell').length;
+
+  return (
+    <div className="flex flex-col text-[11px]">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <TrendingUp size={14} className="text-emerald-500" />
+          <span className="text-sm font-bold text-gray-900 dark:text-zinc-100">策略信号</span>
+        </div>
+        <button onClick={onToggleCollapsed} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded transition-colors text-gray-500">
+          <X size={14} />
+        </button>
+      </div>
+
+      {!collapsed && (
+        <>
+          {/* Strategy name */}
+          <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
+            <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{strategyResult.name}</div>
+            <div className="text-[10px] text-gray-500 dark:text-zinc-500 mt-0.5 leading-relaxed">{strategyResult.explanation}</div>
+          </div>
+
+          {/* Stats */}
+          <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 dark:text-zinc-500">信号数量</span>
+              <span className="font-bold text-gray-900 dark:text-zinc-100 font-mono-nums">{signals.length}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-emerald-500 font-medium">买入</span>
+              <span className="font-bold text-emerald-500 font-mono-nums">{buyCount}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-red-500 font-medium">卖出</span>
+              <span className="font-bold text-red-500 font-mono-nums">{sellCount}</span>
+            </div>
+            {signals.length > 0 && (
+              <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-zinc-800">
+                <span className="text-gray-500 dark:text-zinc-500">最新信号</span>
+                <span className={`font-mono-nums font-medium text-[10px] ${signals[signals.length - 1].action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {signals[signals.length - 1].action === 'buy' ? '▲ 买入' : '▼ 卖出'}
+                  <span className="text-gray-400 ml-1">{signals[signals.length - 1].date}</span>
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Toggle markers button */}
+          <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
+            <button onClick={onToggleMarkers}
+              className={`w-full px-2 py-1 rounded text-[9px] font-bold border transition-all ${
+                showMarkers
+                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                  : 'bg-transparent border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-zinc-400 hover:border-emerald-400'
+              }`}
+            >
+              {showMarkers ? '隐藏K线标记' : '显示K线标记'}
+            </button>
+          </div>
+
+          {/* Signal list */}
+          {signals.length > 0 && (
+            <div className="flex-1 overflow-y-auto max-h-[350px]">
+              {[...signals].reverse().map((s, i) => (
+                <button key={i} onClick={() => onSignalClick(s.date)}
+                  className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[10px] font-bold ${s.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {s.action === 'buy' ? '▲ 买入' : '▼ 卖出'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 dark:text-zinc-500">{s.date}</span>
+                    <span className={`ml-auto font-mono-nums text-[10px] font-medium ${s.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
+                      ¥{Number(s.price).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-gray-500 dark:text-zinc-500 truncate mt-0.5">{s.reason}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // NOTE: Frontend period aggregation is intentionally omitted.
 // Backend (Sidecar / EastMoney / Yahoo / SQLite / Mock) always returns
 // correctly aggregated data for week/month periods. No need for a frontend
@@ -718,7 +860,7 @@ export default function StockDetailPage() {
   const setSelectedStock = useAppStore((s) => s.setSelectedStock);
   const queryClient = useQueryClient();
   const [aiExpanded, setAiExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'fundflow'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'fundflow' | 'daily'>('overview');
   const [indicator, setIndicator] = useState<'macd' | 'kdj' | 'rsi' | 'none'>('macd');
   const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
   const [crosshairData, setCrosshairData] = useState<KLineCrosshairData | null>(null);
@@ -726,10 +868,23 @@ export default function StockDetailPage() {
   const chartTheme = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const klineContainerRef = useRef<HTMLDivElement>(null);
+  const hasAutoTriggeredRef = useRef<string | null>(null);
 
   // Strategy generation state
   const [strategyResult, setStrategyResult] = useState<StrategyScript | null>(null);
   const [strategyShowMarkers, setStrategyShowMarkers] = useState(false);
+  const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(false);
+  const [focusSignalTime, setFocusSignalTime] = useState<string | null>(null);
+  const [signalPopup, setSignalPopup] = useState<{ signal: SignalPoint; strategyName: string } | null>(null);
+
+  // ── Data loading log ──
+  const dataLog = useRef<{ name: string; status: 'loading' | 'ok' | 'error'; detail?: string }[]>([]);
+  const logData = (name: string, status: 'loading' | 'ok' | 'error', detail?: string) => {
+    const idx = dataLog.current.findIndex(d => d.name === name);
+    if (idx >= 0) dataLog.current[idx] = { name, status, detail };
+    else dataLog.current.push({ name, status, detail });
+    console.log(`[DATA] ${name}: ${status}${detail ? ` — ${detail}` : ''}`);
+  };
 
   const { data: stockList, error: stockListError } = useStockList();
   const { data: stockDetail, error: stockDetailError } = useStockDetail(stockId);
@@ -760,11 +915,11 @@ export default function StockDetailPage() {
     if (!strategyShowMarkers || !strategyResult?.signals) return [];
     return strategyResult.signals.map(s => ({
       time: s.date as Time,
-      position: s.action === 'buy' ? 'aboveBar' as const : 'belowBar' as const,
-      shape: 'circle' as const,
+      position: s.action === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
+      shape: s.action === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
       color: s.action === 'buy' ? '#22c55e' : '#ef4444',
       text: s.action === 'buy' ? '买' : '卖',
-      size: 2,
+      size: 3,
     }));
   }, [strategyResult, strategyShowMarkers]);
   const { data: financeData } = useStockFinance(effectiveCode);
@@ -772,6 +927,38 @@ export default function StockDetailPage() {
   const { data: realtimeQuote } = useRealtimeQuote(effectiveCode);
   const { data: deepseekConfig } = useDeepSeekConfig();
   const { data: aiAnalysis, isLoading: aiLoading, error: aiError, refetch: analyzeAI } = useAnalyzeStockWithAI(effectiveCode);
+
+  // ── Data loading logger ──
+  useEffect(() => {
+    logData('useStockDetail', stockDetailError ? 'error' : stockDetail ? 'ok' : 'loading', stockDetailError?.message);
+    logData('useStockHistory', historyData ? 'ok' : 'loading', `长度=${historyData?.length}`);
+    logData('useRealtimeQuote', realtimeQuote ? 'ok' : 'loading', realtimeQuote ? `价=${realtimeQuote.current_price}` : '');
+    logData('useStockFinance', financeData ? 'ok' : 'loading', financeData ? `PE=${financeData.pe}` : '');
+    logData('useStockFundFlow', fundFlowData ? 'ok' : 'loading', `长度=${fundFlowData?.length}`);
+    logData('useDeepSeekConfig', deepseekConfig ? 'ok' : 'loading', deepseekConfig?.has_key ? '已配置Key' : '无Key');
+    logData('useAnalyzeStockWithAI', aiError ? 'error' : aiAnalysis ? 'ok' : 'loading', aiError?.message);
+    logData('useStockList', stockListError ? 'error' : stockList ? 'ok' : 'loading', `数量=${stockList?.length}`);
+    // 检查是否有错误
+    const errors = [stockDetailError, stockListError, aiError].filter(Boolean);
+    if (errors.length > 0) {
+      console.warn('[DATA] 数据加载异常:', errors.map(e => (e as Error).message).join('; '));
+    }
+  });
+
+  // Handle daily report generation: read trading rules + trigger strategy + AI analysis
+  const handleGenerateReport = useCallback(() => {
+    const rules = localStorage.getItem('stockmate_trading_rules') || '';
+    if (rules) {
+      generateStrategyMutation.mutate(
+        { stockId: effectiveCode, rules },
+        { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
+      );
+    }
+    // Also trigger AI analysis if available
+    if (analyzeAI) {
+      analyzeAI();
+    }
+  }, [effectiveCode, analyzeAI]);
 
   // Watchlist toggle
   const tickerCode = effectiveCode.split('.')[0];
@@ -802,10 +989,93 @@ export default function StockDetailPage() {
     if (effectiveCode && stock?.name) setSelectedStock({ code: effectiveCode, name: stock.name });
   }, [effectiveCode, stock?.name, setSelectedStock]);
 
+  // Auto-generate strategy when navigating from RulesPage with autoStrategy=1
+  useEffect(() => {
+    const auto = searchParams.get('autoStrategy') === '1';
+    if (auto && effectiveCode && !generateStrategyMutation.isPending) {
+      const rules = localStorage.getItem('stockmate_trading_rules') || '';
+      if (rules) {
+        generateStrategyMutation.mutate(
+          { stockId: effectiveCode, rules },
+          { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
+        );
+      }
+      // Clean URL to prevent re-triggering
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.delete('autoStrategy');
+      window.history.replaceState(null, '', `#/stock?${newParams.toString()}`);
+    }
+  }, [effectiveCode, searchParams]);
+
+  // Auto-generate strategy when AI analysis completes (once per stock code)
+  useEffect(() => {
+    if (aiAnalysis && effectiveCode && hasAutoTriggeredRef.current !== effectiveCode && !generateStrategyMutation.isPending) {
+      hasAutoTriggeredRef.current = effectiveCode;
+      const rules = localStorage.getItem('stockmate_trading_rules') || '';
+      if (rules) {
+        generateStrategyMutation.mutate(
+          { stockId: effectiveCode, rules },
+          { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
+        );
+      }
+    }
+  }, [aiAnalysis, effectiveCode, generateStrategyMutation]);
+
   useEffect(() => {
     if (stock?.name) document.title = stock.name;
     return () => { document.title = 'StockMate'; };
   }, [stock?.name]);
+
+  // Restore cached strategy result on mount
+  useEffect(() => {
+    if (effectiveCode && !strategyResult) {
+      const cached = getCachedStrategyResult(effectiveCode);
+      if (cached) {
+        setStrategyResult(cached);
+        // Automatically show markers if there are signals
+        if (cached.signals && cached.signals.length > 0) {
+          setStrategyShowMarkers(true);
+        }
+      }
+    }
+  }, [effectiveCode]);
+
+  // ── Section navigation for stock analysis IA ──
+  const sections = [
+    { id: 'price', label: '行情報價', icon: '📊' },
+    { id: 'chart', label: 'K線技術', icon: '📈' },
+    { id: 'ai', label: 'AI 分析', icon: '🧠' },
+    { id: 'fundamentals', label: '基本面', icon: '📋' },
+    { id: 'news', label: '新聞公告', icon: '📰' },
+  ];
+  const [activeSection, setActiveSection] = useState('price');
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    const el = document.getElementById(`stock-section-${sectionId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActiveSection(sectionId);
+    }
+  }, []);
+
+  // Track scroll position to update active section
+  useEffect(() => {
+    const container = document.querySelector('main');
+    if (!container) return;
+    const handleScroll = () => {
+      const scrollY = container.scrollTop + 120; // offset for top bars
+      let current = sections[0].id;
+      for (const s of sections) {
+        const el = document.getElementById(`stock-section-${s.id}`);
+        if (el && el.offsetTop <= scrollY) {
+          current = s.id;
+        }
+      }
+      setActiveSection(current);
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Fullscreen: Escape key to exit
   useEffect(() => {
@@ -935,14 +1205,114 @@ export default function StockDetailPage() {
 
       {/* Row 2: Key Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-        <MetricCard label="市盈率 PE" value={finance.pe ? fmtPrice(finance.pe) : '--'} icon={BarChart3} />
-        <MetricCard label="市净率 PB" value={finance.pb ? fmtPrice(finance.pb) : '--'} icon={Building2} />
-        <MetricCard label="ROE" value={finance.roe ? `${fmtPct(finance.roe)}%` : '--'} icon={TrendingUp} />
-        <MetricCard label="市值" value={finance.total_market_cap ? `${(safeNumber(finance.total_market_cap) / 1e8).toFixed(1)}亿` : '--'} icon={DollarSign} />
+        <MetricCard label="市盈率 PE" value={finance.pe != null ? fmtPrice(finance.pe) : '--'} icon={BarChart3} />
         <MetricCard label="成交量" value={hasQuote ? `${fmtVolume(safeNumber(realtimeQuote?.volume) / 100)}` : '--'} icon={Activity} />
         <MetricCard label="换手率" value={hasQuote ? `${safeNumber(realtimeQuote?.turnover_rate).toFixed(2)}%` : '--'} icon={RefreshCw} />
-        <MetricCard label="量比" value={hasQuote ? safeNumber(realtimeQuote?.ratio).toFixed(2) : '--'} icon={TrendingUp} />
         <MetricCard label="成交额" value={hasQuote ? `${(safeNumber(realtimeQuote?.amount) / 1e8).toFixed(1)}亿` : '--'} icon={DollarSign} />
+      </div>
+
+      {/* Row 2.5: AI Insight Bar */}
+      <div className="rounded-lg border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden min-h-[72px]">
+        {aiLoading ? (
+          <div className="flex items-center gap-3 px-4 animate-pulse" style={{ height: 72 }}>
+            <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-zinc-700" />
+            <div className="h-3 w-16 rounded bg-gray-200 dark:bg-zinc-700" />
+            <div className="h-5 w-10 rounded bg-gray-200 dark:bg-zinc-700" />
+            <div className="h-5 w-12 rounded bg-gray-200 dark:bg-zinc-700" />
+            <div className="flex-1" />
+            <div className="h-3 w-48 rounded bg-gray-200 dark:bg-zinc-700" />
+          </div>
+        ) : aiError ? (
+          <div className="flex items-center justify-between px-4" style={{ height: 72 }}>
+            <div className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400">
+              <AlertTriangle size={14} />
+              <span>AI 分析失败，请重试</span>
+            </div>
+            <button onClick={() => analyzeAI()}
+              className="px-2.5 py-1 text-[10px] font-bold rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/30 hover:bg-violet-200 dark:hover:bg-violet-500/30 transition-colors"
+            >
+              重试
+            </button>
+          </div>
+        ) : aiAnalysis ? (
+          <div className="px-3 py-1.5 space-y-1">
+            {/* Top row: Title + Score + Recommendation + Commentary */}
+            <div className="flex items-center gap-2 text-[11px] min-h-[22px]">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Brain size={14} className="text-violet-500" />
+                <span className="font-bold text-gray-900 dark:text-zinc-100">AI 智能研判</span>
+              </div>
+              {(() => {
+                const s = (ai as any).composite?.overall ?? ((ai as any).confidence ? Math.min(100, Math.round((ai as any).confidence * 100)) : 0);
+                const rec = (ai as any).composite?.recommendation ?? (ai as any).suggestion ?? '--';
+                const comment = (ai as any).card_reason ?? (ai as any).briefing?.commentary ?? (ai as any).summary ?? '';
+                const scoreClr = s >= 70 ? '#22c55e' : s >= 40 ? '#f59e0b' : '#ef4444';
+                const isBuy = ['买入','增持','买','buy','strong_buy'].some(k => rec.includes(k));
+                const isSell = ['卖出','减持','卖','sell','reduce'].some(k => rec.includes(k));
+                return (
+                  <>
+                    <span className="inline-flex items-center justify-center min-w-[26px] h-[18px] px-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: scoreClr }}>
+                      {s}
+                    </span>
+                    <span className={`inline-flex items-center px-1.5 h-[18px] rounded text-[10px] font-bold border ${isBuy ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30' : isSell ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'}`}>
+                      {rec}
+                    </span>
+                    {comment && <span className="text-gray-500 dark:text-zinc-400 truncate flex-1">{comment}</span>}
+                  </>
+                );
+              })()}
+            </div>
+            {/* Bottom row: Mini dimension bars + Signal tags */}
+            <div className="flex items-center gap-3 flex-wrap min-h-[20px]">
+              {(['technical', 'capital_flow', 'fundamental', 'sentiment'] as const).map((key, i) => {
+                const dim = (ai as any)[key];
+                const score = dim?.score ?? 0;
+                const label = ['技术','资金','基本','情绪'][i];
+                const clr = ['#8b5cf6','#06b6d4','#22c55e','#f59e0b'][i];
+                return (
+                  <div key={key} className="flex items-center gap-1 text-[10px]">
+                    <span className="text-gray-500 dark:text-zinc-500 w-8 text-right shrink-0">{label}</span>
+                    <div className="w-16 h-1.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, score)}%`, backgroundColor: clr }} />
+                    </div>
+                    <span className="font-mono-nums font-medium text-gray-700 dark:text-zinc-300 w-5">{Math.round(score)}</span>
+                  </div>
+                );
+              })}
+              {/* Signal tags */}
+              {(() => {
+                const allSignals: { name: string; direction: string; strength: number }[] = [];
+                for (const key of ['technical', 'capital_flow', 'fundamental', 'sentiment'] as const) {
+                  const dim = (ai as any)[key];
+                  if (dim?.signals && Array.isArray(dim.signals)) {
+                    allSignals.push(...dim.signals);
+                  }
+                }
+                allSignals.sort((a, b) => b.strength - a.strength);
+                return allSignals.slice(0, 3).map((s, i) => (
+                  <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border"
+                    style={{
+                      borderColor: s.direction === 'bullish' ? '#22c55e' : s.direction === 'bearish' ? '#ef4444' : '#a1a1aa',
+                      color: s.direction === 'bullish' ? '#16a34a' : s.direction === 'bearish' ? '#dc2626' : '#71717a',
+                      backgroundColor: s.direction === 'bullish' ? 'rgba(34,197,94,0.1)' : s.direction === 'bearish' ? 'rgba(239,68,68,0.1)' : 'rgba(161,161,170,0.1)',
+                    }}
+                  >
+                    {s.direction === 'bullish' ? '▲' : s.direction === 'bearish' ? '▼' : '◆'} {s.name} {Math.round(s.strength * 100)}%
+                  </span>
+                ));
+              })()}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center" style={{ height: 72 }}>
+            <button onClick={() => analyzeAI()}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-violet-200 dark:border-violet-500/30 text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"
+            >
+              <Brain size={14} />
+              点击分析获取 AI 研判
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Row 3: K-line Chart */}
@@ -981,6 +1351,16 @@ export default function StockDetailPage() {
                 </div>
               )}
             </div>
+            {/* Strategy dropdown */}
+            {strategyResult && (
+              <div className="relative">
+                <button onClick={() => setStrategyPanelCollapsed(!strategyPanelCollapsed)}
+                  className="px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-emerald-400 ml-1">
+                  策略 {(strategyResult.signals || []).length > 0 ? `(${(strategyResult.signals || []).length})` : ''} ▾
+                </button>
+              </div>
+            )}
+            </div>
             {/* Fullscreen toggle button */}
             <span className="text-[10px] text-gray-400 mx-1">|</span>
             <button
@@ -1018,14 +1398,26 @@ export default function StockDetailPage() {
       ) : historyLoading ? (
         <div className={isFullscreen ? 'flex-1 flex flex-col items-center justify-center text-gray-500 gap-2' : 'h-[500px] flex flex-col items-center justify-center text-gray-500 gap-2'}><RefreshCw className="animate-spin" size={20} /><span className="text-xs">加载K线数据...</span></div>
       ) : (
-        <div className={isFullscreen ? 'flex flex-1 min-h-0' : 'flex'}>
+        <div className={isFullscreen ? 'flex flex-1 min-h-0 relative' : 'flex relative'}>
           <div className="flex-1 min-w-0">
-            <KLineChart data={chartData} indicator={indicator} period={period} onCrosshairMove={setCrosshairData} markers={strategyMarkers} strategyResult={strategyResult} height={isFullscreen ? '100%' : 500} />
+            <KLineChart data={chartData} indicator={indicator} period={period} onCrosshairMove={setCrosshairData} markers={strategyMarkers} strategyResult={strategyResult} focusTime={focusSignalTime} height={isFullscreen ? '100%' : 500} onMarkerClick={(d) => setSignalPopup(d)} />
           </div>
           <InfoPanel data={crosshairData} indicator={indicator} T={chartTheme} />
+          {/* Strategy overlay panel */}
+          {strategyResult && !strategyPanelCollapsed && (
+            <div className="absolute inset-0 z-30 bg-white/95 dark:bg-zinc-900/95 overflow-auto p-4" style={{ marginTop: '36px' }}>
+              <StrategyPanel
+                strategyResult={strategyResult}
+                showMarkers={strategyShowMarkers}
+                collapsed={false}
+                onToggleCollapsed={() => setStrategyPanelCollapsed(true)}
+                onToggleMarkers={() => setStrategyShowMarkers(!strategyShowMarkers)}
+                onSignalClick={(date) => setFocusSignalTime(date)}
+              />
+            </div>
+          )}
         </div>
       )}
-      </div>
 
       {/* Row 4: AI Analysis + Detailed Data (2-column) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
@@ -1056,7 +1448,7 @@ export default function StockDetailPage() {
                 if (!rules) return;
                 generateStrategyMutation.mutate(
                   { stockId: effectiveCode, rules },
-                  { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); } }
+                  { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
                 );
               }}
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 transition-all"
@@ -1277,8 +1669,7 @@ export default function StockDetailPage() {
         <div className="flex gap-3 border-b border-gray-200 dark:border-zinc-800 pb-2 mb-2">
           {[
             { key: 'overview', label: '概览' },
-            { key: 'finance', label: '财务数据' },
-            { key: 'fundflow', label: '资金明细' },
+            { key: 'daily', label: '日报' },
           ].map((tab) => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} className={`text-[11px] font-medium transition-colors pb-2 -mb-2 border-b-2 ${activeTab === tab.key ? 'text-violet-500 border-violet-500' : 'text-gray-500 border-transparent hover:text-gray-700 dark:hover:text-zinc-300'}`}>
               {tab.label}
@@ -1301,63 +1692,124 @@ export default function StockDetailPage() {
           </div>
         )}
 
-        {activeTab === 'finance' && (
-          <div className="grid grid-cols-3 gap-2 text-[11px]">
-            {[
-              { l: '每股收益', v: finance.eps || '--' },
-              { l: '营收', v: finance.revenue || '--' },
-              { l: '净利润', v: finance.net_profit || '--' },
-              { l: '毛利率', v: finance.gross_margin ? `${finance.gross_margin}%` : '--' },
-              { l: '净利率', v: finance.net_margin ? `${finance.net_margin}%` : '--' },
-              { l: '负债率', v: finance.debt_ratio ? `${finance.debt_ratio}%` : '--' },
-            ].map((item, i) => (
-              <div key={i} className="p-2 rounded bg-gray-50 dark:bg-white/5">
-                <div className="text-[10px] text-gray-500 mb-0.5">{item.l}</div>
-                <div className="font-mono-nums font-medium text-black dark:text-white text-xs">{item.v}</div>
-              </div>
-            ))}
-          </div>
-        )}
 
-        {activeTab === 'fundflow' && (
-          <div>
-            {ff.length > 0 ? (
-              <table className="w-full table-dense">
-                <thead>
-                  <tr className="text-[10px] text-gray-500 dark:text-zinc-400 border-b border-gray-200 dark:border-zinc-800">
-                    <th className="text-left py-1">日期</th>
-                    <th className="text-right py-1">主力净额(万)</th>
-                    <th className="text-right py-1">散户净额(万)</th>
-                    <th className="text-right py-1">方向</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ff.slice(0, 10).map((f: any, i: number) => {
-                    const mainIn = safeNumber(f.main_inflow);
-                    const retailIn = safeNumber(f.retail_inflow);
-                    return (
-                      <tr key={i} className="border-b border-gray-100 dark:border-zinc-800 last:border-0">
-                        <td className="py-1 text-gray-600 dark:text-gray-400">{f.date || '--'}</td>
-                        <td className={`py-1 text-right font-mono-nums ${mainIn > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                          {mainIn > 0 ? '+' : ''}{(mainIn / 1e4).toFixed(0)}
-                        </td>
-                        <td className={`py-1 text-right font-mono-nums ${retailIn > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                          {retailIn > 0 ? '+' : ''}{(retailIn / 1e4).toFixed(0)}
-                        </td>
-                        <td className="py-1 text-right">
-                          {mainIn > 0 ? <ArrowUpRight size={12} className="inline text-rose-500" /> : <ArrowDownRight size={12} className="inline text-emerald-500" />}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div className="text-[11px] text-gray-400 dark:text-zinc-400 text-center py-4">暂无资金流向数据</div>
-            )}
-          </div>
+
+        {activeTab === 'daily' && (
+          <DailyReport
+            stock={stock}
+            realtimeQuote={realtimeQuote}
+            strategyResult={strategyResult}
+            sr={sr}
+            aiAnalysis={ai}
+            aiLoading={aiLoading}
+            strategyLoading={generateStrategyMutation.isPending}
+            onGenerateReport={handleGenerateReport}
+            effectiveCode={effectiveCode}
+            prevClose={prevClose}
+            price={price}
+            change={change}
+            changePercent={changePercent}
+            up={up}
+          />
         )}
       </div>
+
+      {/* Signal detail popup */}
+      {signalPopup && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setSignalPopup(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-80 rounded-xl shadow-2xl overflow-hidden"
+            style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-default))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-4 py-3 flex items-center justify-between"
+              style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}
+            >
+              <div className="flex items-center gap-2">
+                <TrendingUp size={16} className="text-emerald-500" />
+                <span className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
+                  信号详情
+                </span>
+              </div>
+              <button
+                onClick={() => setSignalPopup(null)}
+                className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="px-4 py-4 space-y-3">
+              {/* Direction badge */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>操作方向</span>
+                <span
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${
+                    signalPopup.signal.action === 'buy'
+                      ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'
+                  }`}
+                >
+                  {signalPopup.signal.action === 'buy' ? '▲ 买入' : '▼ 卖出'}
+                </span>
+              </div>
+
+              {/* Date */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>日期</span>
+                <span className="text-sm font-semibold font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
+                  {signalPopup.signal.date}
+                </span>
+              </div>
+
+              {/* Price */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>价格</span>
+                <span className="text-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
+                  ¥{Number(signalPopup.signal.price).toFixed(2)}
+                </span>
+              </div>
+
+              {/* Strategy name */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>策略</span>
+                <span className="text-sm font-semibold" style={{ color: 'hsl(var(--accent))' }}>
+                  {signalPopup.strategyName}
+                </span>
+              </div>
+
+              {/* Reason */}
+              <div className="pt-2" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                <span className="text-xs block mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>原因</span>
+                <p className="text-sm leading-relaxed" style={{ color: 'hsl(var(--text-primary))' }}>
+                  {signalPopup.signal.reason}
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-4 py-3 text-center"
+              style={{ borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-root))' }}
+            >
+              <button
+                onClick={() => { setFocusSignalTime(signalPopup.signal.date); setSignalPopup(null); }}
+                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                style={{ background: 'hsl(var(--accent))', color: 'hsl(var(--text-inverse))' }}
+              >
+                跳转到K线位置
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

@@ -354,3 +354,28 @@ export interface AnalyzeAllResponse {
   card_tags?: string[];
   market: MarketEnvironment;
 }
+
+// v0.6 Multi-strategy management types
+export interface StrategyMeta {
+  id: string;
+  name: string;
+  rules: string;
+  enabled: boolean;
+  color: string;
+  createdAt: string;
+}
+
+export interface CachedStrategyEntry {
+  stockId: string;
+  strategyResult: StrategyScript;
+  savedAt: string;
+}
+
+// ── Data source diagnostic types ──
+export interface DataSourceResult {
+  name: string;
+  endpoint: string;
+  status: 'ok' | 'error';
+  response_time_ms: number;
+  detail: string | null;
+}

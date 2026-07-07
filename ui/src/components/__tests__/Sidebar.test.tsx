@@ -35,15 +35,13 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    // Sidebar shows "股王" as logo text (updated from old "StockMate")
-    expect(screen.getByText('股王')).toBeInTheDocument();
-    // Updated nav items reflecting the new sidebar structure
+    expect(screen.getByText('StockMate')).toBeInTheDocument();
+    expect(screen.getByText('自選')).toBeInTheDocument();
     expect(screen.getByText('搜尋')).toBeInTheDocument();
-    expect(screen.getByText('行情')).toBeInTheDocument();
     expect(screen.getByText('回測')).toBeInTheDocument();
     expect(screen.getByText('預測')).toBeInTheDocument();
     expect(screen.getByText('規則')).toBeInTheDocument();
-    expect(screen.getByText('支撐線')).toBeInTheDocument();
+    expect(screen.getByText('板塊')).toBeInTheDocument();
     expect(screen.getByText('設置')).toBeInTheDocument();
   });
 
@@ -58,6 +56,16 @@ describe('Sidebar', () => {
     expect(toggleSidebar).toHaveBeenCalled();
   });
 
+  it('does not render 個股分析 or 指標實驗室 nav items', () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    );
+    expect(screen.queryByText('個股分析')).not.toBeInTheDocument();
+    expect(screen.queryByText('指標實驗室')).not.toBeInTheDocument();
+  });
+
   it('renders nav links with correct hrefs', () => {
     render(
       <MemoryRouter>
@@ -66,17 +74,37 @@ describe('Sidebar', () => {
     );
     const searchLink = screen.getByText('搜尋').closest('a');
     expect(searchLink).toHaveAttribute('href', '/search');
-    const stockLink = screen.getByText('行情').closest('a');
-    expect(stockLink).toHaveAttribute('href', '/stock');
+    const watchlistLink = screen.getByText('自選').closest('a');
+    expect(watchlistLink).toHaveAttribute('href', '/watchlist');
     const backtestLink = screen.getByText('回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
     const predictLink = screen.getByText('預測').closest('a');
     expect(predictLink).toHaveAttribute('href', '/predict');
     const rulesLink = screen.getByText('規則').closest('a');
     expect(rulesLink).toHaveAttribute('href', '/rules');
-    const indicatorLink = screen.getByText('支撐線').closest('a');
-    expect(indicatorLink).toHaveAttribute('href', '/indicator-lab');
+    const sectorLink = screen.getByText('板塊').closest('a');
+    expect(sectorLink).toHaveAttribute('href', '/sector');
     const settingsLink = screen.getByText('設置').closest('a');
     expect(settingsLink).toHaveAttribute('href', '/settings');
+  });
+
+  it('adds ?code= param to tool links when selectedStock is set', () => {
+    const selectedStock = { code: '600519.SH', name: '贵州茅台' };
+    const mockWithStock = {
+      ...mockStore,
+      selectedStock,
+    };
+    vi.mocked(useAppStore).mockImplementation((selector: any) => selector(mockWithStock));
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>
+    );
+    const backtestLink = screen.getByText('回測').closest('a');
+    expect(backtestLink).toHaveAttribute('href', '/backtest?code=600519.SH');
+    const predictLink = screen.getByText('預測').closest('a');
+    expect(predictLink).toHaveAttribute('href', '/predict?code=600519.SH');
+    const rulesLink = screen.getByText('規則').closest('a');
+    expect(rulesLink).toHaveAttribute('href', '/rules?code=600519.SH');
   });
 });

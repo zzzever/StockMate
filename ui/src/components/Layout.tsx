@@ -20,7 +20,7 @@ export default function Layout({ children }: LayoutProps) {
     const pageMap: Record<string, Page> = {
       search: 'search', sector: 'sector', stock: 'stockDetail',
       backtest: 'backtest', predict: 'predict', rules: 'rules',
-      'indicator-lab': 'indicatorLab', settings: 'settings',
+      settings: 'settings', 'indicator-lab': 'indicatorLab',
     };
     if (pageMap[path]) setPage(pageMap[path]);
   }, [location, setPage]);

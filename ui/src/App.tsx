@@ -32,7 +32,8 @@ function App() {
         <Layout>
           <ErrorBoundary>
             <Routes>
-              <Route path="/" element={<Navigate to="/search" />} />
+              {/* 自選股作为首页默认 — 所有路径最终导向个股分析 */}
+              <Route path="/" element={<Navigate to="/watchlist" />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/sector" element={<SectorStockRankPage />} />

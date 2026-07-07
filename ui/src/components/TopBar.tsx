@@ -1,6 +1,6 @@
 import { useAppStore, type ThemeMode } from '@/store/useAppStore';
 import { Search, Sun, Moon, Monitor } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const themeIcon: Record<ThemeMode, React.ComponentType<any>> = { light: Sun, dark: Moon, system: Monitor };
@@ -12,6 +12,7 @@ export default function TopBar() {
   const toggleDarkMode = useAppStore((s) => s.toggleDarkMode);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const navigate = useNavigate();
+  const searchRef = useRef<HTMLInputElement>(null);
   const ThemeIcon = themeIcon[theme];
 
   const handleSearch = (e: React.KeyboardEvent) => {
@@ -27,6 +28,17 @@ export default function TopBar() {
     else if (/^\d{6}\.(SH|SZ|BJ)$/i.test(q)) { navigate(`/stock?code=${q.toUpperCase()}`); }
     else { navigate(`/stock?code=${encodeURIComponent(q)}`); }
   };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   return (
     <div className="topbar-glass flex h-12 items-center justify-between px-4 relative z-20">
@@ -44,7 +56,7 @@ export default function TopBar() {
         {/* Search box */}
         <div className="flex items-center gap-1.5 px-2.5 py-1.5 w-56 rounded-lg" style={{ background: 'hsl(var(--bg-input))', border: '1px solid hsl(var(--border-subtle))' }}>
           <Search size={14} style={{ color: 'hsl(var(--text-tertiary))' }} />
-          <input type="text" placeholder="輸入代碼…" value={search}
+          <input ref={searchRef} type="text" placeholder="輸入代碼… (Ctrl+K)" value={search}
             onChange={(e) => setSearch(e.target.value)} onKeyDown={handleSearch} aria-label="搜索股票代码"
             className="bg-transparent text-sm outline-none w-full"
             style={{ color: 'hsl(var(--text-primary))' }}

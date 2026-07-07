@@ -9,7 +9,7 @@
 //!   Concept:    push2.eastmoney.com/api/qt/clist/get?fs=m:90+t3
 
 use chrono::NaiveDate;
-use reqwest::Client;
+use reqwest::{Client, header::HeaderMap};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
@@ -53,6 +53,8 @@ struct EmQuoteItem {
     #[serde(rename = "f169", default)] change: Option<f64>,     // /100
     #[serde(rename = "f170", default)] turnover: Option<f64>,   // /100
     #[serde(rename = "f50", default)] ratio: Option<f64>,       // /100
+    #[serde(rename = "f162", default)] pe: Option<f64>,         // TTM市盈率
+    #[serde(rename = "f167", default)] pb: Option<f64>,         // 市净率
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -96,18 +98,124 @@ pub struct BoardData {
 
 // ── HTTP client ──
 
+/// Rate limit: sleep 300ms before each HTTP request to avoid IP blocking.
+async fn rate_limit() {
+    use std::time::Instant;
+    static LAST_REQUEST: std::sync::OnceLock<std::sync::Mutex<Instant>> = std::sync::OnceLock::new();
+    let sleep_ms = {
+        let last = LAST_REQUEST.get_or_init(|| std::sync::Mutex::new(Instant::now()));
+        let mut last = last.lock().unwrap();
+        let elapsed = last.elapsed().as_millis();
+        *last = Instant::now();
+        if elapsed < 300 { Some(300 - elapsed) } else { None }
+    };
+    if let Some(ms) = sleep_ms {
+        tokio::time::sleep(std::time::Duration::from_millis(ms as u64)).await;
+    }
+}
+
+/// Log detailed diagnostic information about a reqwest error, including the
+/// full error chain (source causes) to distinguish DNS / connection / TLS
+/// handshake / timeout failures.
+fn log_request_error(err: &reqwest::Error, context: &str, url: &str) {
+    use std::error::Error;
+
+    let category = if err.is_connect() {
+        "CONNECTION"
+    } else if err.is_timeout() {
+        "TIMEOUT"
+    } else if err.is_builder() {
+        "BUILDER"
+    } else if err.is_redirect() {
+        "REDIRECT"
+    } else if err.is_status() {
+        "STATUS"
+    } else {
+        "UNKNOWN"
+    };
+
+    tracing::warn!(
+        "[EastMoney] {} - {} error\n  URL: {}\n  Detail: {}",
+        context, category, url, err
+    );
+
+    // Log the full error cause chain (e.g., DNS lookup -> TCP connect -> TLS handshake)
+    let mut source = err.source();
+    let mut depth = 0;
+    while let Some(s) = source {
+        tracing::warn!("[EastMoney]   Caused by ({}): {}", depth, s);
+        source = s.source();
+        depth += 1;
+    }
+}
+
 fn build_client() -> Option<Client> {
+    let mut default_headers = HeaderMap::new();
+    default_headers.insert(
+        "Referer",
+        "https://data.eastmoney.com/".parse().unwrap(),
+    );
+    default_headers.insert(
+        "Origin",
+        "https://data.eastmoney.com".parse().unwrap(),
+    );
+    default_headers.insert(
+        "Accept",
+        "application/json, text/plain, */*".parse().unwrap(),
+    );
+    default_headers.insert(
+        "Accept-Language",
+        "zh-CN,zh;q=0.9,en;q=0.8".parse().unwrap(),
+    );
+
     match Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent("StockMate/1.0")
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(30))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+        .default_headers(default_headers)
         .no_proxy()
+        .tcp_keepalive(Some(std::time::Duration::from_secs(30)))
         .build()
     {
         Ok(c) => Some(c),
         Err(e) => {
             tracing::error!("[EastMoney] failed to build HTTP client: {}", e);
             None
+        }
+    }
+}
+
+/// Send an HTTP GET request with automatic HTTPS -> HTTP fallback.
+///
+/// 1. Applies rate limiting.
+/// 2. Attempts the request over HTTPS.
+/// 3. If the connection fails (connect timeout, TLS handshake failure, etc.),
+///    logs the full error chain and retries with plain HTTP.
+///
+/// This is a workaround for environments where the TLS stack has trouble
+/// negotiating with East Money's CDN (a common issue on Windows with native-tls).
+async fn send_request(client: &Client, url_https: &str) -> Result<reqwest::Response, reqwest::Error> {
+    rate_limit().await;
+
+    // First attempt: HTTPS
+    match client.get(url_https).send().await {
+        Ok(r) => return Ok(r),
+        Err(e) => {
+            if e.is_connect() || e.is_timeout() {
+                log_request_error(&e, "HTTPS failed, trying HTTP fallback", url_https);
+                let url_http = url_https.replace("https://", "http://");
+                tracing::warn!("[EastMoney] Retrying with HTTP: {}", url_http);
+                match client.get(&url_http).send().await {
+                    Ok(r) => return Ok(r),
+                    Err(e2) => {
+                        log_request_error(&e2, "HTTP fallback also failed", &url_http);
+                        return Err(e2);
+                    }
+                }
+            } else {
+                log_request_error(&e, "Request failed", url_https);
+                return Err(e);
+            }
         }
     }
 }
@@ -129,15 +237,12 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
         None => return None,
     };
     let url = format!(
-        "http://push2.eastmoney.com/api/qt/stock/get?secid={}&fields=f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f168,f169,f170",
+        "https://push2.eastmoney.com/api/qt/stock/get?secid={}&fields=f43,f44,f45,f46,f47,f48,f50,f57,f58,f60,f162,f167,f168,f169,f170",
         secid
     );
-    let resp = match client.get(&url).send().await {
+    let resp = match send_request(&client, &url).await {
         Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("[EastMoney] fetch_realtime_price HTTP error for {}: {}", ticker, e);
-            return None;
-        }
+        Err(_) => return None,  // Details already logged by send_request
     };
     let json: EmQuoteWrap = match resp.json().await {
         Ok(j) => j,
@@ -154,8 +259,20 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
         }
     };
 
-    let price = q.price? / PRICE_DIV;
-    let prev = q.prev_close? / PRICE_DIV;
+    let price = match q.price {
+        Some(p) => p / PRICE_DIV,
+        None => {
+            tracing::warn!("[EastMoney] fetch_realtime_price price is null for {} (api returned empty data)", ticker);
+            return None;
+        }
+    };
+    let prev = match q.prev_close {
+        Some(p) => p / PRICE_DIV,
+        None => {
+            tracing::warn!("[EastMoney] fetch_realtime_price prev_close is null for {}", ticker);
+            return None;
+        }
+    };
     let chg = q.change.map(|c| c / PRICE_DIV).unwrap_or(price - prev);
     let chg_pct = q.change_pct.map(|c| c / PRICE_DIV).unwrap_or(if prev > 0.0 { (price - prev) / prev * 100.0 } else { 0.0 });
 
@@ -174,6 +291,23 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
         ratio: q.ratio.map(|r| r / PRICE_DIV).unwrap_or(0.0),
         turnover_rate: q.turnover.map(|t| t / PRICE_DIV).unwrap_or(0.0),
     })
+}
+
+/// Fetch financial indicators (PE, PB) from EastMoney real-time quote.
+/// Returns (pe_ttm, pb) if available.
+pub async fn fetch_finance(ticker: &str) -> Option<(f64, f64)> {
+    let secid = to_secid(ticker)?;
+    let client = build_client()?;
+    let url = format!(
+        "https://push2.eastmoney.com/api/qt/stock/get?secid={}&fields=f162,f167",
+        secid
+    );
+    let resp = send_request(&client, &url).await.ok()?;
+    let json: EmQuoteWrap = resp.json().await.ok()?;
+    let q = json.data?;
+    let pe = q.pe?;
+    let pb = q.pb?;
+    Some((pe, pb))
 }
 
 /// Batch fetch via concurrent individual requests (East Money has no native batch endpoint).
@@ -214,15 +348,12 @@ pub async fn fetch_history(ticker: &str, period: &str, days: u32) -> Vec<History
     };
     let klt = period_to_klt(period);
     let url = format!(
-        "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt={}&fqt=1&end=20500101&lmt={}",
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt={}&fqt=1&end=20500101&lmt={}",
         secid, klt, days
     );
-    let resp = match client.get(&url).send().await {
+    let resp = match send_request(&client, &url).await {
         Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("[EastMoney] fetch_history HTTP error for {}: {}", ticker, e);
-            return vec![];
-        }
+        Err(_) => return vec![],
     };
     let json: EmKlineWrap = match resp.json().await {
         Ok(j) => j,
@@ -267,15 +398,12 @@ pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
         None => return vec![],
     };
     let url = format!(
-        "http://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=5&fqt=0&end=20500101&lmt=48",
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=5&fqt=0&end=20500101&lmt=48",
         secid
     );
-    let resp = match client.get(&url).send().await {
+    let resp = match send_request(&client, &url).await {
         Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("[EastMoney] fetch_intraday HTTP error for {}: {}", ticker, e);
-            return vec![];
-        }
+        Err(_) => return vec![],
     };
     let json: EmKlineWrap = match resp.json().await {
         Ok(j) => j,
@@ -325,16 +453,13 @@ async fn fetch_boards(board_type: &str) -> Vec<BoardData> {
     };
 
     let url = format!(
-        "http://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=300&np=1&fltt=2&fid=f3&fs=m:90+{}&fields=f2,f3,f5,f12,f14,f20",
+        "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=300&np=1&fltt=2&fid=f3&fs=m:90+{}&fields=f2,f3,f5,f12,f14,f20",
         board_type
     );
 
-    let resp = match client.get(&url).send().await {
+    let resp = match send_request(&client, &url).await {
         Ok(r) => r,
-        Err(e) => {
-            tracing::warn!("East Money board API request failed ({}): {}", board_type, e);
-            return vec![];
-        }
+        Err(_) => return vec![],
     };
 
     let json: EmDataResponse = match resp.json().await {

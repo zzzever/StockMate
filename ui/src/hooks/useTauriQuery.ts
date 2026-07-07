@@ -674,3 +674,26 @@ export function useWatchlistCheck(symbol: string) {
     enabled: symbol.length > 0,
   });
 }
+
+// ── Data Source Diagnostic hook ──
+
+import { type DataSourceResult } from '@/types';
+
+export function useDiagnoseDataSources() {
+  return useQuery<DataSourceResult[], Error>({
+    queryKey: ['data_sources', 'diagnose'],
+    queryFn: async () => {
+      console.log('[useDiagnoseDataSources] firing');
+      try {
+        const data = await invoke<DataSourceResult[]>('diagnose_data_sources');
+        console.log('[useDiagnoseDataSources] results:', data);
+        return data;
+      } catch (error) {
+        console.error('[useDiagnoseDataSources] error:', error);
+        throw error;
+      }
+    },
+    staleTime: 30_000, // Re-fetch at most once per 30s
+  });
+}
+
