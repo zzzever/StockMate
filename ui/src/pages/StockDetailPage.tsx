@@ -30,9 +30,10 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
   const indRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [overlays, setOverlays] = useState<{ x: number; y: number; color: string; label: string }[]>([]);
-  const charts = useRef<{ mc: IChartApi; candle: ISeriesApi<'Candlestick'>; vol: ISeriesApi<'Histogram'>; ind: IChartApi; macdHist: ISeriesApi<'Histogram'>; macdDif: ISeriesApi<'Line'>; macdDea: ISeriesApi<'Line'>; kdjK: ISeriesApi<'Line'>; kdjD: ISeriesApi<'Line'>; kdjJ: ISeriesApi<'Line'>; bbU: ISeriesApi<'Line'>; bbM: ISeriesApi<'Line'>; bbL: ISeriesApi<'Line'>; bbUMain: ISeriesApi<'Line'>; bbMMain: ISeriesApi<'Line'>; bbLMain: ISeriesApi<'Line'>; ma5: ISeriesApi<'Line'>; ma10: ISeriesApi<'Line'>; ma20: ISeriesApi<'Line'>; ma60: ISeriesApi<'Line'> } | null>(null);
+  const charts = useRef<{ mc: IChartApi; candle: ISeriesApi<'Candlestick'>; vol: ISeriesApi<'Histogram'>; ind: IChartApi; macdHist: ISeriesApi<'Histogram'>; macdDif: ISeriesApi<'Line'>; macdDea: ISeriesApi<'Line'>; kdjK: ISeriesApi<'Line'>; kdjD: ISeriesApi<'Line'>; kdjJ: ISeriesApi<'Line'>; bbU: ISeriesApi<'Line'>; bbM: ISeriesApi<'Line'>; bbL: ISeriesApi<'Line'>; bbUMain: ISeriesApi<'Line'>; bbMMain: ISeriesApi<'Line'>; bbLMain: ISeriesApi<'Line'>; ma5: ISeriesApi<'Line'>; ma10: ISeriesApi<'Line'>; ma20: ISeriesApi<'Line'>; ma60: ISeriesApi<'Line'>; drawLines: any[] } | null>(null);
   const onCrosshairMoveRef = useRef(onCrosshairMove); onCrosshairMoveRef.current = onCrosshairMove;
   const dataRef = useRef(data); dataRef.current = data;
+  const prevLenRef = useRef(0);
   const ruleMarkersRef = useRef(ruleMarkers); ruleMarkersRef.current = ruleMarkers;
 
   const updateOverlays = useCallback(() => {
@@ -60,14 +61,14 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
     const vc = createChart(volRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, visible: false, barSpacing: 6 }, handleScroll: false, handleScale: false, autoSize: true });
     const ic = createChart(indRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, visible: false, barSpacing: 6 }, handleScroll: false, handleScale: false, autoSize: true });
 
-    const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor });
-    const ma5 = mc.addLineSeries({ color: T.ma5Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const ma10 = mc.addLineSeries({ color: T.ma10Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const ma20 = mc.addLineSeries({ color: T.ma20Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const ma60 = mc.addLineSeries({ color: T.ma60Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const bbUMain = mc.addLineSeries({ color: T.bbUpperColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
-    const bbMMain = mc.addLineSeries({ color: T.bbMiddleColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
-    const bbLMain = mc.addLineSeries({ color: T.bbLowerColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
+    const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor, });
+    const ma5 = mc.addLineSeries({ color: T.ma5Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const ma10 = mc.addLineSeries({ color: T.ma10Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const ma20 = mc.addLineSeries({ color: T.ma20Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const ma60 = mc.addLineSeries({ color: T.ma60Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const bbUMain = mc.addLineSeries({ color: T.bbUpperColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const bbMMain = mc.addLineSeries({ color: T.bbMiddleColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const bbLMain = mc.addLineSeries({ color: T.bbLowerColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceLineVisible: false });
     const macdHist = ic.addHistogramSeries({});
     const macdDif = ic.addLineSeries({ color: T.macdDifColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
@@ -79,6 +80,23 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
     const bbM = ic.addLineSeries({ color: T.bbMiddleColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
     const bbL = ic.addLineSeries({ color: T.bbLowerColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
 
+    // Drawing tools: click anywhere → horizontal line at that Y-coordinate price
+    let drawMode = false;
+    mc.subscribeClick((param: MouseEventParams) => {
+      if (!drawMode || param.point === undefined) return;
+      const price = (candle as any).coordinateToPrice(param.point.y);
+      if (price != null && Number.isFinite(price)) {
+        const line = candle.createPriceLine({ price, color: T.supportColor, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: `L${charts.current ? charts.current.drawLines.length + 1 : 1}` });
+        if (charts.current) charts.current.drawLines.push(line);
+      }
+    });
+    (window as any).__klineDrawToggle = (on: boolean) => { drawMode = on; if (mainRef.current) mainRef.current.style.cursor = on ? 'crosshair' : ''; };
+    (window as any).__klineDrawClear = () => { if (charts.current) { charts.current.drawLines.forEach(l => { try { candle.removePriceLine(l); } catch (_) { } }); charts.current.drawLines = []; } };
+    (window as any).__klineFitContent = () => { if (charts.current) { charts.current.mc.timeScale().fitContent(); } };
+    // Escape key to exit draw mode
+    const escHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') { drawMode = false; if (mainRef.current) mainRef.current.style.cursor = ''; } };
+    window.addEventListener('keydown', escHandler);
+
     mc.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0 });
     vc.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0 });
     ic.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0 });
@@ -87,7 +105,6 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
       try { const r = mc.timeScale().getVisibleRange(); if (r?.from != null && r?.to != null) target.timeScale().setVisibleRange({ from: r.from, to: r.to }); } catch (_) { }
     };
     mc.timeScale().subscribeVisibleTimeRangeChange(() => { syncSub(vc); syncSub(ic); updateOverlays(); });
-    mc.subscribeCrosshairMove(() => { syncSub(vc); syncSub(ic); });
 
     mc.subscribeCrosshairMove((param: MouseEventParams) => {
       if (!param.time || param.point === undefined) { onCrosshairMoveRef.current?.(null); return; }
@@ -98,7 +115,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
     vc.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; mc.setCrosshairPosition(0, param.time as Time, candle); });
     ic.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; mc.setCrosshairPosition(0, param.time as Time, candle); });
 
-    charts.current = { mc, candle, vol, ind: ic, macdHist, macdDif, macdDea, kdjK, kdjD, kdjJ, bbU, bbM, bbL, bbUMain, bbMMain, bbLMain, ma5, ma10, ma20, ma60 };
+    charts.current = { mc, candle, vol, ind: ic, macdHist, macdDif, macdDea, kdjK, kdjD, kdjJ, bbU, bbM, bbL, bbUMain, bbMMain, bbLMain, ma5, ma10, ma20, ma60, drawLines: [] };
     [mainRef, volRef, indRef].forEach(r => { try { const a = r.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) { } });
     return () => { mc.remove(); vc.remove(); ic.remove(); charts.current = null; };
   }, []);
@@ -143,7 +160,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
       else if (IND === 'kdj') { c.macdHist.setData([]); c.macdDif.setData([]); c.macdDea.setData([]); c.kdjK.setData(indData.kdj.map((v, i) => ({ time: (data[i + 8] as any)?.date || (data[i + 8] as any)?.time, value: v.k }))); c.kdjD.setData(indData.kdj.map((v, i) => ({ time: (data[i + 8] as any)?.date || (data[i + 8] as any)?.time, value: v.d }))); c.kdjJ.setData(indData.kdj.map((v, i) => ({ time: (data[i + 8] as any)?.date || (data[i + 8] as any)?.time, value: v.j }))); c.bbU.setData([]); c.bbM.setData([]); c.bbL.setData([]); }
       else if (IND === 'boll') { c.macdHist.setData([]); c.macdDif.setData([]); c.macdDea.setData([]); c.kdjK.setData([]); c.kdjD.setData([]); c.kdjJ.setData([]); c.bbU.setData(indData.bbU); c.bbM.setData(indData.bbM); c.bbL.setData(indData.bbL); }
       else { c.macdHist.setData([]); c.macdDif.setData([]); c.macdDea.setData([]); c.kdjK.setData([]); c.kdjD.setData([]); c.kdjJ.setData([]); c.bbU.setData([]); c.bbM.setData([]); c.bbL.setData([]); }
-      c.mc.timeScale().fitContent(); c.mc.timeScale().scrollToPosition(0, false);
+      if (data.length !== prevLenRef.current) { c.mc.timeScale().fitContent(); c.mc.timeScale().scrollToPosition(0, false); prevLenRef.current = data.length; }
       updateOverlays();
     } catch (e) { console.warn('Chart data update failed:', e); }
   }, [data, maData, T, IND, indData, updateOverlays, showBOLL]);
@@ -195,6 +212,7 @@ export default function StockDetailPage() {
   const [period, setPeriod] = useState<string>('day');
   const [indicator, setIndicator] = useState<IndicatorType>('none');
   const [showBOLL, setShowBOLL] = useState(false);
+  const [drawMode, setDrawMode] = useState(false);
 
   const { data: stockList, error: stockListError } = useStockList();
   const { data: stockDetail, error: stockDetailError } = useStockDetail(stockId);
@@ -263,10 +281,24 @@ export default function StockDetailPage() {
             {INDICATORS.map(ind => (<button key={ind} onClick={() => setIndicator(ind)} className={`px-1.5 py-0.5 text-[10px] font-bold transition-colors`} style={{ color: ind === indicator ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: ind === indicator ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{IND_LABELS[ind]}</button>))}
             <span className="text-[10px] text-gray-400 mx-1">|</span>
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[10px] font-bold transition-colors`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
+            <span className="text-[10px] text-gray-400 mx-1">|</span>
+            <button onClick={() => { const on = !drawMode; setDrawMode(on); (window as any).__klineDrawToggle?.(on); }}
+              className={`px-1.5 py-0.5 text-[10px] font-bold transition-colors`}
+              style={{ color: drawMode ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))', borderBottom: drawMode ? '2px solid hsl(var(--price-up))' : '2px solid transparent' }}>{drawMode ? '退出画线' : '画线'}</button>
+            <button onClick={() => { if (confirm('清除所有画线?')) { (window as any).__klineDrawClear?.(); setDrawMode(false); } }}
+              className="px-1.5 py-0.5 text-[10px] font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>清线</button>
+            <button onClick={() => { (window as any).__klineFitContent?.(); }}
+              className="px-1.5 py-0.5 text-[10px] font-bold" style={{ color: 'hsl(var(--text-tertiary))' }} title="恢复默认比例">↺</button>
           </div>
           <div className="flex items-center gap-3"><CrosshairTooltip data={crosshair} allData={chartData} /><button onClick={() => { queryClient.invalidateQueries({ queryKey: ['stocks', 'history'] }); queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime'] }); }} className="text-[10px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} /></button></div>
         </div>
         {/* MA values bar */}
+        {drawMode && (
+          <div className="flex items-center justify-between px-2 py-0.5 text-[10px] font-bold shrink-0" style={{ color: 'white', background: '#f59e0b' }}>
+            <span>✦ 画线模式 — 点击图表任意位置添加水平线</span>
+            <span>按 Esc 退出</span>
+          </div>
+        )}
         {maValues && period !== 'minute' && (
           <div className="flex items-center gap-2 px-1 text-[10px] font-mono-nums shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>
             <span>MA5 <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtPrice(maValues.ma5)}</b></span>

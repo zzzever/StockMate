@@ -38,6 +38,7 @@ vi.mock('lightweight-charts', () => ({
     addHistogramSeries: vi.fn(() => ({ setData: vi.fn(), setColor: vi.fn() })),
     timeScale: vi.fn(() => ({ applyOptions: vi.fn(), fitContent: vi.fn(), scrollToPosition: vi.fn(), getVisibleRange: vi.fn(() => ({ from: 0, to: 100 })), setVisibleRange: vi.fn(), subscribeVisibleTimeRangeChange: vi.fn(() => vi.fn()) })),
     subscribeCrosshairMove: vi.fn(),
+    subscribeClick: vi.fn(),
     setCrosshairPosition: vi.fn(),
     priceScale: vi.fn(() => ({ applyOptions: vi.fn() })),
     remove: vi.fn(),
