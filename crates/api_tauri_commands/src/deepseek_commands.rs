@@ -4,7 +4,7 @@ use domain::{ApiError, Stock, Quote};
 use deepseek::{
     DeepSeekClient, DeepSeekAnalysis, DeepSeekPrediction, StrategyScript,
     StockRef, QuoteRef, StockFinanceRef, FundFlowRef, MovingAverageRef, DeepSeekError,
-    MultiDimensionAnalysis,
+    MultiDimensionAnalysis, TradingRuleResponse,
 };
 
 use crate::AppState;
@@ -213,6 +213,40 @@ pub async fn test_deepseek_connection(
             message: format!("连接失败: {}", e),
         }),
     }
+}
+
+// ============================================================
+// AI Trading Rule Parsing
+// ============================================================
+
+#[tauri::command]
+pub async fn parse_rules_with_ai(
+    stock_id: String,
+    rules: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<TradingRuleResponse>, ApiError> {
+    cmd_log("parse_rules_with_ai", &stock_id);
+
+    let client = create_deepseek_client(&state.db_pool).await?;
+
+    let result = client
+        .parse_trading_rules(&rules)
+        .await
+        .map_err(|e| {
+            let code = match &e {
+                DeepSeekError::NoApiKey => 401,
+                DeepSeekError::RateLimited => 429,
+                DeepSeekError::ParseError(_) => 422,
+                _ => 500,
+            };
+            ApiError {
+                code,
+                message: format!("规则解析失败: {}", e),
+                details: None,
+            }
+        })?;
+
+    Ok(result)
 }
 
 // ============================================================

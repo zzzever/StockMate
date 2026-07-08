@@ -160,9 +160,16 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL }
   );
 }
 
-function CrosshairTooltip({ data }: { data: { time: string; open: number; high: number; low: number; close: number; volume: number } | null }) {
+function CrosshairTooltip({ data, allData }: { data: { time: string; open: number; high: number; low: number; close: number; volume: number } | null; allData: any[] }) {
   if (!data) return null;
-  return (<div className="flex items-center gap-3 text-[11px] font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>{['O','H','L','C','V'].map((l, i) => <span key={l}>{l} <b style={{ color: 'hsl(var(--text-primary))' }}>{i === 0 ? fmtPrice(data.open) : i === 1 ? fmtPrice(data.high) : i === 2 ? fmtPrice(data.low) : i === 3 ? fmtPrice(data.close) : fmtVolume(data.volume / 100)}</b></span>)}</div>);
+  const idx = allData.findIndex((d: any) => (d.date || d.time) === data.time);
+  const prev = idx > 0 ? Number(allData[idx - 1].close) : 0;
+  const chg = prev > 0 ? ((data.close - prev) / prev * 100) : 0;
+  const up = chg >= 0;
+  return (<div className="flex items-center gap-3 text-[11px] font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
+    {['O','H','L','C','V'].map((l, i) => <span key={l}>{l} <b style={{ color: 'hsl(var(--text-primary))' }}>{i === 0 ? fmtPrice(data.open) : i === 1 ? fmtPrice(data.high) : i === 2 ? fmtPrice(data.low) : i === 3 ? fmtPrice(data.close) : fmtVolume(data.volume / 100)}</b></span>)}
+    <span className="font-bold" style={{ color: up ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{up ? '+' : ''}{chg.toFixed(2)}%</span>
+  </div>);
 }
 
 function IndexBar() {
@@ -257,7 +264,7 @@ export default function StockDetailPage() {
             <span className="text-[10px] text-gray-400 mx-1">|</span>
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[10px] font-bold transition-colors`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
           </div>
-          <div className="flex items-center gap-3"><CrosshairTooltip data={crosshair} /><button onClick={() => { queryClient.invalidateQueries({ queryKey: ['stocks', 'history'] }); queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime'] }); }} className="text-[10px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} /></button></div>
+          <div className="flex items-center gap-3"><CrosshairTooltip data={crosshair} allData={chartData} /><button onClick={() => { queryClient.invalidateQueries({ queryKey: ['stocks', 'history'] }); queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime'] }); }} className="text-[10px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} /></button></div>
         </div>
         {/* MA values bar */}
         {maValues && period !== 'minute' && (

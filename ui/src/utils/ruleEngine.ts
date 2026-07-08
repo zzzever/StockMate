@@ -116,7 +116,7 @@ function evaluateMACD(data: KlineItem[], cond: RuleCondition, rule: TradingRule)
 
 // ── Helpers ──
 function makeSignal(bar: KlineItem, rule: TradingRule, reason: string): RuleSignal {
-  return { date: bar.date, action: rule.signal === 'alert' ? 'buy' : rule.signal as 'buy' | 'sell', price: bar.close, reason, ruleId: rule.id, ruleName: rule.name, signalType: 'rule' };
+  return { date: bar.date, action: (rule.signal === 'alert' ? 'buy' : rule.signal) as 'buy' | 'sell', price: bar.close, reason, ruleId: rule.id, ruleName: rule.name, signalType: 'rule' };
 }
 
 const EVALUATORS: Record<string, (data: KlineItem[], cond: RuleCondition, rule: TradingRule) => RuleSignal[]> = {

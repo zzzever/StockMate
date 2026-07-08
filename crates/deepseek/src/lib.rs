@@ -3,6 +3,7 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -908,6 +909,93 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
         serde_json::from_str(&cleaned).map_err(|e| DeepSeekError::ParseError(format!("All-in-one parse: {}", e)))
     }
 
+    /// Parse free-text trading rules into structured TradingRuleResponse[] using AI.
+    pub async fn parse_trading_rules(
+        &self,
+        free_text_rules: &str,
+    ) -> Result<Vec<TradingRuleResponse>, DeepSeekError> {
+        let sanitized = sanitize_user_input(free_text_rules.trim(), 2000);
+        if sanitized.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let system_prompt = r#"你是一位交易规则解析专家。请将用户提供的自由文本交易规则解析为结构化的JSON格式。
+
+支持的规则条件类型（condition_type）和参数（params）如下：
+1. ma_cross（均线交叉）: {"fastPeriod": 快线周期, "slowPeriod": 慢线周期, "direction": "above"(上穿) 或 "below"(下穿)}
+2. rsi_threshold（RSI阈值）: {"period": RSI周期(默认14), "threshold": 阈值(0-100), "direction": "above"(高于) 或 "below"(低于)}
+3. price_breakout（价格突破）: {"period": 观察周期, "direction": "above"(突破) 或 "below"(跌破)}
+4. volume_surge（成交量放大）: {"ratio": 倍率(如1.5表示1.5倍), "period": 均量计算周期(默认5)}
+5. macd_signal（MACD信号）: {"direction": "golden_cross"(金叉), "death_cross"(死叉), "above_zero"(在零轴上), "below_zero"(在零轴下)}
+
+signal字段取值: "buy"(买入), "sell"(卖出), "alert"(提醒)
+
+请严格遵循以下规则：
+1. 返回格式: {"rules": [...]}，rules是一个JSON数组
+2. 只返回JSON，不要有任何额外解释或标记
+3. 如果某条规则无法解析，请跳过它
+4. 最多返回10条规则
+5. 规则名称(name)使用中文，简洁明了
+6. 一条规则可以有多个conditions（AND关系）
+7. 确保参数值合理：均线周期>0，RSI阈值在0-100之间，成交量倍率>0
+
+示例输入：
+"MA5上穿MA10买入；RSI低于30超卖时买入；MACD金叉买入"
+
+示例输出：
+{"rules":[{"name":"MA金叉买入","conditions":[{"type":"ma_cross","params":{"fastPeriod":5,"slowPeriod":10,"direction":"above"}}],"signal":"buy"},{"name":"RSI超卖买入","conditions":[{"type":"rsi_threshold","params":{"period":14,"threshold":30,"direction":"below"}}],"signal":"buy"},{"name":"MACD金叉买入","conditions":[{"type":"macd_signal","params":{"direction":"golden_cross"}}],"signal":"buy"}]}"#;
+
+        let user_prompt = format!("请解析以下交易规则：\n\n{}", sanitized);
+
+        let resp = self.chat_completion(system_prompt, &user_prompt, true).await?;
+
+        let cleaned = resp
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_start_matches("```JSON")
+            .trim_end_matches("```")
+            .trim()
+            .to_string();
+
+        // Try wrapper {"rules": [...]} first (expected format with force_json)
+        if let Ok(wrapper) = serde_json::from_str::<ParseRulesResponse>(&cleaned) {
+            let mut result: Vec<TradingRuleResponse> = wrapper.rules.into_iter().take(10).collect();
+            // Deduplicate by name
+            result.dedup_by(|a, b| a.name == b.name);
+            return Ok(result);
+        }
+
+        // Try direct array parse (some models skip the wrapper)
+        if let Ok(rules) = serde_json::from_str::<Vec<TradingRuleResponse>>(&cleaned) {
+            let mut result: Vec<TradingRuleResponse> = rules.into_iter().take(10).collect();
+            result.dedup_by(|a, b| a.name == b.name);
+            return Ok(result);
+        }
+
+        // Try robust bracket-depth extraction
+        if let Some(extracted) = robust_json_extract(&cleaned) {
+            if let Ok(wrapper) = serde_json::from_str::<ParseRulesResponse>(&extracted) {
+                let mut result: Vec<TradingRuleResponse> = wrapper.rules.into_iter().take(10).collect();
+                result.dedup_by(|a, b| a.name == b.name);
+                return Ok(result);
+            }
+            if let Ok(rules) = serde_json::from_str::<Vec<TradingRuleResponse>>(&extracted) {
+                let mut result: Vec<TradingRuleResponse> = rules.into_iter().take(10).collect();
+                result.dedup_by(|a, b| a.name == b.name);
+                return Ok(result);
+            }
+        }
+
+        tracing::warn!(
+            "parse_trading_rules: failed to parse AI response. raw preview (300 chars): {}",
+            &resp.chars().take(300).collect::<String>()
+        );
+        Err(DeepSeekError::ParseError(
+            "AI返回的规则格式无法解析，请检查规则文本后重试".to_string(),
+        ))
+    }
+
     /// Psychology analysis — market sentiment from price/volume data
     pub async fn analyze_psychology(&self, prompt: &str) -> Result<String, DeepSeekError> {
         let system_prompt = r#"你是市场心理学专家。分析当日交易数据，从散户/主力心理角度判断支撑压力。
@@ -1088,6 +1176,32 @@ pub struct DeepSeekPrediction {
     pub target_price: Option<String>,
     pub reasoning: String,
     pub time_frame: String,      // "1周" / "1月"
+}
+
+// ============================================================
+// Trading Rule parsing types
+// ============================================================
+
+/// A single parsed trading rule returned by AI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TradingRuleResponse {
+    pub name: String,
+    pub conditions: Vec<RuleConditionResponse>,
+    pub signal: String, // "buy" | "sell" | "alert"
+}
+
+/// A single condition within a trading rule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuleConditionResponse {
+    #[serde(rename = "type")]
+    pub condition_type: String,
+    pub params: HashMap<String, serde_json::Value>,
+}
+
+/// Wrapper for the JSON response from DeepSeek (force_json requires a top-level object).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ParseRulesResponse {
+    rules: Vec<TradingRuleResponse>,
 }
 
 // ============================================================
@@ -1277,10 +1391,11 @@ fn robust_json_extract(text: &str) -> Option<String> {
                 b'\\' if in_string => escape = true,
                 b'{' if !in_string => depth += 1,
                 b'}' if !in_string => {
+                    // Decrement first, then check for root return
+                    depth = depth.saturating_sub(1);
                     if depth == 0 {
                         return Some(text[start..=i].to_string());
                     }
-                    depth -= 1;
                 }
                 _ => {}
             }
@@ -1302,10 +1417,11 @@ fn robust_json_extract(text: &str) -> Option<String> {
                 b'\\' if in_string => escape = true,
                 b'[' if !in_string => depth += 1,
                 b']' if !in_string => {
+                    // Decrement first, then check for root return
+                    depth = depth.saturating_sub(1);
                     if depth == 0 {
                         return Some(text[start..=i].to_string());
                     }
-                    depth -= 1;
                 }
                 _ => {}
             }
