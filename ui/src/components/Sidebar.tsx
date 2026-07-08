@@ -1,41 +1,35 @@
 import { useAppStore } from '@/store/useAppStore';
-import { Search, Star, ChevronLeft, ChevronRight, Settings, TrendingUp, BrainCircuit, ScrollText, LayoutGrid, FlaskConical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, ScrollText, FlaskConical, LayoutGrid, Settings, BarChart3 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
-  '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist',
+  '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
   '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
 };
 
-/**
- * 精简导航结构（个股分析已合并至各入口，指标实验室已整合至 K 线图）
- *
- *  Primary: 自選 / 搜尋 — 核心入口
- *  Tools:   回測 / 預測 / 規則 — 基于当前个股的工具
- *  Secondary: 板塊 / 設置
- */
 const navGroups = [
   {
     label: '核心',
     items: [
-      { id: 'watchlist' as const, label: '自選', icon: Star, path: '/watchlist', desc: '首页 · 快速进入个股分析' },
-      { id: 'search' as const, label: '搜尋', icon: Search, path: '/search', desc: '搜索股票直达分析页' },
+      { id: 'watchlist' as const, label: '自選', icon: Star, path: '/watchlist' },
+      { id: 'quote' as const, label: '行情', icon: BarChart3, path: '/quote' },
+      { id: 'search' as const, label: '搜尋', icon: Search, path: '/search' },
     ],
   },
   {
     label: '分析工具',
     items: [
-      { id: 'backtest' as const, label: '回測', icon: TrendingUp, path: '/backtest', desc: '策略回测' },
-      { id: 'predict' as const, label: '預測', icon: BrainCircuit, path: '/predict', desc: 'AI 预测' },
-      { id: 'rules' as const, label: '規則', icon: ScrollText, path: '/rules', desc: '交易规则' },
-      { id: 'indicatorLab' as const, label: '支撐線', icon: FlaskConical, path: '/indicator-lab', desc: '技术指标实验室' },
+      { id: 'backtest' as const, label: '回測', icon: TrendingUp, path: '/backtest' },
+      { id: 'predict' as const, label: '預測', icon: BrainCircuit, path: '/predict' },
+      { id: 'rules' as const, label: '規則', icon: ScrollText, path: '/rules' },
+      { id: 'indicatorLab' as const, label: '支撐線', icon: FlaskConical, path: '/indicator-lab' },
     ],
   },
   {
     label: '系統',
     items: [
-      { id: 'sector' as const, label: '板塊', icon: LayoutGrid, path: '/sector', desc: '板块个股排名' },
-      { id: 'settings' as const, label: '設置', icon: Settings, path: '/settings', desc: '系统设置' },
+      { id: 'sector' as const, label: '板塊', icon: LayoutGrid, path: '/sector' },
+      { id: 'settings' as const, label: '設置', icon: Settings, path: '/settings' },
     ],
   },
 ];
@@ -46,7 +40,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab'];
+  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {
@@ -83,18 +77,18 @@ export default function Sidebar() {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                const Icon = item.icon;
                 const active = isActive(item.id);
+                const Icon = item.icon;
                 return (
                   <Link key={item.id} to={buildPath(item)}
-                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors rounded-lg ${
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors border-l-[3px] ${
                       active
-                        ? 'bg-[hsl(var(--accent-subtle))] text-[hsl(var(--accent))]'
-                        : 'text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--border-subtle))] hover:text-[hsl(var(--text-primary))]'
+                        ? 'border-l-[hsl(var(--swiss-accent))] text-[var(--text-primary)] font-bold'
+                        : 'border-l-transparent text-[var(--text-secondary)] hover:border-l-[var(--border-default)] hover:text-[var(--text-primary)]'
                     } ${sidebarOpen ? '' : 'justify-center'}`}
                     title={sidebarOpen ? undefined : item.label}
                   >
-                    <Icon size={17} className={active ? '' : 'opacity-60'} />
+                    <Icon size={17} className="shrink-0" />
                     {sidebarOpen && <span>{item.label}</span>}
                   </Link>
                 );
@@ -122,7 +116,7 @@ export default function Sidebar() {
       )}
 
       <div className="border-t px-3 py-2 text-[9px] font-bold tracking-widest" style={{ borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-tertiary))' }}>
-        {sidebarOpen ? 'STOCKMATE · 个股深度分析' : 'SM'}
+        {sidebarOpen ? '' : 'SM'}
       </div>
     </>
   );

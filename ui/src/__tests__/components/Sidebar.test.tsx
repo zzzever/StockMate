@@ -12,6 +12,7 @@ const mockStore = {
   toggleSidebar,
   toggleDarkMode: vi.fn(),
   setSelectedStock: vi.fn(),
+  selectedStock: null,
 };
 
 vi.mock('@/store/useAppStore', () => ({
@@ -34,11 +35,13 @@ describe('Sidebar', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('StockMate')).toBeInTheDocument();
-    expect(screen.getByText('板块排名')).toBeInTheDocument();
-    expect(screen.getByText('AI分析')).toBeInTheDocument();
-    expect(screen.getByText('策略回测')).toBeInTheDocument();
-    expect(screen.getByText('走势预测')).toBeInTheDocument();
-    expect(screen.getByText('设置')).toBeInTheDocument();
+    // Swiss-style text-only nav labels
+    expect(screen.getByText('自選')).toBeInTheDocument();
+    expect(screen.getByText('行情')).toBeInTheDocument();
+    expect(screen.getByText('搜尋')).toBeInTheDocument();
+    expect(screen.getByText('回測')).toBeInTheDocument();
+    expect(screen.getByText('預測')).toBeInTheDocument();
+    expect(screen.getByText('規則')).toBeInTheDocument();
   });
 
   it('calls toggleSidebar when collapse button is clicked', () => {
@@ -58,34 +61,37 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    const sectorsLink = screen.getByText('板块排名').closest('a');
-    expect(sectorsLink).toHaveAttribute('href', '/sectors');
-    const stockLink = screen.getByText('AI分析').closest('a');
-    expect(stockLink).toHaveAttribute('href', '/stock');
-    const backtestLink = screen.getByText('策略回测').closest('a');
+    const watchlistLink = screen.getByText('自選').closest('a');
+    expect(watchlistLink).toHaveAttribute('href', '/watchlist');
+    const searchLink = screen.getByText('搜尋').closest('a');
+    expect(searchLink).toHaveAttribute('href', '/search');
+    const backtestLink = screen.getByText('回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
-    const predictLink = screen.getByText('走势预测').closest('a');
+    const predictLink = screen.getByText('預測').closest('a');
     expect(predictLink).toHaveAttribute('href', '/predict');
-    const settingsLink = screen.getByText('设置').closest('a');
+    const settingsLink = screen.getByText('設置').closest('a');
     expect(settingsLink).toHaveAttribute('href', '/settings');
   });
 
   it('shows active state for current page', () => {
     render(
-      <MemoryRouter initialEntries={['/sectors']}>
+      <MemoryRouter initialEntries={['/sector']}>
         <Sidebar />
       </MemoryRouter>
     );
-    const sectorsLink = screen.getByText('板块排名').closest('a');
-    expect(sectorsLink).toHaveClass('bg-violet-100');
+    const sectorsLink = screen.getByText('板塊').closest('a');
+    // Swiss style: active = border-left-* + font-bold, not bg-violet-100
+    expect(sectorsLink).toHaveClass('font-bold');
   });
 
-  it('renders version info', () => {
+  it('shows SM when collapsed', () => {
+    mockStore.sidebarOpen = false;
     render(
       <MemoryRouter>
         <Sidebar />
       </MemoryRouter>
     );
-    expect(screen.getByText('v0.2.0')).toBeInTheDocument();
+    expect(screen.getByText('SM')).toBeInTheDocument();
+    mockStore.sidebarOpen = true;
   });
 });

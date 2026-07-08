@@ -371,10 +371,7 @@ function SliderInput({ label, value, min, max, step, onChange }: {
           const val = Number(e.target.value);
           onChange(isNaN(val) ? min : val);
         }}
-        className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-200 dark:bg-white/10 appearance-none cursor-pointer accent-violet-400"
-        style={{
-          background: `linear-gradient(to right, rgba(139,92,246,0.6) ${((value - min) / (max - min)) * 100}%, rgba(255,255,255,0.1) ${((value - min) / (max - min)) * 100}%)`,
-        }}
+        className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-white/10 appearance-none cursor-pointer accent-gray-700"
       />
     </div>
   );
@@ -879,10 +876,7 @@ export default function BacktestPage() {
                       type="range" min={10000} max={1000000} step={10000}
                       value={params.initialCapital}
                       onChange={e => setParams(p => ({ ...p, initialCapital: Number(e.target.value) }))}
-                      className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-                      style={{
-                        background: `linear-gradient(to right, rgba(139,92,246,0.6) ${(params.initialCapital - 10000) / 990000 * 100}%, rgba(255,255,255,0.1) ${(params.initialCapital - 10000) / 990000 * 100}%)`,
-                      }}
+                      className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-slate-200 dark:bg-white/10 accent-gray-700"
                     />
                   </div>
                   <PercentInput label="手续费率" value={params.commissionRate * 100} min={0} max={0.5} step={0.01} onChange={v => setParams(p => ({ ...p, commissionRate: v / 100 }))} />

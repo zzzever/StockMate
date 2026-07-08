@@ -179,61 +179,17 @@ pub async fn calculate_ma(stock_id: String, days: u32, state: State<'_, AppState
 }
 
 #[tauri::command]
+pub async fn get_index_quotes() -> Result<Vec<data_fetcher::market_data::PriceData>, domain::ApiError> {
+    let codes = ["000001.SH", "000300.SH", "399006.SZ"];
+    Ok(data_fetcher::market_data::fetch_realtime_batch(&codes).await)
+}
+
+#[tauri::command]
 pub async fn calculate_support_resistance(stock_id: String, state: State<'_, AppState>) -> Result<domain::SupportResistance, domain::ApiError> {
     validate_stock_id(&stock_id)?;
-    use rust_decimal::Decimal;
-
     let history = state.data_service.get_stock_history(&stock_id, 60, "day").await?;
-    if history.is_empty() {
-        return Ok(domain::SupportResistance {
-            stock_id: stock_id.clone(),
-            supports: vec![],
-            resistances: vec![],
-            nearest_support: None,
-            nearest_resistance: None,
-        });
-    }
-
-    let latest = history.last().unwrap();
-    let current_price = latest.close.to_f64().unwrap_or(0.0);
-
-    // Collect recent lows and highs (last 30 days)
-    let recent = history.iter().rev().take(30).collect::<Vec<_>>();
-    let mut lows: Vec<f64> = recent.iter().map(|q| q.low.to_f64().unwrap_or(0.0)).filter(|&v| v > 0.0).collect();
-    let mut highs: Vec<f64> = recent.iter().map(|q| q.high.to_f64().unwrap_or(0.0)).filter(|&v| v > 0.0).collect();
-
-    lows.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    lows.dedup_by(|a, b| (*b - *a).abs() < 0.01);
-    highs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    highs.dedup_by(|a, b| (*b - *a).abs() < 0.01);
-
-    // Supports: lowest 2 unique lows
-    let supports: Vec<Decimal> = lows.iter().take(2).map(|&v| {
-        Decimal::from_f64_retain(v).unwrap_or_default()
-    }).collect();
-
-    // Resistances: highest 2 unique highs
-    let resistances: Vec<Decimal> = highs.iter().rev().take(2).map(|&v| {
-        Decimal::from_f64_retain(v).unwrap_or_default()
-    }).collect();
-
-    // nearest_support: highest support below current price
-    let nearest_support = lows.iter().rev().find(|&&v| v < current_price).map(|&v| {
-        Decimal::from_f64_retain(v).unwrap_or_default()
-    });
-
-    // nearest_resistance: lowest resistance above current price
-    let nearest_resistance = highs.iter().find(|&&v| v > current_price).map(|&v| {
-        Decimal::from_f64_retain(v).unwrap_or_default()
-    });
-
-    Ok(domain::SupportResistance {
-        stock_id: stock_id.clone(),
-        supports,
-        resistances,
-        nearest_support,
-        nearest_resistance,
-    })
+    // Use the proper local-extrema clustering algorithm from the screener crate
+    Ok(screener::support_resistance::calculate_sr(&history, &stock_id, 30))
 }
 
 #[tauri::command]
@@ -388,8 +344,17 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
         code: 500, message: format!("Failed to fetch watchlist: {}", e), details: None,
     })?;
 
-    // Fetch batch realtime prices
-    let codes: Vec<String> = items.iter().map(|i| i.stock_code.clone()).collect();
+    // Fetch batch realtime prices — reconstruct exchange-suffixed codes
+    // (e.g. "600519" + "SH" → "600519.SH") so the Tencent API can parse them.
+    let codes: Vec<String> = items.iter().map(|i| {
+        let suffix = match i.exchange.as_str() {
+            "SH" => ".SH",
+            "SZ" => ".SZ",
+            "BJ" => ".BJ",
+            _ => "",
+        };
+        format!("{}{}", i.stock_code, suffix)
+    }).collect();
     let codes_refs: Vec<&str> = codes.iter().map(|s| s.as_str()).collect();
     let prices = if codes_refs.is_empty() {
         vec![]

@@ -358,24 +358,22 @@ function ChartStyleSelector() {
   const styles = Object.entries(chartThemes) as [ChartStyle, typeof chartThemes['classic']][];
 
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="grid grid-cols-3 gap-2">
       {styles.map(([key, config]) => (
         <button
           key={key}
           onClick={() => setChartStyle(key)}
-          className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+          className={`relative flex flex-col items-center gap-1.5 p-3 border transition-all ${
             chartStyle === key
-              ? 'border-violet-500/50 bg-violet-500/10'
-              : 'border-slate-100 dark:border-slate-100 dark:border-white/5 bg-slate-100 dark:bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:bg-slate-200 dark:bg-white/10'
+              ? 'border-gray-900 dark:border-white bg-gray-100 dark:bg-white/10'
+              : 'border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-gray-400'
           }`}
         >
-          <span className="text-xl">{config.icon}</span>
-          <span className="text-xs text-slate-700 dark:text-slate-700 dark:text-zinc-300 font-medium">{config.name}</span>
-          <span className="text-[10px] text-slate-500 dark:text-slate-500 dark:text-zinc-500">{config.description}</span>
-          {/* Preview colors */}
+          <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{config.name}</span>
+          <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>{config.description}</span>
           <div className="flex gap-1 mt-1">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: config.upColor }} />
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: config.downColor }} />
+            <div className="w-3 h-3" style={{ backgroundColor: config.upColor }} />
+            <div className="w-3 h-3" style={{ backgroundColor: config.downColor }} />
             <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: config.ma5Color }} />
           </div>
           {chartStyle === key && (

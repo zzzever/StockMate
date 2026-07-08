@@ -1,24 +1,13 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type AreaData, type LineData, type Time, LineStyle } from 'lightweight-charts';
+import { createChart, type IChartApi, type ISeriesApi, type LineData, type Time, LineStyle } from 'lightweight-charts';
 import { type Quote } from '@/types';
 import { fmtPrice, fmtPct } from '@/lib/format';
 import { getChartTheme, type ChartStyle } from '@/config/chartThemes';
-
-function hexToRgba(hex: string, alpha: number): string {
-  if (hex.startsWith('rgba')) return hex.replace(/[\d.]+\)$/, `${alpha})`);
-  if (hex.startsWith('rgb')) return hex.replace('rgb', 'rgba').replace(')', `,${alpha})`);
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  if (isNaN(r)) return hex; // fallback
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
 function safeNum(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 function fmtHM(ts: number): string { const d = new Date(ts * 1000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 const HALF_HOURS = new Set(['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00']);
 
-// ── Build 48 five-min slots 09:30-15:00 ──
 function buildSlots() {
   const s: { time: string; ts: number }[] = [];
   const d = '2024-01-01';
@@ -28,52 +17,31 @@ function buildSlots() {
 }
 const ALL_SLOTS = buildSlots();
 
-// ── Design tokens — derived from chart theme ──
-
 interface Props { data: Quote[]; prevClose: number; loading?: boolean; className?: string; chartStyle?: ChartStyle; }
 
 export function IntradayChart({ data, prevClose, loading = false, className, chartStyle: chartStyleProp }: Props) {
-  const chartStyle = chartStyleProp ?? 'manga' as ChartStyle;
+  const chartStyle = chartStyleProp ?? 'classic' as ChartStyle;
   const theme = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
-  // Derive area colors from theme (follows 红涨绿跌 Chinese convention: up=red, down=green)
-  const UP_COLOR = useMemo(() => ({
-    line: theme.upColor,
-    top: hexToRgba(theme.upColor, 0.28),
-    mid: hexToRgba(theme.upColor, 0.08),
-    bottom: hexToRgba(theme.upColor, 0.0),
-  }), [theme]);
-  const DOWN_COLOR = useMemo(() => ({
-    line: theme.downColor,
-    top: hexToRgba(theme.downColor, 0.0),
-    mid: hexToRgba(theme.downColor, 0.08),
-    bottom: hexToRgba(theme.downColor, 0.28),
-  }), [theme]);
   const elRef = useRef<HTMLDivElement>(null);
-  const storeRef = useRef<{ chart: IChartApi; green: ISeriesApi<'Area'>; red: ISeriesApi<'Area'>; base: ISeriesApi<'Line'>; price: ISeriesApi<'Line'> } | null>(null);
+  const storeRef = useRef<{ chart: IChartApi; price: ISeriesApi<'Line'>; base: ISeriesApi<'Line'> } | null>(null);
   const prevCloseRef = useRef(prevClose); prevCloseRef.current = prevClose;
   const [tip, setTip] = useState<{ x: number; y: number; price: number; time: string; pct: number } | null>(null);
 
-  // Build price lookup: "HH:MM" → close
   const priceMap = useMemo(() => {
     const m = new Map<string, number>();
     for (const q of Array.isArray(data) ? data : []) { if (q.time?.length >= 5) { const p = safeNum(q.close); if (p > 0) m.set(q.time.slice(0, 5), p); } }
     return m;
   }, [data]);
 
-  // Fill 48 slots with NaN gaps
-  const { greenData, redData, baselineData, priceLine } = useMemo(() => {
-    const g: AreaData[] = []; const r: AreaData[] = []; const b: LineData[] = []; const pl: LineData[] = [];
+  const { baselineData, priceLine } = useMemo(() => {
+    const b: LineData[] = []; const pl: LineData[] = [];
     const bp = prevClose > 0 ? prevClose : (priceMap.size > 0 ? [...priceMap.values()][0] : 0);
     for (const slot of ALL_SLOTS) {
-      const ts = slot.ts as Time; b.push({ time: ts, value: bp });
+      b.push({ time: slot.ts as Time, value: bp });
       const price = priceMap.get(slot.time);
-      if (price !== undefined && price > 0) {
-        pl.push({ time: ts, value: price });
-        if (price >= bp) { g.push({ time: ts, value: price }); r.push({ time: ts, value: NaN }); }
-        else { g.push({ time: ts, value: NaN }); r.push({ time: ts, value: price }); }
-      } else { g.push({ time: ts, value: NaN }); r.push({ time: ts, value: NaN }); }
+      if (price !== undefined && price > 0) pl.push({ time: slot.ts as Time, value: price });
     }
-    return { greenData: g, redData: r, baselineData: b, priceLine: pl };
+    return { baselineData: b, priceLine: pl };
   }, [priceMap, prevClose]);
 
   useEffect(() => {
@@ -88,16 +56,12 @@ export function IntradayChart({ data, prevClose, loading = false, className, cha
       handleScroll: false, handleScale: false, autoSize: true,
     });
 
-    // Price line (thin, on top) — use a neutral color from theme
-    const priceLineSeries = chart.addLineSeries({ color: t.textColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    const areaGreen = chart.addAreaSeries({ topColor: UP_COLOR.top, bottomColor: UP_COLOR.mid, lineColor: UP_COLOR.line, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: UP_COLOR.line, crosshairMarkerBorderColor: '#fff' });
-    const areaRed = chart.addAreaSeries({ topColor: DOWN_COLOR.mid, bottomColor: DOWN_COLOR.bottom, lineColor: DOWN_COLOR.line, lineWidth: 1, invertFilledArea: true, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: DOWN_COLOR.line, crosshairMarkerBorderColor: '#fff' });
-    // Baseline (dashed) — use a muted theme color
+    const priceSeries = chart.addLineSeries({ color: t.textColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerRadius: 3, crosshairMarkerBackgroundColor: t.textColor, crosshairMarkerBorderColor: '#fff' });
     const baseline = chart.addLineSeries({ color: t.volumeMaColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
 
     chart.subscribeCrosshairMove((param: any) => {
       if (!param.time || param.point === undefined) { setTip(null); return; }
-      const sd = param.seriesData.get(areaGreen) ?? param.seriesData.get(areaRed);
+      const sd = param.seriesData.get(priceSeries);
       const price = sd?.value;
       if (price === undefined || price === null || !Number.isFinite(price) || isNaN(price)) { setTip(null); return; }
       const pc = prevCloseRef.current; const pct = pc > 0 ? ((price - pc) / pc * 100) : 0;
@@ -105,50 +69,50 @@ export function IntradayChart({ data, prevClose, loading = false, className, cha
       setTip({ x: Math.min((param.point?.x ?? 0) + 12, w - 150), y: Math.max(4, (param.point?.y ?? 0) - 56), price: price as number, time: fmtHM(param.time as number), pct });
     });
 
-    storeRef.current = { chart, green: areaGreen, red: areaRed, base: baseline, price: priceLineSeries };
+    storeRef.current = { chart, price: priceSeries, base: baseline };
     try { const a = el.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) { }
     return () => { if (storeRef.current) { try { storeRef.current.chart.remove(); } catch (_) { } storeRef.current = null; } };
   }, []);
 
   useEffect(() => {
     const s = storeRef.current; if (!s) return;
-    s.green.setData(greenData); s.red.setData(redData);
-    s.base.setData(baselineData); s.price.setData(priceLine);
+    s.price.setData(priceLine);
+    s.base.setData(baselineData);
     if (ALL_SLOTS.length > 0) s.chart.timeScale().setVisibleRange({ from: ALL_SLOTS[0].ts as Time, to: ALL_SLOTS[47].ts as Time });
-  }, [greenData, redData, baselineData, priceLine]);
+  }, [priceLine, baselineData]);
 
   const changePct = useMemo(() => { if (!data?.length || prevClose <= 0) return null; return ((safeNum(data[data.length - 1].close) - prevClose) / prevClose) * 100; }, [data, prevClose]);
   const lastPrice = data?.length ? safeNum(data[data.length - 1].close) : null;
   const barCount = priceMap.size;
 
   return (
-    <div className={`flex flex-col rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${className ?? ''}`}>
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100 dark:border-zinc-800 shrink-0">
+    <div className={`flex flex-col border border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${className ?? ''}`}>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-zinc-800 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-semibold text-slate-500 dark:text-zinc-400 tracking-wide">分时走势</span>
-          <span className="text-[10px] text-slate-400">{barCount}/48</span>
+          <span className="text-xs font-semibold tracking-wide" style={{ color: 'hsl(var(--text-secondary))' }}>分时走势</span>
+          <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>{barCount}/48</span>
         </div>
         <div className="flex items-center gap-3">
-          {lastPrice !== null && <span className="text-sm font-mono font-bold text-slate-800 dark:text-zinc-100">¥{fmtPrice(lastPrice)}</span>}
+          {lastPrice !== null && <span className="text-sm font-mono-nums font-bold" style={{ color: 'hsl(var(--text-primary))' }}>¥{fmtPrice(lastPrice)}</span>}
           {changePct !== null && (
-            <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${changePct >= 0 ? 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-500/10' : 'text-emerald-600 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10'}`}>
+            <span className={`text-xs font-mono-nums font-bold px-2 py-0.5 ${changePct >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}`}>
               {changePct >= 0 ? '+' : ''}{fmtPct(changePct)}%
             </span>
           )}
-          {loading && <span className="text-xs text-slate-400 animate-pulse">…</span>}
+          {loading && <span className="text-xs animate-pulse" style={{ color: 'hsl(var(--text-tertiary))' }}>…</span>}
         </div>
       </div>
       <div className="relative" style={{ height: 360 }}>
         <div ref={elRef} className="absolute inset-0" />
         {!loading && (!data || data.length === 0) && (
-          <div className="absolute inset-0 flex items-center justify-center z-10"><span className="text-sm text-slate-400">暂无分时数据</span></div>
+          <div className="absolute inset-0 flex items-center justify-center z-10"><span className="text-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>暂无分时数据</span></div>
         )}
         {tip && (
-          <div className="absolute z-20 px-3 py-2 rounded-lg bg-slate-900/95 dark:bg-black/90 pointer-events-none border border-white/10 shadow-xl" style={{ left: tip.x, top: tip.y, fontSize: 11, fontFamily: 'monospace', color: '#e2e8f0' }}>
-            <div className="text-slate-400 text-[10px] mb-1">{tip.time}</div>
+          <div className="absolute z-20 px-3 py-2 bg-white dark:bg-slate-900 pointer-events-none border border-gray-200 dark:border-white/10" style={{ left: tip.x, top: tip.y, fontSize: 11, fontFamily: 'monospace' }}>
+            <div className="text-[10px] mb-1" style={{ color: 'hsl(var(--text-tertiary))' }}>{tip.time}</div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-white text-sm">{fmtPrice(tip.price)}</span>
-              <span className={`text-xs font-bold ${tip.pct >= 0 ? 'text-red-400' : 'text-emerald-400'}`}>{tip.pct >= 0 ? '+' : ''}{fmtPct(tip.pct)}%</span>
+              <span className="font-bold text-sm" style={{ color: 'hsl(var(--text-primary))' }}>{fmtPrice(tip.price)}</span>
+              <span className={`text-xs font-bold ${tip.pct >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}`}>{tip.pct >= 0 ? '+' : ''}{fmtPct(tip.pct)}%</span>
             </div>
           </div>
         )}

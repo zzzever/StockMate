@@ -435,10 +435,12 @@ impl WatchlistRepository {
     }
 
     pub async fn add(&self, symbol: &str, name: Option<&str>, alert_price: Option<f64>, notes: Option<&str>) -> Result<()> {
+        let group = name.unwrap_or("default");
         sqlx::query(
-            "INSERT OR REPLACE INTO watchlist (symbol, alert_price, notes) VALUES (?1, ?2, ?3)"
+            "INSERT OR IGNORE INTO watchlist (symbol, name, alert_price, notes) VALUES (?1, ?2, ?3, ?4)"
         )
         .bind(symbol)
+        .bind(group)
         .bind(alert_price)
         .bind(notes)
         .execute(&self.pool)
@@ -760,6 +762,7 @@ mod tests {
             industry: Some("Consumer Electronics".into()),
             market_cap: Some(Decimal::new(3_000_000_000_000i64, 0)),
             currency: "USD".into(),
+            stock_type: "stock".into(),
         };
 
         repo.insert(&stock).await.unwrap();
@@ -790,6 +793,7 @@ mod tests {
         let quote = Quote {
             stock_id: "stock_001".into(),
             date: NaiveDate::from_ymd_opt(2024, 6, 15).unwrap(),
+            time: String::new(),
             open: Decimal::new(15000, 2),
             high: Decimal::new(15500, 2),
             low: Decimal::new(14800, 2),
@@ -910,6 +914,87 @@ mod tests {
 
         let items = repo.get_all().await.unwrap();
         assert_eq!(items.len(), 0);
+    }
+
+    // ============================
+    // exchange_for_symbol
+    // ============================
+
+    #[test]
+    fn test_exchange_for_symbol_sh_a() {
+        assert_eq!(exchange_for_symbol("600519"), "SH");  // 上海A股
+    }
+    #[test]
+    fn test_exchange_for_symbol_sh_star() {
+        assert_eq!(exchange_for_symbol("688981"), "SH");  // 科创板
+    }
+    #[test]
+    fn test_exchange_for_symbol_sh_b() {
+        assert_eq!(exchange_for_symbol("900957"), "SH");  // 上海B股
+    }
+    #[test]
+    fn test_exchange_for_symbol_sh_b_boundary() {
+        assert_eq!(exchange_for_symbol("901234"), "SH");  // 上海B股 901范围
+    }
+    #[test]
+    fn test_exchange_for_symbol_bj_920() {
+        assert_eq!(exchange_for_symbol("920001"), "BJ");  // 北交所
+    }
+    #[test]
+    fn test_exchange_for_symbol_bj_920_boundary() {
+        assert_eq!(exchange_for_symbol("920999"), "BJ");  // 北交所边界
+    }
+    #[test]
+    fn test_exchange_for_symbol_sz_main() {
+        assert_eq!(exchange_for_symbol("000001"), "SZ");  // 深圳主板
+    }
+    #[test]
+    fn test_exchange_for_symbol_sz_sme() {
+        assert_eq!(exchange_for_symbol("002415"), "SZ");  // 深圳中小板
+    }
+    #[test]
+    fn test_exchange_for_symbol_sz_chi_next() {
+        assert_eq!(exchange_for_symbol("300750"), "SZ");  // 深圳创业板
+    }
+    #[test]
+    fn test_exchange_for_symbol_sz_b() {
+        assert_eq!(exchange_for_symbol("200550"), "SZ");  // 深圳B股
+    }
+    #[test]
+    fn test_exchange_for_symbol_bj_430() {
+        assert_eq!(exchange_for_symbol("430047"), "BJ");  // 北京新三板
+    }
+    #[test]
+    fn test_exchange_for_symbol_bj_830() {
+        assert_eq!(exchange_for_symbol("830000"), "BJ");  // 北交所
+    }
+    #[test]
+    fn test_exchange_for_symbol_bj_870() {
+        assert_eq!(exchange_for_symbol("870000"), "BJ");  // 北交所 8开头
+    }
+    #[test]
+    fn test_exchange_for_symbol_empty() {
+        assert_eq!(exchange_for_symbol(""), "");           // 空字符串
+    }
+    #[test]
+    fn test_exchange_for_symbol_non_numeric() {
+        assert_eq!(exchange_for_symbol("ABC"), "");        // 非数字
+    }
+    #[test]
+    fn test_exchange_for_symbol_short_6() {
+        assert_eq!(exchange_for_symbol("6"), "SH");        // 极短代码
+    }
+    #[test]
+    fn test_exchange_for_symbol_short_92() {
+        assert_eq!(exchange_for_symbol("92"), "SH");       // 以9开头但不以920开头
+    }
+    #[test]
+    fn test_exchange_for_symbol_hk() {
+        assert_eq!(exchange_for_symbol("00700"), "SZ");    // 港股5位→会被归为0开头
+    }
+    #[test]
+    fn test_exchange_for_symbol_us() {
+        assert_eq!(exchange_for_symbol("AAPL"), "");       // 美股代码
     }
 
     // ============================

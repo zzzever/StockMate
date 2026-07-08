@@ -215,7 +215,7 @@ export default function DailyReport({
             <button
               onClick={onGenerateReport}
               disabled={strategyLoading || aiLoading}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white border border-red-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-500/20"
+              className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold bg-red-600 hover:bg-red-700 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {(strategyLoading || aiLoading) ? (
                 <RefreshCw size={14} className="animate-spin" />
@@ -278,7 +278,7 @@ export default function DailyReport({
       {/* ── Report body (captured by html2canvas) ── */}
       <div ref={reportRef} className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 overflow-hidden">
         {/* Report Header */}
-        <div className="px-5 py-4 border-b border-gray-200 dark:border-zinc-800 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-800/50">
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -625,7 +625,7 @@ export default function DailyReport({
         <button
           onClick={onGenerateReport}
           disabled={strategyLoading || aiLoading}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white transition-all disabled:opacity-50 shadow-lg shadow-red-500/20"
+          className="flex items-center gap-2 px-4 py-2 rounded text-xs font-bold bg-red-600 hover:bg-red-700 text-white transition-all disabled:opacity-50"
         >
           {(strategyLoading || aiLoading) ? (
             <RefreshCw size={14} className="animate-spin" />

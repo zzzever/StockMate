@@ -1,1815 +1,307 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, type SeriesMarker, LineStyle, type LineWidth } from 'lightweight-charts';
-import {
-  ArrowLeft, ArrowUpRight, ArrowDownRight, Building2, DollarSign, TrendingUp, BarChart3,
-  RefreshCw, Brain, ChevronDown, ChevronUp, Activity, Shield, Target, AlertTriangle,
-  Maximize2, Minimize2, X, Star,
-} from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { useStockList, useStockDetail, useStockHistory, useStockFinance, useStockFundFlow, useRealtimeQuote, useIntraday, useDeepSeekConfig, useAnalyzeStockWithAI, useGenerateStrategyWithAI, useSupportResistance, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove } from '@/hooks/useTauriQuery';
-import { IntradayChart } from '@/components/IntradayChart';
-import DailyReport from '@/components/DailyReport';
+import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, LineStyle } from 'lightweight-charts';
+import { Star, RefreshCw } from 'lucide-react';
+import { useStockList, useStockDetail, useStockHistory, useStockFinance, useRealtimeQuote, useStockFundFlow, useIntraday, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove, useSupportResistance } from '@/hooks/useTauriQuery';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume, fmtAmount } from '@/lib/format';
-import { getChartTheme, type ChartThemeConfig } from '@/config/chartThemes';
-import { computeMACD, computeKDJ, computeRSI } from '@/utils/indicators';
-import { type StrategyScript, type SignalPoint } from '@/types';
-import { getCachedStrategyResult, cacheStrategyResult } from '@/hooks/useStrategyCache';
+import { getChartTheme } from '@/config/chartThemes';
+import type { StockFinance } from '@/types';
+import type { PriceData, Quote } from '@/types';
+import { invoke } from '@tauri-apps/api/core';
+import { IntradayChart } from '@/components/IntradayChart';
 
 function safeNumber(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
-function Badge({ text, type }: { text: string; type: 'buy' | 'sell' | 'hold' | 'neutral' }) {
-  const map = {
-    buy: 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30',
-    sell: 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30',
-    hold: 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/30',
-    neutral: 'bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-400 border-gray-200 dark:border-white/10',
-  };
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${map[type]}`}>{text}</span>;
-}
+// ── K-Line Chart (candle + MA5/10/20/60 + volume) ──
 
-function MetricCard({ label, value, unit, icon: Icon, highlight }: {
-  label: string; value: string; unit?: string; icon: React.ElementType; highlight?: 'up' | 'down' | 'neutral'
-}) {
-  const colorMap = { up: 'text-rose-600 dark:text-rose-400', down: 'text-emerald-600 dark:text-emerald-400', neutral: 'text-black dark:text-zinc-100' };
-  return (
-    <div className="glass-card-compact p-2.5">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon size={12} className="text-gray-500 dark:text-zinc-500" />
-        <span className="text-[10px] text-gray-500 dark:text-zinc-500 uppercase tracking-wide">{label}</span>
-      </div>
-      <div className={`text-sm font-semibold font-mono-nums ${colorMap[highlight ?? 'neutral']}`}>
-        {value} {unit && <span className="text-[10px] font-normal text-gray-400 dark:text-zinc-400">{unit}</span>}
-      </div>
-    </div>
-  );
-}
+const SMA = (data: number[], period: number): (number | null)[] => data.map((_, i) => i < period - 1 ? null : data.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period);
 
-// Price header mini-stat
-function MiniStat({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="text-center">
-      <div className="text-[10px] text-gray-500 dark:text-zinc-500 uppercase tracking-wide">{label}</div>
-      <div className={`text-xs font-mono-nums font-medium ${color ?? 'text-black dark:text-zinc-200'}`}>{value}</div>
-    </div>
-  );
-}
-
-interface ChartsRef {
-  mc: IChartApi;
-  vc: IChartApi;
-  ic: IChartApi;
-  candle: ISeriesApi<'Candlestick'>;
-  ma5: ISeriesApi<'Line'>;
-  ma10: ISeriesApi<'Line'>;
-  ma20: ISeriesApi<'Line'>;
-  ma60: ISeriesApi<'Line'>;
-  bbU: ISeriesApi<'Line'>;
-  bbM: ISeriesApi<'Line'>;
-  bbL: ISeriesApi<'Line'>;
-  vol: ISeriesApi<'Histogram'>;
-  indHist: ISeriesApi<'Histogram'>;
-  indLine1: ISeriesApi<'Line'>;
-  indLine2: ISeriesApi<'Line'>;
-  indLine3: ISeriesApi<'Line'>;
-  supportLines: any[];
-  resistanceLines: any[];
-}
-
-interface KLineCrosshairData {
-  time: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  changePrice: number;
-  changePct: number;
-  isUp: boolean;
-  volume: number;
-  amount: number;
-  ma5: number | null;
-  ma10: number | null;
-  ma20: number | null;
-  ma60: number | null;
-  dif?: number | null;
-  dea?: number | null;
-  macdHist?: number | null;
-  k?: number | null;
-  d?: number | null;
-  j?: number | null;
-  rsi?: number | null;
-}
-
-function KLineChart({ data, indicator, period, onCrosshairMove, markers, strategyResult, focusTime, height = 500, onMarkerClick }: {
-  data: any[]; indicator: string; period: string;
-  onCrosshairMove?: (data: KLineCrosshairData | null) => void;
-  markers?: SeriesMarker<Time>[];
-  strategyResult?: StrategyScript | null;
-  focusTime?: string | null;
-  height?: number | string;
-  onMarkerClick?: (data: { signal: SignalPoint; strategyName: string }) => void;
-}) {
-  const chartStyle = useAppStore((s) => s.chartStyle);
+function SimpleKLine({ data, onCrosshairMove }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void }) {
+  const chartStyle = useAppStore(s => s.chartStyle);
   const T = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
   const mainRef = useRef<HTMLDivElement>(null);
   const volRef = useRef<HTMLDivElement>(null);
-  const indRef = useRef<HTMLDivElement>(null);
-  const charts = useRef<ChartsRef | null>(null);
-  const onCrosshairMoveRef = useRef(onCrosshairMove);
-  onCrosshairMoveRef.current = onCrosshairMove;
-  const periodRef = useRef(period);
-  periodRef.current = period;
-  const cleanupRef = useRef<number | null>(null);
+  const charts = useRef<{ mc: IChartApi; candle: ISeriesApi<'Candlestick'>; vol: ISeriesApi<'Histogram'>; ma5: ISeriesApi<'Line'>; ma10: ISeriesApi<'Line'>; ma20: ISeriesApi<'Line'>; ma60: ISeriesApi<'Line'> } | null>(null);
+  const onCrosshairMoveRef = useRef(onCrosshairMove); onCrosshairMoveRef.current = onCrosshairMove;
+  const dataRef = useRef(data); dataRef.current = data;
 
-  const markersRef = useRef(markers);
-  markersRef.current = markers;
-  const strategyResultRef = useRef(strategyResult);
-  strategyResultRef.current = strategyResult;
-  const onMarkerClickRef = useRef(onMarkerClick);
-  onMarkerClickRef.current = onMarkerClick;
-
-  const arr = Array.isArray(data) ? data.filter((q: any) => q && q.date) : [];
-  const items = useMemo(() => arr.map((q: any) => ({ time: String(q.date), open: Number(q.open) || 0, high: Number(q.high) || 0, low: Number(q.low) || 0, close: Number(q.close) || 0 })), [data]);
-  const volItems = useMemo(() => arr.map((q: any) => ({ time: String(q.date), value: Number(q.volume ?? 0) / 100, color: Number(q.close) >= Number(q.open) ? T.volumeUpColor : T.volumeDownColor })), [data, T]);
-  const closes = useMemo(() => arr.map((q: any) => Number(q.close) || 0), [data]);
-  const dates = useMemo(() => arr.map((q: any) => String(q.date)), [data]);
-  const highs = useMemo(() => arr.map((q: any) => Number(q.high) || 0), [data]);
-  const lows = useMemo(() => arr.map((q: any) => Number(q.low) || 0), [data]);
-
-  // SMA helper
-  const sma = (period: number) => {
-    const r: any[] = [];
-    for (let i = 0; i < closes.length; i++) {
-      if (i < period - 1) { r.push({ time: String(arr[i].date), value: NaN }); continue; }
-      let s = 0; for (let j = i - period + 1; j <= i; j++) s += closes[j];
-      r.push({ time: String(arr[i].date), value: s / period });
-    }
-    return r;
-  };
-
-  const ma5d = useMemo(() => sma(5), [closes]);
-  const ma10d = useMemo(() => sma(10), [closes]);
-  const ma20d = useMemo(() => sma(20), [closes]);
-  const ma60d = useMemo(() => sma(60), [closes]);
-
-  // Refs for crosshair tooltip data access (always up-to-date)
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-  const arrRef = useRef(arr);
-  arrRef.current = arr;
-  const ma5Ref = useRef(ma5d);
-  ma5Ref.current = ma5d;
-  const ma10Ref = useRef(ma10d);
-  ma10Ref.current = ma10d;
-  const ma20Ref = useRef(ma20d);
-  ma20Ref.current = ma20d;
-  const ma60Ref = useRef(ma60d);
-  ma60Ref.current = ma60d;
-  const indicatorRef = useRef(indicator); indicatorRef.current = indicator;
-  const volItemsRef = useRef(volItems); volItemsRef.current = volItems;
-
-  // Shared crosshair data builder for all three chart callbacks (mc, vc, ic)
-  function buildCrosshairData(param: MouseEventParams): KLineCrosshairData | null {
-    const c2 = charts.current;
-    if (!c2 || !param.time || !param.point) return null;
-    const d = param.seriesData.get(c2.candle) as any;
-    const timeStr = typeof param.time === 'string' ? param.time : String(param.time);
-    let o: number, h: number, l: number, cl: number;
-    if (d) {
-      o = d.open ?? 0; h = d.high ?? 0; l = d.low ?? 0; cl = d.close ?? 0;
-    } else {
-      // On vc/ic chart: look up from itemsRef by time (candle series is not on these charts)
-      const item = itemsRef.current.find((i: any) => String(i.time) === timeStr);
-      if (!item) return null;
-      o = Number(item.open ?? 0); h = Number(item.high ?? 0);
-      l = Number(item.low ?? 0); cl = Number(item.close ?? 0);
-    }
-    // Compute change vs previous day's close (A-share standard)
-    const itemsData = itemsRef.current;
-    const idx = itemsData.findIndex((item: any) => String(item.time) === timeStr);
-    const prevCloseVal = idx > 0 ? Number(itemsData[idx - 1].close) || 0 : 0;
-    const chgPrice = prevCloseVal > 0 ? cl - prevCloseVal : 0;
-    const chgPct = prevCloseVal > 0 ? (chgPrice / prevCloseVal) * 100 : 0;
-    const isUp = chgPrice > 0;
-
-    // Volume & amount from raw data
-    const rawData = arrRef.current;
-    const rawItem = rawData.find((q: any) => String(q.date) === timeStr);
-    const rawVolume = rawItem ? Number(rawItem.volume ?? 0) : 0;
-    const rawClosePrice = rawItem ? Number(rawItem.close ?? 0) : 0;
-    const rawOpenPrice = rawItem ? Number(rawItem.open ?? 0) : 0;
-    const volume = rawVolume / 100;
-    const amount = Math.round(rawVolume * (rawClosePrice + rawOpenPrice) / 2);
-
-    // MA values
-    const findMA = (maArr: any[]) => {
-      const found = maArr.find((x: any) => String(x.time) === timeStr);
-      return found && Number.isFinite(found.value) ? found.value : null;
-    };
-    const ma5v = findMA(ma5Ref.current);
-    const ma10v = findMA(ma10Ref.current);
-    const ma20v = findMA(ma20Ref.current);
-    const ma60v = findMA(ma60Ref.current);
-
-    const crosshairData: KLineCrosshairData = {
-      time: timeStr, open: o, high: h, low: l, close: cl,
-      changePrice: chgPrice, changePct: chgPct, isUp,
-      volume, amount,
-      ma5: ma5v, ma10: ma10v, ma20: ma20v, ma60: ma60v,
-    };
-
-    // Indicator values based on current indicator
-    const ind = indicatorRef.current;
-    if (ind === 'macd') {
-      const p = macdDataRef.current.find((d: any) => d.time === timeStr);
-      if (p) { crosshairData.dif = p.dif; crosshairData.dea = p.dea; crosshairData.macdHist = p.hist; }
-    } else if (ind === 'kdj') {
-      const p = kdjDataRef.current.find((d: any) => d.time === timeStr);
-      if (p) { crosshairData.k = p.k; crosshairData.d = p.d; crosshairData.j = p.j; }
-    } else if (ind === 'rsi') {
-      const p = rsiDataRef.current.find((d: any) => d.time === timeStr);
-      if (p) { crosshairData.rsi = p.value; }
-    }
-
-    return crosshairData;
-  }
-
-  // Bollinger Bands (20, 2)
-  const bbD = useMemo(() => {
-    const m = sma(20);
-    return arr.map((q, i) => {
-      const mid = m[i]?.value || 0;
-      if (i < 19) return { time: String(q.date), upper: 0, middle: 0, lower: 0 };
-      let sumSq = 0;
-      for (let j = i - 19; j <= i; j++) sumSq += (closes[j] - mid) ** 2;
-      const std = Math.sqrt(sumSq / 20);
-      return { time: String(q.date), upper: mid + 2 * std, middle: mid, lower: mid - 2 * std };
-    });
-  }, [closes]);
-
-  // MACD
-  const macdData = useMemo(() => {
-    const raw = computeMACD(closes, dates, 12, 26, 9);
-    return raw.map(d => ({ time: d.time, dif: d.dif, dea: d.dea, hist: d.histogram }));
-  }, [closes, dates]);
-  const macdDataRef = useRef(macdData); macdDataRef.current = macdData;
-
-  // KDJ (9,3,3)
-  const kdjData = useMemo(() => {
-    return computeKDJ(highs, lows, closes, dates, 9);
-  }, [highs, lows, closes, dates]);
-  const kdjDataRef = useRef(kdjData); kdjDataRef.current = kdjData;
-
-  // RSI (14)
-  const rsiData = useMemo(() => {
-    const raw = computeRSI(closes, dates, 14);
-    return raw.map(d => ({ time: d.time, value: d.rsi }));
-  }, [closes, dates]);
-  const rsiDataRef = useRef(rsiData); rsiDataRef.current = rsiData;
-
-  const IND = indicator; // capture for chart creation
-
-  // Create charts ONCE
   useEffect(() => {
-    if (!mainRef.current || !volRef.current || !indRef.current) return;
-    try {
-      // Main K-line chart
-      const mc = createChart(mainRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: T.textColor ?? '#94a3b8' },
-        grid: { vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' }, horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' } },
-        autoSize: true,
-        crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 } },
-        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', minimumWidth: 65 },
-        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', timeVisible: true, barSpacing: 6, tickMarkFormatter: (time: any) => {
-          if (typeof time !== 'string') return String(time);
-          const parts = time.split('-');
-          if (periodRef.current === 'day') return `${parts[1]}-${parts[2]}`;
-          return `${parts[0]}-${parts[1]}`;
-        } },
-      });
-      mc.timeScale().applyOptions({ minBarSpacing: 3, rightOffset: 0, fixLeftEdge: true, fixRightEdge: true });
-      try { const a = mainRef.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) {}
+    if (!mainRef.current || !volRef.current) return;
+    const mc = createChart(mainRef.current, {
+      layout: { background: { color: 'transparent' }, textColor: T.textColor },
+      grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } },
+      crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } },
+      rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 64 },
+      timeScale: { borderColor: T.borderColor, timeVisible: true, fixLeftEdge: true, fixRightEdge: true, barSpacing: 6 },
+      autoSize: true,
+    });
+    const vc = createChart(volRef.current, {
+      layout: { background: { color: 'transparent' }, textColor: T.textColor },
+      grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } },
+      rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 64 },
+      timeScale: { borderColor: T.borderColor, visible: false, barSpacing: 6 },
+      autoSize: true,
+    });
+    const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor });
+    const ma5 = mc.addLineSeries({ color: T.ma5Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const ma10 = mc.addLineSeries({ color: T.ma10Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const ma20 = mc.addLineSeries({ color: T.ma20Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const ma60 = mc.addLineSeries({ color: T.ma60Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+    const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceLineVisible: false });
 
-      const candle = mc.addCandlestickSeries({
-        upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor,
-        wickUpColor: T.wickUpColor ?? 'rgba(148,163,184,0.5)', wickDownColor: T.wickDownColor ?? 'rgba(148,163,184,0.5)',
-      });
-      // Marker click handler on the main chart
-      mc.subscribeClick((param: MouseEventParams) => {
-        if (!param.time) return;
-        const timeStr = typeof param.time === 'string' ? param.time : String(param.time);
-        const currentMarkers = markersRef.current || [];
-        const hasMarker = currentMarkers.some(m => String(m.time) === timeStr);
-        if (hasMarker) {
-          const currentStrategy = strategyResultRef.current;
-          const signal = currentStrategy?.signals?.find(s => s.date === timeStr);
-          if (signal && currentStrategy) {
-            onMarkerClickRef.current?.({ signal, strategyName: currentStrategy.name });
-          }
-        }
-      });
-      const addLine = (c: string) => mc.addLineSeries({ color: c, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid, priceLineVisible: false, lastValueVisible: false });
-      const ma5 = addLine(T.ma5Color); const ma10 = addLine(T.ma10Color); const ma20 = addLine(T.ma20Color); const ma60 = addLine(T.ma60Color);
-      // BOLL — dashed style
-      const bbU = mc.addLineSeries({ color: T.bbUpperColor ?? '#ff6b6b', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
-      const bbM = mc.addLineSeries({ color: T.bbMiddleColor ?? '#f9ca24', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
-      const bbL = mc.addLineSeries({ color: T.bbLowerColor ?? '#4ecdc4', lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false });
+    mc.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0 });
+    vc.timeScale().applyOptions({ minBarSpacing: 6, rightOffset: 0 });
 
-      // Crosshair tooltip on main chart — update InfoPanel and sync to volume/indicator charts
-      mc.subscribeCrosshairMove((param: MouseEventParams) => {
-        const crosshairData = buildCrosshairData(param);
-        onCrosshairMoveRef.current?.(crosshairData ?? null);
-        if (!crosshairData || !param.time) return;
-        const timeStr = crosshairData.time;
-        const t = param.time as Time;
-        const c2 = charts.current; if (!c2) return;
-        // Sync crosshair to volume chart
-        const volItem = volItemsRef.current.find((v: any) => String(v.time) === timeStr);
-        if (volItem) { try { c2.vc.setCrosshairPosition(volItem.value, t, c2.vol); } catch (_) {} }
-        // Sync crosshair to indicator chart
-        const ind = indicatorRef.current;
-        if (ind === 'macd') {
-          const p = macdDataRef.current.find((d: any) => d.time === timeStr);
-          if (p) { try { c2.ic.setCrosshairPosition(p.hist ?? 0, t, c2.indLine1); } catch (_) {} }
-        } else if (ind === 'kdj') {
-          const p = kdjDataRef.current.find((d: any) => d.time === timeStr);
-          if (p) { try { c2.ic.setCrosshairPosition(p.k ?? 0, t, c2.indLine1); } catch (_) {} }
-        } else if (ind === 'rsi') {
-          const p = rsiDataRef.current.find((d: any) => d.time === timeStr);
-          if (p) { try { c2.ic.setCrosshairPosition(p.value ?? 0, t, c2.indLine1); } catch (_) {} }
-        }
-      });
+    mc.timeScale().subscribeVisibleTimeRangeChange(() => {
+      try { const range = mc.timeScale().getVisibleRange(); if (range?.from != null && range?.to != null) vc.timeScale().setVisibleRange({ from: range.from, to: range.to }); } catch (_) { }
+    });
 
-      // Volume chart
-      const vc = createChart(volRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: T.textColor ?? '#94a3b8' },
-        grid: { vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' }, horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' } },
-        autoSize: true,
-        crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 } },
-        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', minimumWidth: 65 },
-        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', timeVisible: false },
-      });
-      vc.timeScale().applyOptions({ minBarSpacing: 6, fixLeftEdge: true, fixRightEdge: true });
-      const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' } });
+    mc.subscribeCrosshairMove((param: MouseEventParams) => {
+      if (!param.time || param.point === undefined) { onCrosshairMoveRef.current?.(null); return; }
+      const items = dataRef.current;
+      const timeStr = String(param.time);
+      const item = items.find((i: any) => String(i.date || i.time) === timeStr);
+      if (item) { onCrosshairMoveRef.current?.({ time: timeStr, open: item.open, high: item.high, low: item.low, close: item.close, volume: item.volume }); }
+    });
+    vc.subscribeCrosshairMove((param: MouseEventParams) => {
+      if (!param.time) return;
+      mc.setCrosshairPosition(0, param.time as Time, candle);
+    });
 
-      // Indicator chart
-      const ic = createChart(indRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: T.textColor ?? '#94a3b8' },
-        grid: { vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' }, horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' } },
-        autoSize: true,
-        crosshair: { mode: 1, vertLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 }, horzLine: { visible: true, labelVisible: true, labelBackgroundColor: T.crosshairColor, color: T.crosshairColor, style: 2, width: 1 } },
-        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', minimumWidth: 65 },
-        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)', timeVisible: false },
-      });
-      ic.timeScale().applyOptions({ minBarSpacing: 6, fixLeftEdge: true, fixRightEdge: true });
-      const indHist = ic.addHistogramSeries({});
-      const indLine1 = ic.addLineSeries({ color: T.macdDifColor, lineWidth: 1, priceLineVisible: false });
-      const indLine2 = ic.addLineSeries({ color: T.macdDeaColor, lineWidth: 1, priceLineVisible: false });
-      const indLine3 = ic.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceLineVisible: false });
-
-      // Volume chart crosshair sync -> update InfoPanel, main and indicator charts
-      vc.subscribeCrosshairMove((param: MouseEventParams) => {
-        const crosshairData = buildCrosshairData(param);
-        onCrosshairMoveRef.current?.(crosshairData ?? null);
-        if (!param.time || !charts.current) return;
-        const timeStr = String(param.time);
-        const t = param.time as Time;
-        const cs = charts.current;
-        const item = itemsRef.current.find((i: any) => String(i.time) === timeStr);
-        if (item) { try { cs.mc.setCrosshairPosition(item.close ?? 0, t, cs.candle); } catch (_) {} }
-        const ind = indicatorRef.current;
-        if (ind === 'macd') {
-          const p = macdDataRef.current.find((d: any) => d.time === timeStr);
-          if (p) { try { cs.ic.setCrosshairPosition(p.hist ?? 0, t, cs.indLine1); } catch (_) {} }
-        } else if (ind === 'kdj') {
-          const p = kdjDataRef.current.find((d: any) => d.time === timeStr);
-          if (p) { try { cs.ic.setCrosshairPosition(p.k ?? 0, t, cs.indLine1); } catch (_) {} }
-        } else if (ind === 'rsi') {
-          const p = rsiDataRef.current.find((d: any) => d.time === timeStr);
-          if (p) { try { cs.ic.setCrosshairPosition(p.value ?? 0, t, cs.indLine1); } catch (_) {} }
-        }
-      });
-
-      // Indicator chart crosshair sync -> update InfoPanel, main and volume charts
-      ic.subscribeCrosshairMove((param: MouseEventParams) => {
-        const crosshairData = buildCrosshairData(param);
-        onCrosshairMoveRef.current?.(crosshairData ?? null);
-        if (!param.time || !charts.current) return;
-        const timeStr = String(param.time);
-        const t = param.time as Time;
-        const cs = charts.current;
-        const item = itemsRef.current.find((i: any) => String(i.time) === timeStr);
-        if (item) { try { cs.mc.setCrosshairPosition(item.close ?? 0, t, cs.candle); } catch (_) {} }
-        const volItem = volItemsRef.current.find((v: any) => String(v.time) === timeStr);
-        if (volItem) { try { cs.vc.setCrosshairPosition(volItem.value, t, cs.vol); } catch (_) {} }
-      });
-
-      // Simple zoom sync only — no crosshair sync
-      const syncZoom = (src: any) => {
-        src.timeScale().subscribeVisibleTimeRangeChange((r: any) => {
-          if (!r || !charts.current) return;
-          const cs = charts.current;
-          try { if (src !== cs.mc) cs.mc.timeScale().setVisibleRange(r); } catch (_) {}
-          try { if (src !== cs.vc) cs.vc.timeScale().setVisibleRange(r); } catch (_) {}
-          try { if (src !== cs.ic) cs.ic.timeScale().setVisibleRange(r); } catch (_) {}
-        });
-      };
-      syncZoom(mc); syncZoom(vc); syncZoom(ic);
-
-      charts.current = { mc, vc, ic, candle, ma5, ma10, ma20, ma60, bbU, bbM, bbL, vol, indHist, indLine1, indLine2, indLine3, supportLines: [], resistanceLines: [] };
-    } catch (e) { console.error('KLineChart create:', e); }
-    return () => {
-      if (charts.current) {
-        try { charts.current.mc.remove(); } catch (_) {}
-        try { charts.current.vc.remove(); } catch (_) {}
-        try { charts.current.ic.remove(); } catch (_) {}
-        charts.current = null;
-      }
-    };
+    charts.current = { mc, candle, vol, ma5, ma10, ma20, ma60 };
+    try { const a = mainRef.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) { }
+    try { const a = volRef.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) { }
+    return () => { mc.remove(); vc.remove(); charts.current = null; };
   }, []);
 
-  // Update chart colors when theme changes (no full recreation needed)
-  const prevChartStyleRef = useRef(chartStyle);
+  const maData = useMemo(() => {
+    const closes = data.map((d: any) => Number(d.close) || 0);
+    return { ma5: SMA(closes, 5), ma10: SMA(closes, 10), ma20: SMA(closes, 20), ma60: SMA(closes, 60) };
+  }, [data]);
+
   useEffect(() => {
-    if (prevChartStyleRef.current === chartStyle) return;
-    prevChartStyleRef.current = chartStyle;
-    const c = charts.current;
-    if (!c) return;
+    const c = charts.current; if (!c || !Array.isArray(data) || data.length === 0) return;
     try {
-      c.candle?.applyOptions({
-        upColor: T.upColor, downColor: T.downColor,
-        borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor,
-        wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor,
-      });
-      // MA lines — also update lineWidth and lineStyle from theme
-      c.ma5?.applyOptions({ color: T.ma5Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
-      c.ma10?.applyOptions({ color: T.ma10Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
-      c.ma20?.applyOptions({ color: T.ma20Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
-      c.ma60?.applyOptions({ color: T.ma60Color, lineWidth: (T.maLineWidth ?? 1) as LineWidth, lineStyle: T.maLineStyle ?? LineStyle.Solid });
-      c.bbU?.applyOptions({ color: T.bbUpperColor });
-      c.bbM?.applyOptions({ color: T.bbMiddleColor });
-      c.bbL?.applyOptions({ color: T.bbLowerColor });
-      c.indLine1?.applyOptions({ color: T.macdDifColor });
-      c.indLine2?.applyOptions({ color: T.macdDeaColor });
-      // Update layout, grid, crosshair, borders for all three charts
-      const chartOpts = {
-        layout: { textColor: T.textColor ?? '#94a3b8' },
-        grid: {
-          vertLines: { color: T.gridVertColor ?? 'rgba(148,163,184,0.1)' },
-          horzLines: { color: T.gridHorzColor ?? 'rgba(148,163,184,0.1)' },
-        },
-        crosshair: {
-          vertLine: { color: T.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: T.crosshairColor },
-          horzLine: { color: T.crosshairColor ?? 'rgba(148,163,184,0.3)', labelBackgroundColor: T.crosshairColor },
-        },
-        rightPriceScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)' },
-        timeScale: { borderColor: T.borderColor ?? 'rgba(148,163,184,0.2)' },
-      };
-      c.mc?.applyOptions(chartOpts);
-      c.vc?.applyOptions(chartOpts);
-      c.ic?.applyOptions(chartOpts);
-    } catch (e) { /* ignore */ }
-  }, [chartStyle, T]);
-
-  // Update data
-  useEffect(() => {
-    const c = charts.current;
-    if (!c || !items.length) return;
-    try {
-      c.candle?.setData(items);
-      // Set strategy markers on candle chart
-      if (markers && markers.length > 0) {
-        try { c.candle?.setMarkers(markers); } catch (_) {}
-      } else {
-        try { c.candle?.setMarkers([]); } catch (_) {}
-      }
-      // Clear old support/resistance lines
-      if (c.supportLines) {
-        c.supportLines.forEach((line: any) => { try { c.candle?.removePriceLine(line); } catch (_) {} });
-      }
-      if (c.resistanceLines) {
-        c.resistanceLines.forEach((line: any) => { try { c.candle?.removePriceLine(line); } catch (_) {} });
-      }
-      // Draw new support lines (green dashed)
-      const supLines: any[] = [];
-      (strategyResult?.support_levels || []).forEach((price: number) => {
-        const line = c.candle?.createPriceLine({
-          price,
-          color: '#22c55e',
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: '',
-        });
-        if (line) supLines.push(line);
-      });
-      // Draw new resistance lines (red dashed)
-      const resLines: any[] = [];
-      (strategyResult?.resistance_levels || []).forEach((price: number) => {
-        const line = c.candle?.createPriceLine({
-          price,
-          color: '#ef4444',
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelVisible: true,
-          title: '',
-        });
-        if (line) resLines.push(line);
-      });
-      c.supportLines = supLines;
-      c.resistanceLines = resLines;
-      c.ma5?.setData(ma5d); c.ma10?.setData(ma10d); c.ma20?.setData(ma20d); c.ma60?.setData(ma60d);
-      // BOLL on main chart (always visible)
-      c.bbU?.setData(bbD.map(d => ({ time: d.time, value: d.upper || undefined })));
-      c.bbM?.setData(bbD.map(d => ({ time: d.time, value: d.middle || undefined })));
-      c.bbL?.setData(bbD.map(d => ({ time: d.time, value: d.lower || undefined })));
-      c.vol?.setData(volItems);
-      // Indicator panel
-      if (indicator === 'macd') {
-        c.indHist?.setData(macdData.map(d => ({ time: d.time, value: d.hist, color: (d.hist ?? 0) >= 0 ? T.macdHistUpColor : T.macdHistDownColor })));
-        c.indLine1?.setData(macdData.map(d => ({ time: d.time, value: d.dif })));
-        c.indLine2?.setData(macdData.map(d => ({ time: d.time, value: d.dea })));
-        c.indLine3?.setData([]);
-      } else if (indicator === 'kdj') {
-        c.indLine1?.setData(kdjData.map(d => ({ time: d.time, value: d.k })));
-        c.indLine2?.setData(kdjData.map(d => ({ time: d.time, value: d.d })));
-        c.indLine3?.setData(kdjData.map(d => ({ time: d.time, value: d.j })));
-        c.indHist?.setData([]);
-      } else if (indicator === 'rsi') {
-        c.indLine1?.setData(rsiData.map(d => ({ time: d.time, value: d.value })));
-        c.indLine2?.setData([]); c.indLine3?.setData([]); c.indHist?.setData([]);
-      } else {
-        c.indHist?.setData([]); c.indLine1?.setData([]); c.indLine2?.setData([]); c.indLine3?.setData([]);
-      }
-      // FULL RESET: scroll all three charts to position 0 to clear stale zoom state
-      try { c.mc.timeScale().scrollToPosition(0, false); } catch (_) {}
-      try { c.vc.timeScale().scrollToPosition(0, false); } catch (_) {}
-      try { c.ic.timeScale().scrollToPosition(0, false); } catch (_) {}
-
-      // Dynamically calculate barSpacing based on data count
-      const count = items.length;
-      const barSpacing = Math.max(Math.min(Math.floor(800 / count), 20), 4);
-
-      // Set barSpacing on ALL three charts BEFORE fitContent (order matters!)
-      // minBarSpacing: 2 ensures bars don't get too thin when zoomed out
-      // maxBarSpacing: 30 prevents monthly bars from being too wide
-      c.mc.timeScale().applyOptions({ barSpacing, minBarSpacing: 2 });
-      c.vc.timeScale().applyOptions({ barSpacing, minBarSpacing: 2 });
-      c.ic.timeScale().applyOptions({ barSpacing, minBarSpacing: 2 });
-
-      // Fit time scale to new data range — only call fitContent() on the MAIN chart (mc),
-      // then explicitly sync vc/ic to its exact visible range.
-      // IMPORTANT: Calling fitContent() independently on each chart causes misalignment
-      // because each chart has different data profiles (null/NaN padding at the start
-      // for MACD/KDJ/RSI), and fitContent() can produce slightly different ranges.
-      const rafId = requestAnimationFrame(() => {
-        try {
-          c.mc.timeScale().fitContent();
-          const range = c.mc.timeScale().getVisibleRange();
-          if (range) {
-            c.vc.timeScale().setVisibleRange(range);
-            c.ic.timeScale().setVisibleRange(range);
-          }
-        } catch (_) {}
-      });
-      cleanupRef.current = rafId;
-    } catch (e) { console.error('KLineChart update:', e); }
-    return () => {
-      if (cleanupRef.current !== null) {
-        cancelAnimationFrame(cleanupRef.current);
-        cleanupRef.current = null;
-      }
-    };
-  }, [items, ma5d, ma10d, ma20d, ma60d, volItems, macdData, kdjData, rsiData, bbD, indicator, markers, strategyResult]);
-
-  // Scroll to signal when focusTime changes
-  useEffect(() => {
-    if (!focusTime || !charts.current?.mc || !items.length) return;
-    const idx = items.findIndex(i => String(i.time) === focusTime);
-    if (idx < 0) return;
-    const total = items.length;
-    const from = Math.max(0, idx - 40);
-    const to = Math.min(total - 1, idx + 10);
-    try {
-      const c = charts.current!;
-      const range = { from: items[from].time as Time, to: items[to].time as Time };
-      c.mc.timeScale().setVisibleRange(range);
-      c.vc.timeScale().setVisibleRange(range);
-      c.ic.timeScale().setVisibleRange(range);
-    } catch (e) { /* ignore */ }
-  }, [focusTime, items]);
+      const candleData = data.map((d: any) => ({ time: d.date || d.time, open: Number(d.open), high: Number(d.high), low: Number(d.low), close: Number(d.close) }));
+      const volData = data.map((d: any) => ({ time: d.date || d.time, value: Number(d.volume), color: Number(d.close) >= Number(d.open) ? T.volumeUpColor : T.volumeDownColor }));
+      c.candle.setData(candleData);
+      c.vol.setData(volData);
+      const maLine = (vals: (number | null)[]) => vals.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v ?? undefined }));
+      c.ma5.setData(maLine(maData.ma5)); c.ma10.setData(maLine(maData.ma10));
+      c.ma20.setData(maLine(maData.ma20)); c.ma60.setData(maLine(maData.ma60));
+      c.mc.timeScale().fitContent();
+      c.mc.timeScale().scrollToPosition(0, false);
+    } catch (e) { console.warn('Chart data update failed:', e); }
+  }, [data, maData, T]);
 
   return (
-    <div className="flex flex-col relative" style={{ height }}>
-      {/* MA color legend above main chart */}
-      <div className="flex items-center gap-3 px-2 py-0.5 text-[9px] font-bold bg-gray-50 dark:bg-white/5 border-b border-gray-200 dark:border-zinc-800">
-        <span style={{ color: T.ma5Color, fontWeight: 900 }}>━ MA5</span>
-        <span style={{ color: T.ma10Color, fontWeight: 900 }}>━ MA10</span>
-        <span style={{ color: T.ma20Color, fontWeight: 900 }}>━ MA20</span>
-        <span style={{ color: T.ma60Color, fontWeight: 900 }}>━ MA60</span>
-        <span className="ml-auto mr-0.5 inline-block rounded-sm" style={{ width: 8, height: 8, background: T.bbUpperColor ?? '#ff6b6b' }} />
-        <span style={{ color: T.bbUpperColor ?? '#ff6b6b', fontWeight: 900 }}>BOLL</span>
-      </div>
-      <div ref={mainRef} className="flex-1" />
-      <div className="border-t border-gray-200 dark:border-zinc-800 relative">
-        <span className="absolute left-2 top-0 text-[9px] text-gray-400 font-bold z-10 bg-white dark:bg-zinc-900 px-1">副图 · 成交量</span>
-      </div>
-      <div ref={volRef} style={{ height: 80 }} />
-      <div className="border-t border-gray-200 dark:border-zinc-800 relative">
-        <span className="absolute left-2 top-0 text-[9px] text-gray-400 font-bold z-10 bg-white dark:bg-zinc-900 px-1">指标 · {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'—'}[indicator]}</span>
-      </div>
-      <div ref={indRef} style={{ height: 90 }} />
-      {/* Hide TradingView logo */}
-      <style>{`a[href*="tradingview"]{display:none!important}`}</style>
+    <div className="flex flex-col h-full">
+      <div ref={mainRef} className="flex-1 min-h-0" />
+      <div ref={volRef} className="h-[60px]" />
     </div>
   );
 }
 
-// ── K-line info panel (side panel, always visible) ──
-const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-
-function InfoPanel({ data, indicator, T }: {
-  data: KLineCrosshairData | null;
-  indicator: string;
-  T: ChartThemeConfig;
-}) {
-  const dateObj = data ? new Date(data.time + 'T12:00:00') : null;
-  const weekday = dateObj ? weekdayNames[dateObj.getDay()] : '';
-  const chgColor = '#ef4444'; // Chinese convention: red = up
-  const chgDownColor = '#22c55e'; // Chinese convention: green = down
-  const isUp = data ? data.isUp : true;
-  const effectiveChgColor = data ? (isUp ? chgColor : chgDownColor) : 'var(--color-gray-400)';
-  const sign = data ? (isUp ? '+' : '') : '';
-
+function CrosshairTooltip({ data }: { data: { time: string; open: number; high: number; low: number; close: number; volume: number } | null }) {
+  if (!data) return null;
   return (
-    <div className="w-56 border-l border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-900/50 flex flex-col text-[11px] shrink-0">
-      {/* Title: date + weekday */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-        <div className="text-xs font-bold text-gray-900 dark:text-zinc-100">
-          {data ? `${data.time} ${weekday}` : 'K线详情'}
-        </div>
-      </div>
-
-      {/* OHLC 2x2 */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-        <div className="grid grid-cols-4 gap-x-2 gap-y-1">
-          <span className="text-gray-500 dark:text-zinc-500">开</span>
-          <span className="text-right font-mono font-medium text-gray-900 dark:text-zinc-100">{data ? fmtPrice(data.open) : '--'}</span>
-          <span className="text-gray-500 dark:text-zinc-500">收</span>
-          <span className="text-right font-mono font-medium text-gray-900 dark:text-zinc-100">{data ? fmtPrice(data.close) : '--'}</span>
-          <span className="text-gray-500 dark:text-zinc-500">高</span>
-          <span className="text-right font-mono font-medium" style={{ color: data ? T.upColor : undefined }}>{data ? fmtPrice(data.high) : '--'}</span>
-          <span className="text-gray-500 dark:text-zinc-500">低</span>
-          <span className="text-right font-mono font-medium" style={{ color: data ? T.downColor : undefined }}>{data ? fmtPrice(data.low) : '--'}</span>
-        </div>
-      </div>
-
-      {/* Change */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-        <div className="flex items-center gap-2 font-bold" style={{ color: data ? effectiveChgColor : '#9ca3af' }}>
-          {data ? `涨跌 ${sign}${fmtPrice(data.changePrice)}（${sign}${fmtPct(data.changePct)}%）` : '涨跌 --'}
-        </div>
-      </div>
-
-      {/* Volume & Amount */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700 space-y-1">
-        <div className="flex justify-between">
-          <span className="text-gray-500 dark:text-zinc-500">量</span>
-          <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data ? fmtVolume(data.volume) : '--'}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-500 dark:text-zinc-500">额</span>
-          <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data ? fmtAmount(data.amount) : '--'}</span>
-        </div>
-      </div>
-
-      {/* Moving Averages */}
-      <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          {([
-            ['MA5', data?.ma5, T.ma5Color],
-            ['MA10', data?.ma10, T.ma10Color],
-            ['MA20', data?.ma20, T.ma20Color],
-            ['MA60', data?.ma60, T.ma60Color],
-          ] as const).map(([label, val, color]) => (
-            <div key={label} className="flex justify-between">
-              <span style={{ color, fontWeight: 600 }}>{label}</span>
-              <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{val != null ? fmtPrice(val) : '--'}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Indicator */}
-      {indicator === 'macd' && (
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700 space-y-1">
-          <div className="flex justify-between">
-            <span style={{ color: T.macdDifColor }}>DIF</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.dif != null ? data.dif.toFixed(2) : '--'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span style={{ color: T.macdDeaColor }}>DEA</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.dea != null ? data.dea.toFixed(2) : '--'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>MACD</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.macdHist != null ? data.macdHist.toFixed(2) : '--'}</span>
-          </div>
-        </div>
-      )}
-      {indicator === 'kdj' && (
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700 space-y-1">
-          <div className="flex justify-between">
-            <span style={{ color: T.kdjKColor }}>K</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.k != null ? data.k.toFixed(2) : '--'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span style={{ color: T.kdjDColor }}>D</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.d != null ? data.d.toFixed(2) : '--'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span style={{ color: T.kdjJColor }}>J</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.j != null ? data.j.toFixed(2) : '--'}</span>
-          </div>
-        </div>
-      )}
-      {indicator === 'rsi' && (
-        <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-          <div className="flex justify-between">
-            <span style={{ color: T.rsiLineColor }}>RSI(14)</span>
-            <span className="font-mono font-medium text-gray-900 dark:text-zinc-100">{data?.rsi != null ? data.rsi.toFixed(2) : '--'}</span>
-          </div>
-        </div>
-      )}
+    <div className="flex items-center gap-3 text-[11px] font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
+      <span>{data.time}</span>
+      <span>O <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtPrice(data.open)}</b></span>
+      <span>H <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtPrice(data.high)}</b></span>
+      <span>L <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtPrice(data.low)}</b></span>
+      <span>C <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtPrice(data.close)}</b></span>
+      <span>V <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtVolume(data.volume / 100)}</b></span>
     </div>
   );
 }
 
-// ── Strategy Panel (collapsible, next to K-line chart) ──
-function StrategyPanel({ strategyResult, showMarkers, collapsed, onToggleCollapsed, onToggleMarkers, onSignalClick }: {
-  strategyResult: StrategyScript;
-  showMarkers: boolean;
-  collapsed: boolean;
-  onToggleCollapsed: () => void;
-  onToggleMarkers: () => void;
-  onSignalClick: (date: string) => void;
-}) {
-  const signals = strategyResult.signals || [];
-  const buyCount = signals.filter(s => s.action === 'buy').length;
-  const sellCount = signals.filter(s => s.action === 'sell').length;
+// ── Index Mini-Bar ──
 
+function IndexBar() {
+  const { data } = useQuery<PriceData[], Error>({
+    queryKey: ['market', 'indices'],
+    queryFn: async () => invoke<PriceData[]>('get_index_quotes'),
+    refetchInterval: 30000,
+  });
+  const names: [string, string][] = [['000001', '上证'], ['000300', '沪深300'], ['399006', '创业板']];
+  if (!data?.length) return null;
   return (
-    <div className="flex flex-col text-[11px]">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5">
-          <TrendingUp size={14} className="text-emerald-500" />
-          <span className="text-sm font-bold text-gray-900 dark:text-zinc-100">策略信号</span>
-        </div>
-        <button onClick={onToggleCollapsed} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded transition-colors text-gray-500">
-          <X size={14} />
-        </button>
-      </div>
-
-      {!collapsed && (
-        <>
-          {/* Strategy name */}
-          <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-            <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">{strategyResult.name}</div>
-            <div className="text-[10px] text-gray-500 dark:text-zinc-500 mt-0.5 leading-relaxed">{strategyResult.explanation}</div>
-          </div>
-
-          {/* Stats */}
-          <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-500 dark:text-zinc-500">信号数量</span>
-              <span className="font-bold text-gray-900 dark:text-zinc-100 font-mono-nums">{signals.length}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-emerald-500 font-medium">买入</span>
-              <span className="font-bold text-emerald-500 font-mono-nums">{buyCount}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-red-500 font-medium">卖出</span>
-              <span className="font-bold text-red-500 font-mono-nums">{sellCount}</span>
-            </div>
-            {signals.length > 0 && (
-              <div className="flex items-center justify-between pt-1 border-t border-gray-100 dark:border-zinc-800">
-                <span className="text-gray-500 dark:text-zinc-500">最新信号</span>
-                <span className={`font-mono-nums font-medium text-[10px] ${signals[signals.length - 1].action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
-                  {signals[signals.length - 1].action === 'buy' ? '▲ 买入' : '▼ 卖出'}
-                  <span className="text-gray-400 ml-1">{signals[signals.length - 1].date}</span>
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Toggle markers button */}
-          <div className="px-3 py-2 border-b border-gray-200 dark:border-zinc-700">
-            <button onClick={onToggleMarkers}
-              className={`w-full px-2 py-1 rounded text-[9px] font-bold border transition-all ${
-                showMarkers
-                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                  : 'bg-transparent border-gray-300 dark:border-zinc-600 text-gray-600 dark:text-zinc-400 hover:border-emerald-400'
-              }`}
-            >
-              {showMarkers ? '隐藏K线标记' : '显示K线标记'}
-            </button>
-          </div>
-
-          {/* Signal list */}
-          {signals.length > 0 && (
-            <div className="flex-1 overflow-y-auto max-h-[350px]">
-              {[...signals].reverse().map((s, i) => (
-                <button key={i} onClick={() => onSignalClick(s.date)}
-                  className="w-full text-left px-3 py-2 border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-                >
-                  <div className="flex items-center gap-1">
-                    <span className={`text-[10px] font-bold ${s.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
-                      {s.action === 'buy' ? '▲ 买入' : '▼ 卖出'}
-                    </span>
-                    <span className="text-[10px] text-gray-400 dark:text-zinc-500">{s.date}</span>
-                    <span className={`ml-auto font-mono-nums text-[10px] font-medium ${s.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
-                      ¥{Number(s.price).toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="text-[9px] text-gray-500 dark:text-zinc-500 truncate mt-0.5">{s.reason}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
+    <div className="flex items-center gap-4 px-1 text-[11px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+      {data.map(d => {
+        const k = (d.ticker || '').replace(/^(sh|sz)/, '');
+        const n = names.find(([code]) => code === k);
+        const up = d.change >= 0;
+        return (
+          <span key={k} className="flex items-center gap-1.5">
+            <span>{n ? n[1] : k}</span>
+            <span className="font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>{d.current_price.toFixed(0)}</span>
+            <span className="font-mono-nums" style={{ color: up ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{up ? '+' : ''}{fmtPct(d.change_percent)}%</span>
+          </span>
+        );
+      })}
     </div>
   );
 }
 
-// NOTE: Frontend period aggregation is intentionally omitted.
-// Backend (Sidecar / EastMoney / Yahoo / SQLite / Mock) always returns
-// correctly aggregated data for week/month periods. No need for a frontend
-// safeguard — it would be a no-op (each returned bar already has a unique
-// period key, so no actual merging occurs).
+// ── Main Page ──
+
+const PERIODS = ['minute', 'day', 'week', 'month'] as const;
+const PERIOD_LABELS: Record<string, string> = { minute: '分时', day: '日线', week: '周线', month: '月线' };
 
 export default function StockDetailPage() {
   const [searchParams] = useSearchParams();
-  const stockId = searchParams.get('code') || '';
   const navigate = useNavigate();
-
-  const setSelectedStock = useAppStore((s) => s.setSelectedStock);
   const queryClient = useQueryClient();
-  const [aiExpanded, setAiExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'finance' | 'fundflow' | 'daily'>('overview');
-  const [indicator, setIndicator] = useState<'macd' | 'kdj' | 'rsi' | 'none'>('macd');
-  const [showIndicatorMenu, setShowIndicatorMenu] = useState(false);
-  const [crosshairData, setCrosshairData] = useState<KLineCrosshairData | null>(null);
-  const chartStyle = useAppStore((s) => s.chartStyle);
-  const chartTheme = useMemo(() => getChartTheme(chartStyle), [chartStyle]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const klineContainerRef = useRef<HTMLDivElement>(null);
-  const hasAutoTriggeredRef = useRef<string | null>(null);
+  const setSelectedStock = useAppStore(s => s.setSelectedStock);
+  const code = searchParams.get('code') || '';
+  const stockId = code;
 
-  // Strategy generation state
-  const [strategyResult, setStrategyResult] = useState<StrategyScript | null>(null);
-  const [strategyShowMarkers, setStrategyShowMarkers] = useState(false);
-  const [strategyPanelCollapsed, setStrategyPanelCollapsed] = useState(false);
-  const [focusSignalTime, setFocusSignalTime] = useState<string | null>(null);
-  const [signalPopup, setSignalPopup] = useState<{ signal: SignalPoint; strategyName: string } | null>(null);
-
-  // ── Data loading log ──
-  const dataLog = useRef<{ name: string; status: 'loading' | 'ok' | 'error'; detail?: string }[]>([]);
-  const logData = (name: string, status: 'loading' | 'ok' | 'error', detail?: string) => {
-    const idx = dataLog.current.findIndex(d => d.name === name);
-    if (idx >= 0) dataLog.current[idx] = { name, status, detail };
-    else dataLog.current.push({ name, status, detail });
-    console.log(`[DATA] ${name}: ${status}${detail ? ` — ${detail}` : ''}`);
-  };
+  const [period, setPeriod] = useState<string>('day');
 
   const { data: stockList, error: stockListError } = useStockList();
   const { data: stockDetail, error: stockDetailError } = useStockDetail(stockId);
-
-  // Resolve effective stock code: use DB result if URL param was a name
-  const stock = useMemo(() => {
-    return stockList?.find((s: any) => s.id === stockId || s.ticker === stockId) || stockDetail;
-  }, [stockList, stockDetail, stockId]);
+  const stock = useMemo(() => stockList?.find(s => s.id === stockId || s.ticker === stockId) || stockDetail, [stockList, stockDetail, stockId]);
   const effectiveCode = stock?.id || stockId;
 
-  const [period, setPeriod] = useState<string>('day');
-  const handlePeriodChange = (p: string) => {
-    setPeriod(p);
-    if (p === 'minute' && isFullscreen) setIsFullscreen(false);
-  };
   const periodDays: Record<string, number> = { day: 250, week: 104, month: 60 };
-  const historyCode = (period !== 'minute' && effectiveCode.includes('.')) ? effectiveCode : '';
-  const { data: historyData, isLoading: historyLoading } = useStockHistory(historyCode, periodDays[period] || 120, period);
-  const { data: intradayData, isLoading: intradayLoading } = useIntraday(period === 'minute' && effectiveCode.includes('.') ? effectiveCode : '');
-  const chartData = useMemo(() => {
-    return historyData ?? [];
-  }, [historyData]);
-
-  const generateStrategyMutation = useGenerateStrategyWithAI();
-
-  // Compute chart markers from strategy signals
-  const strategyMarkers = useMemo(() => {
-    if (!strategyShowMarkers || !strategyResult?.signals) return [];
-    return strategyResult.signals.map(s => ({
-      time: s.date as Time,
-      position: s.action === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
-      shape: s.action === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
-      color: s.action === 'buy' ? '#22c55e' : '#ef4444',
-      text: s.action === 'buy' ? '买' : '卖',
-      size: 3,
-    }));
-  }, [strategyResult, strategyShowMarkers]);
+  const { data: historyData, isLoading: historyLoading } = useStockHistory(period !== 'minute' ? effectiveCode || stockId : '', periodDays[period] || 120, period);
+  const { data: intradayData, isLoading: intradayLoading } = useIntraday(period === 'minute' ? effectiveCode || stockId : '');
+  const { data: realtimeQuote } = useRealtimeQuote(effectiveCode);
   const { data: financeData } = useStockFinance(effectiveCode);
   const { data: fundFlowData } = useStockFundFlow(effectiveCode);
-  const { data: realtimeQuote } = useRealtimeQuote(effectiveCode);
-  const { data: deepseekConfig } = useDeepSeekConfig();
-  const { data: aiAnalysis, isLoading: aiLoading, error: aiError, refetch: analyzeAI } = useAnalyzeStockWithAI(effectiveCode);
-
-  // ── Data loading logger ──
-  useEffect(() => {
-    logData('useStockDetail', stockDetailError ? 'error' : stockDetail ? 'ok' : 'loading', stockDetailError?.message);
-    logData('useStockHistory', historyData ? 'ok' : 'loading', `长度=${historyData?.length}`);
-    logData('useRealtimeQuote', realtimeQuote ? 'ok' : 'loading', realtimeQuote ? `价=${realtimeQuote.current_price}` : '');
-    logData('useStockFinance', financeData ? 'ok' : 'loading', financeData ? `PE=${financeData.pe}` : '');
-    logData('useStockFundFlow', fundFlowData ? 'ok' : 'loading', `长度=${fundFlowData?.length}`);
-    logData('useDeepSeekConfig', deepseekConfig ? 'ok' : 'loading', deepseekConfig?.has_key ? '已配置Key' : '无Key');
-    logData('useAnalyzeStockWithAI', aiError ? 'error' : aiAnalysis ? 'ok' : 'loading', aiError?.message);
-    logData('useStockList', stockListError ? 'error' : stockList ? 'ok' : 'loading', `数量=${stockList?.length}`);
-    // 检查是否有错误
-    const errors = [stockDetailError, stockListError, aiError].filter(Boolean);
-    if (errors.length > 0) {
-      console.warn('[DATA] 数据加载异常:', errors.map(e => (e as Error).message).join('; '));
-    }
-  });
-
-  // Handle daily report generation: read trading rules + trigger strategy + AI analysis
-  const handleGenerateReport = useCallback(() => {
-    const rules = localStorage.getItem('stockmate_trading_rules') || '';
-    if (rules) {
-      generateStrategyMutation.mutate(
-        { stockId: effectiveCode, rules },
-        { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
-      );
-    }
-    // Also trigger AI analysis if available
-    if (analyzeAI) {
-      analyzeAI();
-    }
-  }, [effectiveCode, analyzeAI]);
-
-  // Watchlist toggle
-  const tickerCode = effectiveCode.split('.')[0];
-  const { data: isInWatchlist } = useWatchlistCheck(tickerCode);
-  const watchlistAdd = useWatchlistAdd();
-  const watchlistRemove = useWatchlistRemove();
-  const handleWatchlistToggle = () => {
-    if (isInWatchlist) {
-      watchlistRemove.mutate(tickerCode, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['watchlist'] });
-          queryClient.invalidateQueries({ queryKey: ['watchlist', 'check', tickerCode] });
-        },
-      });
-    } else {
-      watchlistAdd.mutate(tickerCode, {
-        onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['watchlist'] });
-          queryClient.invalidateQueries({ queryKey: ['watchlist', 'check', tickerCode] });
-        },
-      });
-    }
-  };
-
-
-  // Persist selected stock to global store so other pages can read it
-  useEffect(() => {
-    if (effectiveCode && stock?.name) setSelectedStock({ code: effectiveCode, name: stock.name });
-  }, [effectiveCode, stock?.name, setSelectedStock]);
-
-  // Auto-generate strategy when navigating from RulesPage with autoStrategy=1
-  useEffect(() => {
-    const auto = searchParams.get('autoStrategy') === '1';
-    if (auto && effectiveCode && !generateStrategyMutation.isPending) {
-      const rules = localStorage.getItem('stockmate_trading_rules') || '';
-      if (rules) {
-        generateStrategyMutation.mutate(
-          { stockId: effectiveCode, rules },
-          { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
-        );
-      }
-      // Clean URL to prevent re-triggering
-      const newParams = new URLSearchParams(searchParams.toString());
-      newParams.delete('autoStrategy');
-      window.history.replaceState(null, '', `#/stock?${newParams.toString()}`);
-    }
-  }, [effectiveCode, searchParams]);
-
-  // Auto-generate strategy when AI analysis completes (once per stock code)
-  useEffect(() => {
-    if (aiAnalysis && effectiveCode && hasAutoTriggeredRef.current !== effectiveCode && !generateStrategyMutation.isPending) {
-      hasAutoTriggeredRef.current = effectiveCode;
-      const rules = localStorage.getItem('stockmate_trading_rules') || '';
-      if (rules) {
-        generateStrategyMutation.mutate(
-          { stockId: effectiveCode, rules },
-          { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
-        );
-      }
-    }
-  }, [aiAnalysis, effectiveCode, generateStrategyMutation]);
-
-  useEffect(() => {
-    if (stock?.name) document.title = stock.name;
-    return () => { document.title = 'StockMate'; };
-  }, [stock?.name]);
-
-  // Restore cached strategy result on mount
-  useEffect(() => {
-    if (effectiveCode && !strategyResult) {
-      const cached = getCachedStrategyResult(effectiveCode);
-      if (cached) {
-        setStrategyResult(cached);
-        // Automatically show markers if there are signals
-        if (cached.signals && cached.signals.length > 0) {
-          setStrategyShowMarkers(true);
-        }
-      }
-    }
-  }, [effectiveCode]);
-
-  // ── Section navigation for stock analysis IA ──
-  const sections = [
-    { id: 'price', label: '行情報價', icon: '📊' },
-    { id: 'chart', label: 'K線技術', icon: '📈' },
-    { id: 'ai', label: 'AI 分析', icon: '🧠' },
-    { id: 'fundamentals', label: '基本面', icon: '📋' },
-    { id: 'news', label: '新聞公告', icon: '📰' },
-  ];
-  const [activeSection, setActiveSection] = useState('price');
-
-  const scrollToSection = useCallback((sectionId: string) => {
-    const el = document.getElementById(`stock-section-${sectionId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setActiveSection(sectionId);
-    }
-  }, []);
-
-  // Track scroll position to update active section
-  useEffect(() => {
-    const container = document.querySelector('main');
-    if (!container) return;
-    const handleScroll = () => {
-      const scrollY = container.scrollTop + 120; // offset for top bars
-      let current = sections[0].id;
-      for (const s of sections) {
-        const el = document.getElementById(`stock-section-${s.id}`);
-        if (el && el.offsetTop <= scrollY) {
-          current = s.id;
-        }
-      }
-      setActiveSection(current);
-    };
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Fullscreen: Escape key to exit
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullscreen) {
-        setIsFullscreen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullscreen]);
-
-  // Fullscreen: track window resize for responsive chart sizing
-  useEffect(() => {
-    if (!isFullscreen) return;
-    const handler = () => window.dispatchEvent(new Event('resize'));
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, [isFullscreen]);
+  const { data: sr } = useSupportResistance(effectiveCode);
+  const watchlist = { add: useWatchlistAdd(), remove: useWatchlistRemove(), check: useWatchlistCheck(effectiveCode.split('.')[0]) };
 
   const hasQuote = !!realtimeQuote;
   const price = hasQuote ? safeNumber(realtimeQuote.current_price) : 0;
   const prevClose = hasQuote ? safeNumber(realtimeQuote.prev_close) : 0;
-  const change = hasQuote ? (price - prevClose) : 0;
-  const changePercent = hasQuote && prevClose > 0 ? (change / prevClose) * 100 : 0;
-  const up = hasQuote ? change >= 0 : true;
+  const change = price - prevClose;
+  const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+  const up = change >= 0;
+  const chgColor = up ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))';
 
+  const displayName = stock?.name || '--';
+  const displayCode = stock?.ticker || effectiveCode.split('.')[0] || stockId;
+
+  const chartData = useMemo(() => historyData ?? [], [historyData]);
+  const [crosshair, setCrosshair] = useState<{ time: string; open: number; high: number; low: number; close: number; volume: number } | null>(null);
+
+  const finance = (financeData || {}) as Partial<StockFinance>;
   const ff = Array.isArray(fundFlowData) ? fundFlowData : [];
-  const ai = (aiAnalysis || {}) as any;
-  // TODO: populate sr from an S/R data source (e.g. AI analysis or dedicated endpoint)
-  const { data: sr } = useSupportResistance(effectiveCode);
-  const finance = (financeData || {}) as any;
+  const mainFlow = ff.length > 0 ? safeNumber(ff[ff.length - 1].main_inflow) : 0;
 
-  const amplitude = hasQuote && prevClose > 0
-    ? ((safeNumber(realtimeQuote?.high) - safeNumber(realtimeQuote?.low)) / prevClose * 100)
-    : 0;
+  useEffect(() => { if (stock?.name) { setSelectedStock({ code: effectiveCode, name: stock.name }); } }, [stock?.name]);
+  useEffect(() => { if (stock?.name) document.title = stock.name; return () => { document.title = 'StockMate'; }; }, [stock?.name]);
 
-  if (!stockId) {
-    return (
-      <div className="p-4 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
-        <div className="text-red-700 dark:text-red-400 font-medium">错误：无法获取股票代码</div>
-        <div className="text-red-600 dark:text-red-300 text-sm mt-1">URL 参数 "code" 为空，请从板块排名页重新点击个股。</div>
-      </div>
-    );
-  }
+  if (!stockId) return <div className="flex items-center justify-center h-full"><p className="text-sm" style={{ color: 'hsl(var(--text-secondary))' }}>请在自选页选择股票</p></div>;
 
   const primaryError = stockList && !stockDetail ? stockDetailError : stockListError;
-  if (primaryError) {
-    return <div className="p-4 text-red-500">加载失败: {primaryError.message}</div>;
-  }
 
   return (
-    <div className="space-y-2">
-      {/* Row 1: Sticky Price Header Bar */}
-      <div className="sticky-price-bar rounded-lg px-4 py-2.5">
-        <div className="flex items-center justify-between">
-          {/* Left: Stock info */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button onClick={() => navigate(-1)} className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:text-red-700 hover:border-red-400 transition-colors rounded" title="返回">
-                <ArrowLeft size={14} /> 返回
-              </button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleWatchlistToggle}
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
-                      isInWatchlist
-                        ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-500 hover:bg-amber-200 dark:hover:bg-amber-500/25'
-                        : 'bg-gray-100 dark:bg-white/10 text-gray-400 dark:text-zinc-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10'
-                    }`}
-                    title={isInWatchlist ? '取消自选' : '加入自选'}
-                    aria-label={isInWatchlist ? '取消自选' : '加入自选'}
-                  >
-                    <Star size={14} fill={isInWatchlist ? 'currentColor' : 'none'} />
-                  </button>
-                  <span className="text-lg font-bold text-black dark:text-zinc-100">{stock?.name || '--'}</span>
-                  <span className="font-mono text-xs text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 px-1.5 py-0.5 rounded">{stock?.ticker || stockId}</span>
-                  <span className="text-[10px] text-gray-400 dark:text-zinc-400 bg-gray-100 dark:bg-white/10 px-1 py-0 rounded">{stock?.exchange || 'A股'}</span>
-                  {realtimeQuote && <span className="live-indicator" title="实时更新中" />}
-                  {!realtimeQuote && <span className="text-[10px] text-amber-500 dark:text-amber-400">离线</span>}
-                </div>
-              </div>
+    <div className="flex flex-col h-full" style={{ gap: 'var(--grid-unit, 8px)' }}>
+      {primaryError && <div className="p-2 text-[11px]" style={{ color: 'hsl(var(--price-up))' }}>加载失败: {primaryError.message}</div>}
+
+      {/* ── Zone A: Price Bar ── */}
+      <div className="flex items-center justify-between shrink-0 px-1" style={{ height: 56 }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate(-1)} className="text-[11px] font-medium shrink-0" style={{ color: 'hsl(var(--text-secondary))' }}>←</button>
+          <span className="text-sm font-bold truncate" style={{ color: 'hsl(var(--text-primary))' }}>{displayName}</span>
+          <span className="text-[11px] font-mono-nums shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{displayCode}</span>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-right">
+            <div className="text-[28px] font-black font-mono-nums leading-tight" style={{ color: chgColor }}>¥{fmtPrice(price)}</div>
+            <div className="text-xs font-mono-nums font-bold" style={{ color: chgColor }}>
+              {hasQuote ? `${up ? '+' : ''}${fmtPrice(change)} (${up ? '+' : ''}${fmtPct(changePct)}%)` : '--'}
             </div>
           </div>
-
-          {/* Center: Price */}
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] font-bold tracking-wider" style={{ color: 'hsl(var(--text-tertiary))' }}>
-              股价
-            </span>
-            <div className={`px-4 py-1 border-2 ${up ? 'border-l-[hsl(var(--red))]' : 'border-l-[hsl(var(--price-down))]'}`}
-              style={{ borderColor: 'hsl(var(--border-strong))', borderLeftWidth: 4 }}>
-              {hasQuote ? (
-                <>
-                  <div className={`font-mono-nums text-2xl font-black ${up ? 'price-up' : 'price-down'}`}>
-                    ¥{fmtPrice(price)}
-                  </div>
-                  <div className={`flex items-center gap-1 text-sm font-mono-nums font-bold ${up ? 'price-up' : 'price-down'}`}>
-                    {up ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    <span>{up ? '+' : ''}{fmtPrice(change)} ({up ? '+' : ''}{fmtPct(changePercent)}%)</span>
-                  </div>
-                </>
-              ) : (
-                <div className="text-gray-400 text-lg font-mono-nums">—</div>
-              )}
-            </div>
-          </div>
-
-          {/* Right: Mini stats — 横長 strip with dot dividers */}
-          <div className="flex items-center gap-2 text-[10px] font-bold">
-            <MiniStat label="開" value={realtimeQuote ? safeNumber(realtimeQuote.open).toFixed(2) : '--'} />
-            <span className="w-1 h-1 rounded-full inline-block" style={{ background: 'hsl(var(--text-tertiary))' }} />
-            <MiniStat label="高" value={realtimeQuote ? safeNumber(realtimeQuote.high).toFixed(2) : '--'} color="price-up" />
-            <span className="w-1 h-1 rounded-full inline-block" style={{ background: 'hsl(var(--text-tertiary))' }} />
-            <MiniStat label="低" value={realtimeQuote ? safeNumber(realtimeQuote.low).toFixed(2) : '--'} color="price-down" />
-            <span className="w-1 h-1 rounded-full inline-block" style={{ background: 'hsl(var(--text-tertiary))' }} />
-            <MiniStat label="昨" value={hasQuote ? prevClose.toFixed(2) : '--'} />
-            <div className="w-px h-8 bg-gray-300 dark:bg-zinc-700" />
-            <MiniStat label="成交量" value={realtimeQuote ? `${fmtVolume(safeNumber(realtimeQuote.volume) / 100)}` : '--'} />
-            <MiniStat label="换手率" value={realtimeQuote ? `${safeNumber(realtimeQuote.turnover_rate).toFixed(2)}%` : '--'} />
-            <MiniStat label="量比" value={realtimeQuote ? safeNumber(realtimeQuote.ratio).toFixed(2) : '--'} />
-            <MiniStat label="振幅" value={hasQuote && prevClose > 0 ? `${amplitude.toFixed(2)}%` : '--'} />
-          </div>
+          <button onClick={() => {
+            const ticker = effectiveCode.split('.')[0];
+            if (watchlist.check.data) { watchlist.remove.mutate(ticker, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['watchlist'] }); }, onError: (e: any) => console.warn(e) }); }
+            else { watchlist.add.mutate(ticker, { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['watchlist'] }); }, onError: (e: any) => console.warn(e) }); }
+          }}
+            className="flex h-9 w-9 shrink-0 items-center justify-center transition-colors" style={{ color: watchlist.check.data ? '#f59e0b' : 'hsl(var(--text-tertiary))' }}
+            title={watchlist.check.data ? '取消自选' : '加入自选'} aria-label={watchlist.check.data ? '取消自选' : '加入自选'}>
+            <Star size={18} fill={watchlist.check.data ? 'currentColor' : 'none'} />
+          </button>
         </div>
       </div>
 
-      {/* Row 2: Key Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-        <MetricCard label="市盈率 PE" value={finance.pe != null ? fmtPrice(finance.pe) : '--'} icon={BarChart3} />
-        <MetricCard label="成交量" value={hasQuote ? `${fmtVolume(safeNumber(realtimeQuote?.volume) / 100)}` : '--'} icon={Activity} />
-        <MetricCard label="换手率" value={hasQuote ? `${safeNumber(realtimeQuote?.turnover_rate).toFixed(2)}%` : '--'} icon={RefreshCw} />
-        <MetricCard label="成交额" value={hasQuote ? `${(safeNumber(realtimeQuote?.amount) / 1e8).toFixed(1)}亿` : '--'} icon={DollarSign} />
-      </div>
+      {/* ── Index Bar ── */}
+      <IndexBar />
 
-      {/* Row 2.5: AI Insight Bar */}
-      <div className="rounded-lg border border-gray-300 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 overflow-hidden min-h-[72px]">
-        {aiLoading ? (
-          <div className="flex items-center gap-3 px-4 animate-pulse" style={{ height: 72 }}>
-            <div className="w-5 h-5 rounded-full bg-gray-200 dark:bg-zinc-700" />
-            <div className="h-3 w-16 rounded bg-gray-200 dark:bg-zinc-700" />
-            <div className="h-5 w-10 rounded bg-gray-200 dark:bg-zinc-700" />
-            <div className="h-5 w-12 rounded bg-gray-200 dark:bg-zinc-700" />
-            <div className="flex-1" />
-            <div className="h-3 w-48 rounded bg-gray-200 dark:bg-zinc-700" />
-          </div>
-        ) : aiError ? (
-          <div className="flex items-center justify-between px-4" style={{ height: 72 }}>
-            <div className="flex items-center gap-2 text-[11px] text-amber-600 dark:text-amber-400">
-              <AlertTriangle size={14} />
-              <span>AI 分析失败，请重试</span>
-            </div>
-            <button onClick={() => analyzeAI()}
-              className="px-2.5 py-1 text-[10px] font-bold rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/30 hover:bg-violet-200 dark:hover:bg-violet-500/30 transition-colors"
-            >
-              重试
-            </button>
-          </div>
-        ) : aiAnalysis ? (
-          <div className="px-3 py-1.5 space-y-1">
-            {/* Top row: Title + Score + Recommendation + Commentary */}
-            <div className="flex items-center gap-2 text-[11px] min-h-[22px]">
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Brain size={14} className="text-violet-500" />
-                <span className="font-bold text-gray-900 dark:text-zinc-100">AI 智能研判</span>
-              </div>
-              {(() => {
-                const s = (ai as any).composite?.overall ?? ((ai as any).confidence ? Math.min(100, Math.round((ai as any).confidence * 100)) : 0);
-                const rec = (ai as any).composite?.recommendation ?? (ai as any).suggestion ?? '--';
-                const comment = (ai as any).card_reason ?? (ai as any).briefing?.commentary ?? (ai as any).summary ?? '';
-                const scoreClr = s >= 70 ? '#22c55e' : s >= 40 ? '#f59e0b' : '#ef4444';
-                const isBuy = ['买入','增持','买','buy','strong_buy'].some(k => rec.includes(k));
-                const isSell = ['卖出','减持','卖','sell','reduce'].some(k => rec.includes(k));
-                return (
-                  <>
-                    <span className="inline-flex items-center justify-center min-w-[26px] h-[18px] px-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: scoreClr }}>
-                      {s}
-                    </span>
-                    <span className={`inline-flex items-center px-1.5 h-[18px] rounded text-[10px] font-bold border ${isBuy ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30' : isSell ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30' : 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/30'}`}>
-                      {rec}
-                    </span>
-                    {comment && <span className="text-gray-500 dark:text-zinc-400 truncate flex-1">{comment}</span>}
-                  </>
-                );
-              })()}
-            </div>
-            {/* Bottom row: Mini dimension bars + Signal tags */}
-            <div className="flex items-center gap-3 flex-wrap min-h-[20px]">
-              {(['technical', 'capital_flow', 'fundamental', 'sentiment'] as const).map((key, i) => {
-                const dim = (ai as any)[key];
-                const score = dim?.score ?? 0;
-                const label = ['技术','资金','基本','情绪'][i];
-                const clr = ['#8b5cf6','#06b6d4','#22c55e','#f59e0b'][i];
-                return (
-                  <div key={key} className="flex items-center gap-1 text-[10px]">
-                    <span className="text-gray-500 dark:text-zinc-500 w-8 text-right shrink-0">{label}</span>
-                    <div className="w-16 h-1.5 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, score)}%`, backgroundColor: clr }} />
-                    </div>
-                    <span className="font-mono-nums font-medium text-gray-700 dark:text-zinc-300 w-5">{Math.round(score)}</span>
-                  </div>
-                );
-              })}
-              {/* Signal tags */}
-              {(() => {
-                const allSignals: { name: string; direction: string; strength: number }[] = [];
-                for (const key of ['technical', 'capital_flow', 'fundamental', 'sentiment'] as const) {
-                  const dim = (ai as any)[key];
-                  if (dim?.signals && Array.isArray(dim.signals)) {
-                    allSignals.push(...dim.signals);
-                  }
-                }
-                allSignals.sort((a, b) => b.strength - a.strength);
-                return allSignals.slice(0, 3).map((s, i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border"
-                    style={{
-                      borderColor: s.direction === 'bullish' ? '#22c55e' : s.direction === 'bearish' ? '#ef4444' : '#a1a1aa',
-                      color: s.direction === 'bullish' ? '#16a34a' : s.direction === 'bearish' ? '#dc2626' : '#71717a',
-                      backgroundColor: s.direction === 'bullish' ? 'rgba(34,197,94,0.1)' : s.direction === 'bearish' ? 'rgba(239,68,68,0.1)' : 'rgba(161,161,170,0.1)',
-                    }}
-                  >
-                    {s.direction === 'bullish' ? '▲' : s.direction === 'bearish' ? '▼' : '◆'} {s.name} {Math.round(s.strength * 100)}%
-                  </span>
-                ));
-              })()}
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center" style={{ height: 72 }}>
-            <button onClick={() => analyzeAI()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border border-violet-200 dark:border-violet-500/30 text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors"
-            >
-              <Brain size={14} />
-              点击分析获取 AI 研判
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Row 3: K-line Chart */}
-      <div
-        ref={klineContainerRef}
-        className={
-          isFullscreen
-            ? 'fixed inset-0 z-50 bg-white dark:bg-zinc-900 flex flex-col'
-            : 'rounded-lg border border-gray-300 dark:border-zinc-800 overflow-hidden'
-        }
-        onDoubleClick={() => { if (!isFullscreen) setIsFullscreen(true); }}
-      >
-        <div className={"flex items-center justify-between px-3 py-1.5 " + (isFullscreen ? 'bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm' : 'border-b border-gray-200 dark:border-zinc-800')}>
-          <div className="flex items-center gap-1">
-            {['minute','day','week','month'].map(p => (
-              <button key={p} onClick={() => handlePeriodChange(p)}
-                className={`px-2 py-0.5 text-[10px] font-bold border ${p === period ? 'bg-red-700 border-red-700 text-white' : 'border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-red-400'}`}>
-                {{minute:'分时',day:'日线',week:'周线',month:'月线'}[p]}
+      {/* ── Zone B: K-Line Chart ── */}
+      <div className="flex-1 min-h-0 flex flex-col" style={{ borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+        <div className="flex items-center justify-between px-1 py-0.5 shrink-0">
+          <div className="flex items-center gap-0.5">
+            {PERIODS.map(p => (
+              <button key={p} onClick={() => setPeriod(p)}
+                className={`px-1.5 py-0.5 text-[10px] font-bold transition-colors ${p === period ? 'text-[hsl(var(--text-primary))]' : ''}`}
+                style={{ color: p === period ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: p === period ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>
+                {PERIOD_LABELS[p]}
               </button>
             ))}
-            {/* Indicator selector */}
-            <span className="text-[10px] text-gray-400 mx-1">|</span>
-            <div className="relative">
-              <button onClick={() => setShowIndicatorMenu(!showIndicatorMenu)}
-                className="px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-red-400">
-                指标: {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'无'}[indicator]} ▾
-              </button>
-              {showIndicatorMenu && (
-                <div className="absolute top-full left-0 mt-1 bg-white dark:bg-zinc-900 border border-gray-300 dark:border-zinc-700 shadow-lg z-20">
-                  {(['macd','kdj','rsi','none'] as const).map(i => (
-                    <button key={i} onClick={() => { setIndicator(i); setShowIndicatorMenu(false); }}
-                      className={`block w-full text-left px-3 py-1.5 text-[10px] font-bold hover:bg-gray-100 dark:hover:bg-white/5 ${indicator === i ? 'text-red-700' : 'text-gray-600 dark:text-zinc-400'}`}>
-                      {{macd:'MACD',kdj:'KDJ',rsi:'RSI',none:'无'}[i]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Strategy dropdown */}
-            {strategyResult && (
-              <div className="relative">
-                <button onClick={() => setStrategyPanelCollapsed(!strategyPanelCollapsed)}
-                  className="px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-emerald-400 ml-1">
-                  策略 {(strategyResult.signals || []).length > 0 ? `(${(strategyResult.signals || []).length})` : ''} ▾
-                </button>
-              </div>
-            )}
-            </div>
-            {/* Fullscreen toggle button */}
-            <span className="text-[10px] text-gray-400 mx-1">|</span>
-            <button
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:border-red-400"
-              title={isFullscreen ? '退出全屏 (Esc)' : '全屏显示'}
-            >
-              {isFullscreen ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
-              {isFullscreen ? '退出' : '全屏'}
-            </button>
           </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => { queryClient.invalidateQueries({ queryKey: ['stocks'] }); }}
-              className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:text-red-700 hover:border-red-400 transition-colors"
-              title="刷新数据">
-              <RefreshCw size={11} /> 刷新
+          <div className="flex items-center gap-3">
+            <CrosshairTooltip data={crosshair} />
+            <button onClick={() => { queryClient.invalidateQueries({ queryKey: ['stocks', 'history'] }); queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime'] }); }}
+              className="text-[10px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新">
+              <RefreshCw size={12} className={historyLoading ? 'animate-spin' : ''} />
             </button>
-            {isFullscreen && (
-              <button onClick={() => setIsFullscreen(false)}
-                className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold border border-gray-300 dark:border-zinc-700 text-gray-600 dark:text-zinc-400 hover:text-red-500 transition-colors"
-                title="退出全屏 (Esc)">
-                <X size={11} /> 退出
-              </button>
-            )}
           </div>
         </div>
-      {period === 'minute' ? (
-        <IntradayChart
-          data={Array.isArray(intradayData) ? intradayData : []}
-          prevClose={prevClose}
-          loading={intradayLoading}
-          chartStyle={chartStyle}
-          className={isFullscreen ? 'border-0 rounded-none flex-1' : 'border-0 rounded-none'}
-        />
-      ) : historyLoading ? (
-        <div className={isFullscreen ? 'flex-1 flex flex-col items-center justify-center text-gray-500 gap-2' : 'h-[500px] flex flex-col items-center justify-center text-gray-500 gap-2'}><RefreshCw className="animate-spin" size={20} /><span className="text-xs">加载K线数据...</span></div>
-      ) : (
-        <div className={isFullscreen ? 'flex flex-1 min-h-0 relative' : 'flex relative'}>
-          <div className="flex-1 min-w-0">
-            <KLineChart data={chartData} indicator={indicator} period={period} onCrosshairMove={setCrosshairData} markers={strategyMarkers} strategyResult={strategyResult} focusTime={focusSignalTime} height={isFullscreen ? '100%' : 500} onMarkerClick={(d) => setSignalPopup(d)} />
-          </div>
-          <InfoPanel data={crosshairData} indicator={indicator} T={chartTheme} />
-          {/* Strategy overlay panel */}
-          {strategyResult && !strategyPanelCollapsed && (
-            <div className="absolute inset-0 z-30 bg-white/95 dark:bg-zinc-900/95 overflow-auto p-4" style={{ marginTop: '36px' }}>
-              <StrategyPanel
-                strategyResult={strategyResult}
-                showMarkers={strategyShowMarkers}
-                collapsed={false}
-                onToggleCollapsed={() => setStrategyPanelCollapsed(true)}
-                onToggleMarkers={() => setStrategyShowMarkers(!strategyShowMarkers)}
-                onSignalClick={(date) => setFocusSignalTime(date)}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Row 4: AI Analysis + Detailed Data (2-column) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2">
-        {/* AI Analysis Panel - takes 2 cols */}
-        <div className="lg:col-span-2 glass-card-compact p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Brain size={16} className="text-violet-500" />
-              <h3 className="text-xs font-semibold text-black dark:text-white uppercase tracking-wide">AI 智能分析</h3>
-              {aiAnalysis && (
-                <Badge text={ai.trend === 'bullish' ? '看涨' : ai.trend === 'bearish' ? '看跌' : '观望'} type={
-                  ai.trend === 'bullish' ? 'buy' : ai.trend === 'bearish' ? 'sell' : 'hold'
-                } />
-              )}
-            </div>
-            <div className="flex items-center gap-1">
-            <button
-              onClick={() => analyzeAI()}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/30 hover:bg-violet-200 dark:hover:bg-violet-500/30 transition-all"
-              disabled={aiLoading}
-            >
-              {aiLoading ? <RefreshCw size={11} className="animate-spin" /> : <Brain size={11} />}
-              {aiLoading ? '分析中...' : '重新分析'}
-            </button>
-            <button
-              onClick={() => {
-                const rules = localStorage.getItem('stockmate_trading_rules') || '';
-                if (!rules) return;
-                generateStrategyMutation.mutate(
-                  { stockId: effectiveCode, rules },
-                  { onSuccess: (data) => { setStrategyResult(data); setStrategyShowMarkers(true); cacheStrategyResult(effectiveCode, data); } }
-                );
-              }}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-200 dark:hover:bg-emerald-500/30 transition-all"
-              disabled={generateStrategyMutation.isPending}
-            >
-              {generateStrategyMutation.isPending ? <RefreshCw size={11} className="animate-spin" /> : <TrendingUp size={11} />}
-              {generateStrategyMutation.isPending ? '生成中...' : '生成策略'}
-            </button>
-            </div>
-          </div>
-
-          {aiAnalysis ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-6">
-                <div>
-                  <div className="text-lg font-bold font-mono-nums text-black dark:text-white">{ai.confidence ? `${(ai.confidence > 1 ? ai.confidence : ai.confidence * 100).toFixed(1)}%` : '--'}</div>
-                  <div className="text-[10px] text-gray-500 dark:text-zinc-500">置信度</div>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-black dark:text-white">{ai.suggestion || '--'}</div>
-                  <div className="text-[10px] text-gray-500 dark:text-zinc-500">操作建议</div>
-                </div>
-                <div className="flex-1">
-                  {(() => {
-                    const pct = Math.min(100, safeNumber(ai.confidence > 1 ? ai.confidence : ai.confidence * 100));
-                    return (
-                      <div className="progress-bar-track">
-                        <div
-                          className={`progress-bar-fill ${pct > 66 ? 'bg-emerald-500' : pct > 33 ? 'bg-amber-500' : 'bg-red-500'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <button onClick={() => setAiExpanded(!aiExpanded)} className="flex items-center gap-1 text-[10px] text-violet-500 hover:text-violet-400 dark:hover:text-violet-300 transition-colors">
-                {aiExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                {aiExpanded ? '收起详情' : '展开详情'}
-              </button>
-
-              {aiExpanded && (
-                <div className="space-y-1.5 text-xs">
-                  {ai.summary && (
-                    <div className="p-2 rounded bg-gray-50 dark:bg-white/5">
-                      <div className="text-[10px] font-medium text-gray-500 dark:text-zinc-500 mb-0.5">分析摘要</div>
-                      <div className="text-gray-700 dark:text-gray-300 leading-relaxed">{ai.summary}</div>
-                    </div>
-                  )}
-                  {Array.isArray(ai.key_points) && ai.key_points.length > 0 && (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {ai.key_points.map((r: string, i: number) => (
-                        <div key={i} className="flex items-start gap-1 p-1.5 rounded bg-gray-50 dark:bg-white/5">
-                          <Target size={10} className="text-violet-400 mt-0.5 shrink-0" />
-                          <span className="text-[11px] text-gray-600 dark:text-gray-400">{r}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {Array.isArray(ai.risks) && ai.risks.length > 0 && (
-                    <div className="p-2 rounded bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20">
-                      <div className="text-[10px] font-medium text-rose-600 dark:text-rose-400 mb-1">风险提示</div>
-                      <ul className="list-disc list-inside text-rose-600 dark:text-rose-400">
-                        {ai.risks.map((r: string, i: number) => <li key={i} className="text-[11px]">{r}</li>)}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Strategy Result from AI */}
-              {strategyResult && (
-                <div className="mt-3 p-2 rounded bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp size={12} className="text-emerald-500" />
-                      <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                        {strategyResult.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                        {(strategyResult.signals || []).length} 个信号
-                      </span>
-                      <button
-                        onClick={() => setStrategyShowMarkers(!strategyShowMarkers)}
-                        className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all ${
-                          strategyShowMarkers
-                            ? 'bg-emerald-500 border-emerald-500 text-white'
-                            : 'bg-transparent border-emerald-300 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        {strategyShowMarkers ? '隐藏信号' : '显示信号'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">{strategyResult.explanation}</div>
-                  {/* Signal list */}
-                  {strategyShowMarkers && strategyResult.signals && strategyResult.signals.length > 0 && (
-                    <div className="mt-1.5 space-y-0.5">
-                      {strategyResult.signals.map((s: any, i: number) => (
-                        <div key={i} className="flex items-center gap-1 text-[10px]">
-                          <span className={s.action === 'buy' ? 'text-emerald-500 font-bold' : 'text-red-500 font-bold'}>
-                            {s.action === 'buy' ? '▲ 买入' : '▼ 卖出'}
-                          </span>
-                          <span className="text-gray-600 dark:text-gray-400">{s.date}</span>
-                          <span className={`font-mono-nums font-medium ${s.action === 'buy' ? 'text-emerald-500' : 'text-red-500'}`}>
-                            ¥{Number(s.price).toFixed(2)}
-                          </span>
-                          <span className="text-gray-500 dark:text-zinc-500 truncate">{s.reason}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : aiError ? (
-            <div className="text-center py-4 text-xs">
-              <AlertTriangle size={24} className="mx-auto mb-2 text-amber-500" />
-              <p className="text-amber-600 dark:text-amber-400 font-medium">AI 分析失败</p>
-              <p className="text-gray-500 dark:text-zinc-400 mt-1">
-                {typeof aiError === 'string' ? aiError : (aiError as any)?.message || '请检查网络或 API Key 配置'}
-              </p>
-              <button
-                onClick={() => analyzeAI()}
-                className="mt-2 px-3 py-1 text-[10px] rounded bg-violet-100 dark:bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-500/30 hover:bg-violet-200 transition-colors"
-              >
-                重试
-              </button>
-            </div>
+        {period === 'minute' ? (
+          intradayLoading ? (
+            <div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>
           ) : (
-            <div className="text-center py-6 text-gray-500 dark:text-zinc-400 text-xs">
-              <Brain size={32} className="mx-auto mb-2 text-gray-400 dark:text-zinc-400" />
-              <p>点击"重新分析"获取 AI 智能分析</p>
-              {!deepseekConfig?.has_key && <p className="text-[10px] mt-1 text-amber-500 dark:text-amber-400">请先在设置中配置 DeepSeek API Key</p>}
-            </div>
-          )}
-        </div>
-
-        {/* Right: S/R + Technical Summary */}
-        <div className="space-y-2">
-          {/* Support / Resistance */}
-          <div className="glass-card-compact p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Activity size={14} className="text-gray-500 dark:text-zinc-400" />
-              <h3 className="text-xs font-semibold text-black dark:text-white uppercase tracking-wide">支撑 / 压力</h3>
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-[10px] text-gray-500 dark:text-zinc-400 mb-1">
-                当前: <span className="font-mono-nums font-medium text-black dark:text-white">¥{price.toFixed(2)}</span>
-              </div>
-              {((sr?.resistances as any[]) || []).length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-[10px] text-rose-500 font-medium">阻力位</div>
-                  {(sr?.resistances as any[]).slice(0, 3).map((r: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-[11px]">
-                      <span className="text-gray-500 dark:text-zinc-400">R{i + 1}</span>
-                      <span className="font-mono-nums text-rose-500">{safeNumber(r).toFixed(2)}</span>
-                      <span className="text-[10px] text-rose-400">
-                        +{((safeNumber(r) - price) / price * 100).toFixed(2)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {((sr?.supports as any[]) || []).length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-[10px] text-emerald-500 font-medium">支撑位</div>
-                  {(sr!.supports as any[]).slice(0, 3).map((s: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-[11px]">
-                      <span className="text-gray-500 dark:text-zinc-400">S{i + 1}</span>
-                      <span className="font-mono-nums text-emerald-500">{safeNumber(s).toFixed(2)}</span>
-                      <span className="text-[10px] text-emerald-400">
-                        {((safeNumber(s) - price) / price * 100).toFixed(2)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {((sr?.supports as any[]) || []).length === 0 && ((sr?.resistances as any[]) || []).length === 0 && (
-                <div className="text-[11px] text-gray-400 dark:text-zinc-400">暂无数据</div>
-              )}
-            </div>
-          </div>
-
-          {/* Fund Flow Summary */}
-          <div className="glass-card-compact p-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Shield size={14} className="text-gray-500 dark:text-zinc-400" />
-              <h3 className="text-xs font-semibold text-black dark:text-white uppercase tracking-wide">资金流向</h3>
-            </div>
-            {ff.length > 0 ? (
-              <div className="space-y-1">
-                {ff.slice(0, 4).map((f: any, i: number) => {
-                  const mainIn = safeNumber(f.main_inflow);
-                  const up = mainIn > 0;
-                  return (
-                    <div key={i} className="flex items-center justify-between text-[11px] py-0.5 border-b border-gray-100 dark:border-zinc-800 last:border-0">
-                      <span className="text-gray-500 dark:text-zinc-400">{f.date || '--'}</span>
-                      <span className={`font-mono-nums font-medium ${up ? 'text-rose-500' : 'text-emerald-500'}`}>
-                        {up ? '+' : ''}{(mainIn / 1e4).toFixed(0)}万
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-[11px] text-gray-400 dark:text-zinc-400 text-center py-2">暂无资金流向数据</div>
-            )}
-          </div>
-        </div>
+            <IntradayChart data={(intradayData || []) as Quote[]} prevClose={prevClose} loading={intradayLoading} className="flex-1" />
+          )
+        ) : historyLoading && !chartData.length ? (
+          <div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>
+        ) : (
+          <SimpleKLine data={chartData} onCrosshairMove={setCrosshair} />
+        )}
       </div>
 
-      {/* Row 5: Tabs */}
-      <div className="glass-card-compact p-3">
-        <div className="flex gap-3 border-b border-gray-200 dark:border-zinc-800 pb-2 mb-2">
+      {/* ── Zone C: Key Data (2 rows) ── */}
+      <div className="shrink-0 px-1 py-1.5" style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+        <div className="grid grid-cols-4 gap-3">
           {[
-            { key: 'overview', label: '概览' },
-            { key: 'daily', label: '日报' },
-          ].map((tab) => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key as any)} className={`text-[11px] font-medium transition-colors pb-2 -mb-2 border-b-2 ${activeTab === tab.key ? 'text-violet-500 border-violet-500' : 'text-gray-500 border-transparent hover:text-gray-700 dark:hover:text-zinc-300'}`}>
-              {tab.label}
-            </button>
+            { label: '市盈率', value: finance.pe != null ? finance.pe.toFixed(1) : '--' },
+            { label: '市净率', value: finance.pb != null ? finance.pb.toFixed(1) : '--' },
+            { label: '换手率', value: hasQuote ? `${safeNumber(realtimeQuote.turnover_rate).toFixed(2)}%` : '--' },
+            { label: '成交额', value: hasQuote ? fmtAmount(safeNumber(realtimeQuote.amount)) : '--' },
+            { label: 'ROE', value: finance.roe != null ? `${(finance.roe * 100).toFixed(1)}%` : '--' },
+            { label: '量比', value: hasQuote ? safeNumber(realtimeQuote.ratio).toFixed(2) : '--' },
+            { label: '振幅', value: hasQuote && prevClose > 0 ? `${(((safeNumber(realtimeQuote.high) - safeNumber(realtimeQuote.low)) / prevClose) * 100).toFixed(2)}%` : '--' },
+            { label: '主力净流入', value: mainFlow ? (mainFlow > 0 ? '+' : '') + fmtAmount(Math.abs(mainFlow)) : '--' },
+          ].map((item, i) => (
+            <div key={i} className="text-center">
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>{item.label}</div>
+              <div className="text-sm font-mono-nums font-bold" style={{ color: item.label === '主力净流入' && mainFlow ? (mainFlow > 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))') : 'hsl(var(--text-primary))' }}>{item.value}</div>
+            </div>
           ))}
         </div>
-
-        {activeTab === 'overview' && (
-          <div className="space-y-2">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="p-2 rounded bg-gray-50 dark:bg-white/5">
-                <div className="text-[10px] text-gray-500 dark:text-zinc-400">最近支撑</div>
-                <div className="text-xs font-mono-nums font-medium text-emerald-500">{sr?.nearest_support ? safeNumber(sr?.nearest_support).toFixed(2) : '--'}</div>
-              </div>
-              <div className="p-2 rounded bg-gray-50 dark:bg-white/5">
-                <div className="text-[10px] text-gray-500 dark:text-zinc-400">最近阻力</div>
-                <div className="text-xs font-mono-nums font-medium text-rose-500">{sr?.nearest_resistance ? safeNumber(sr?.nearest_resistance).toFixed(2) : '--'}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-
-
-        {activeTab === 'daily' && (
-          <DailyReport
-            stock={stock}
-            realtimeQuote={realtimeQuote}
-            strategyResult={strategyResult}
-            sr={sr}
-            aiAnalysis={ai}
-            aiLoading={aiLoading}
-            strategyLoading={generateStrategyMutation.isPending}
-            onGenerateReport={handleGenerateReport}
-            effectiveCode={effectiveCode}
-            prevClose={prevClose}
-            price={price}
-            change={change}
-            changePercent={changePercent}
-            up={up}
-          />
-        )}
       </div>
 
-      {/* Signal detail popup */}
-      {signalPopup && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.4)' }}
-          onClick={() => setSignalPopup(null)}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-80 rounded-xl shadow-2xl overflow-hidden"
-            style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-default))' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="px-4 py-3 flex items-center justify-between"
-              style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}
-            >
-              <div className="flex items-center gap-2">
-                <TrendingUp size={16} className="text-emerald-500" />
-                <span className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
-                  信号详情
-                </span>
-              </div>
-              <button
-                onClick={() => setSignalPopup(null)}
-                className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="px-4 py-4 space-y-3">
-              {/* Direction badge */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>操作方向</span>
-                <span
-                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${
-                    signalPopup.signal.action === 'buy'
-                      ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400'
-                  }`}
-                >
-                  {signalPopup.signal.action === 'buy' ? '▲ 买入' : '▼ 卖出'}
-                </span>
-              </div>
-
-              {/* Date */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>日期</span>
-                <span className="text-sm font-semibold font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
-                  {signalPopup.signal.date}
-                </span>
-              </div>
-
-              {/* Price */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>价格</span>
-                <span className="text-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
-                  ¥{Number(signalPopup.signal.price).toFixed(2)}
-                </span>
-              </div>
-
-              {/* Strategy name */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>策略</span>
-                <span className="text-sm font-semibold" style={{ color: 'hsl(var(--accent))' }}>
-                  {signalPopup.strategyName}
-                </span>
-              </div>
-
-              {/* Reason */}
-              <div className="pt-2" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
-                <span className="text-xs block mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>原因</span>
-                <p className="text-sm leading-relaxed" style={{ color: 'hsl(var(--text-primary))' }}>
-                  {signalPopup.signal.reason}
-                </p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-4 py-3 text-center"
-              style={{ borderTop: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-root))' }}
-            >
-              <button
-                onClick={() => { setFocusSignalTime(signalPopup.signal.date); setSignalPopup(null); }}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                style={{ background: 'hsl(var(--accent))', color: 'hsl(var(--text-inverse))' }}
-              >
-                跳转到K线位置
-              </button>
-            </div>
-          </motion.div>
+      {/* ── Zone D: Support / Resistance ── */}
+      <div className="shrink-0 grid grid-cols-2 gap-3 px-1 py-1.5">
+        <div className="text-center">
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>最近阻力</div>
+          <div className="text-sm font-mono-nums font-bold" style={{ color: 'hsl(var(--price-up))' }}>
+            {sr?.resistances?.[0] != null ? fmtPrice(sr.resistances[0]) : '--'}
+          </div>
         </div>
-      )}
+        <div className="text-center">
+          <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>最近支撑</div>
+          <div className="text-sm font-mono-nums font-bold" style={{ color: 'hsl(var(--price-down))' }}>
+            {sr?.supports?.[0] != null ? fmtPrice(sr.supports[0]) : '--'}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

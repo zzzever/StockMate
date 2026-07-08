@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 vi.mock('@/hooks/useTauriQuery', () => ({
   useDeepSeekConfig: vi.fn(),
+  useDiagnoseDataSources: () => ({ data: null, isLoading: false, error: null }),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -94,10 +95,14 @@ describe('SettingsPage', () => {
         <SettingsPage />
       </MemoryRouter>
     );
+    // Fill in API key first — handleTest returns early if apiKey is empty
+    // When has_key is true, placeholder shows masked dots
+    const input = screen.getByPlaceholderText('••••••••••••••••') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'sk-test-key' } });
     const testBtn = screen.getByText('连接测试');
     fireEvent.click(testBtn);
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('test_deepseek_connection');
+      expect(invokeMock).toHaveBeenCalledWith('test_deepseek_connection', expect.anything());
     });
   });
 });

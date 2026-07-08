@@ -67,7 +67,7 @@ describe('useTauriQuery', () => {
     const { result } = renderHook(() => useStockHistory('1', 60), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(mockHistory);
-    expect(invokeMock).toHaveBeenCalledWith('get_stock_history', { stock_id: '1', days: 60 });
+    expect(invokeMock).toHaveBeenCalledWith('get_stock_history', { stockId: '1', days: 60, period: 'day' });
   });
 
   it('useDeepSeekConfig fetches config', async () => {

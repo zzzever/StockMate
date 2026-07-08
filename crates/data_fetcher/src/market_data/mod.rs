@@ -1,14 +1,14 @@
 //! Market data providers for real-time stock data.
 //!
 //! Providers:
-//! - EastMoney: Primary A-share (Shanghai/Shenzhen/Beijing) real-time prices and K-line
-//! - Tencent: Fallback A-share provider via QQ Finance API
+//! - Tencent: Primary A-share (Shanghai/Shenzhen/Beijing) real-time prices, batch quotes, and K-line via QQ Finance API
+//! - EastMoney: A-share real-time prices and K-line (available as fallback; Tencent is more reliable for batch)
 //! - YahooFinance: US stock prices via Yahoo Finance chart API
 
-pub mod eastmoney; // Primary A-share data provider
+pub mod eastmoney; // A-share data provider (fallback)
 pub mod ws;        // Sina Finance WebSocket real-time push
 pub mod yahoo;
-pub mod tencent;   // Fallback A-share (Shanghai/Shenzhen) real-time prices and K-line via QQ Finance API
+pub mod tencent;   // Primary A-share real-time prices, batch quotes, and K-line via QQ Finance API
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -369,10 +369,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_select_provider_eastmoney() {
-        assert!(matches!(select_provider("600519.SH"), Provider::EastMoney));
-        assert!(matches!(select_provider("000001.SZ"), Provider::EastMoney));
-        assert!(matches!(select_provider("430047.BJ"), Provider::EastMoney));
+    fn test_select_provider_ashare() {
+        assert!(matches!(select_provider("600519.SH"), Provider::Tencent));
+        assert!(matches!(select_provider("000001.SZ"), Provider::Tencent));
+        assert!(matches!(select_provider("430047.BJ"), Provider::Tencent));
     }
 
     #[test]

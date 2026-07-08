@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Sidebar from '@/components/Sidebar';
+import { useAppStore } from '@/store/useAppStore';
 
 const toggleSidebar = vi.fn();
 const mockStore = {
@@ -37,6 +38,7 @@ describe('Sidebar', () => {
     );
     expect(screen.getByText('StockMate')).toBeInTheDocument();
     expect(screen.getByText('自選')).toBeInTheDocument();
+    expect(screen.getByText('行情')).toBeInTheDocument();
     expect(screen.getByText('搜尋')).toBeInTheDocument();
     expect(screen.getByText('回測')).toBeInTheDocument();
     expect(screen.getByText('預測')).toBeInTheDocument();
@@ -89,12 +91,7 @@ describe('Sidebar', () => {
   });
 
   it('adds ?code= param to tool links when selectedStock is set', () => {
-    const selectedStock = { code: '600519.SH', name: '贵州茅台' };
-    const mockWithStock = {
-      ...mockStore,
-      selectedStock,
-    };
-    vi.mocked(useAppStore).mockImplementation((selector: any) => selector(mockWithStock));
+    mockStore.selectedStock = { code: '600519.SH', name: '贵州茅台' };
     render(
       <MemoryRouter>
         <Sidebar />
@@ -106,5 +103,6 @@ describe('Sidebar', () => {
     expect(predictLink).toHaveAttribute('href', '/predict?code=600519.SH');
     const rulesLink = screen.getByText('規則').closest('a');
     expect(rulesLink).toHaveAttribute('href', '/rules?code=600519.SH');
+    mockStore.selectedStock = null;
   });
 });

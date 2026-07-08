@@ -80,10 +80,6 @@ export const mockLightweightCharts = () => vi.mock('lightweight-charts', () => (
   LineStyle: { Dashed: 2 },
 }));
 
-export const mockParticlesBackground = () => vi.mock('@/components/ParticlesBackground', () => ({
-  default: () => <div data-testid="particles-bg" className="particles-container" />,
-}));
-
 export const mockTauriApi = () => vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn((_cmd: string, _args?: Record<string, unknown>) => {
     return Promise.resolve(null);

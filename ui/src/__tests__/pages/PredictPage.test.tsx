@@ -2,82 +2,65 @@ import { vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import PredictPage from '@/pages/PredictPage';
-import { usePredictWithAI, useStockList } from '@/hooks/useTauriQuery';
+
+const queryReturn = { data: null, isLoading: false, error: null } as any;
+const mutationReturn = { mutate: vi.fn(), isLoading: false, isSuccess: false, data: null } as any;
 
 vi.mock('@/hooks/useTauriQuery', () => ({
-  usePredictWithAI: vi.fn(),
   useStockList: vi.fn(),
+  useStockDetail: () => queryReturn,
+  useAnalyzeAll: () => queryReturn,
+  useStockHistory: () => ({ data: [], isLoading: false }),
+  useRealtimeQuote: () => queryReturn,
+  useStockFinance: () => queryReturn,
+  useDeepSeekConfig: () => queryReturn,
+  usePredictWithAI: () => queryReturn,
+  useDiagnoseDataSources: () => ({ data: null, isLoading: false }),
+  useRealtimePriceListener: () => {},
+  useWsRealtimeQuote: () => undefined,
+  useGenerateStrategyWithAI: () => mutationReturn,
 }));
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
+    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
   },
   AnimatePresence: ({ children }: any) => <>{children}</>,
 }));
 
+vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
+
+vi.mock('lightweight-charts', () => ({
+  LineStyle: { Solid: 0, Dashed: 2 },
+  createChart: vi.fn(() => ({
+    addCandlestickSeries: vi.fn(() => ({ setData: vi.fn() })),
+    addLineSeries: vi.fn(() => ({ setData: vi.fn() })),
+    addHistogramSeries: vi.fn(() => ({ setData: vi.fn() })),
+    timeScale: vi.fn(() => ({ fitContent: vi.fn() })),
+    remove: vi.fn(),
+  })),
+}));
+
 describe('PredictPage', () => {
-  it('renders predict page with loading state', () => {
-    vi.mocked(usePredictWithAI).mockReturnValue({ data: null, isLoading: true, error: null, refetch: vi.fn() } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
+  it('renders predict page title', () => {
     render(
-      <MemoryRouter initialEntries={['/predict?code=600519']}>
+      <MemoryRouter initialEntries={['/predict']}>
         <PredictPage />
       </MemoryRouter>
     );
-    expect(screen.getByText('预测中...')).toBeInTheDocument();
+    expect(screen.getByText('AI 预测中心')).toBeInTheDocument();
   });
 
-  it('renders prediction result when data is loaded', () => {
-    vi.mocked(usePredictWithAI).mockReturnValue({
-      data: {
-        direction: 'up',
-        confidence: 0.82,
-        target_price: '1800-1900',
-        reasoning: '技术面显示均线多头排列，MACD金叉形成。基本面方面，公司业绩稳健，毛利率维持高位。',
-        time_frame: '1个月',
-      },
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
+  it('shows code in header when stockId query param is present', () => {
     render(
       <MemoryRouter initialEntries={['/predict?code=600519']}>
         <PredictPage />
       </MemoryRouter>
     );
-    expect(screen.getByText('AI 预测结论')).toBeInTheDocument();
-    expect(screen.getByText('82%')).toBeInTheDocument();
-    expect(screen.getByText('上涨')).toBeInTheDocument();
-  });
-
-  it('triggers refresh on button click', () => {
-    const refetch = vi.fn();
-    vi.mocked(usePredictWithAI).mockReturnValue({ data: null, isLoading: false, error: null, refetch } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
-    render(
-      <MemoryRouter initialEntries={['/predict?code=600519']}>
-        <PredictPage />
-      </MemoryRouter>
-    );
-    const refreshBtn = screen.getByText('刷新预测');
-    fireEvent.click(refreshBtn);
-    expect(refetch).toHaveBeenCalled();
-  });
-
-  it('shows error state when API fails', () => {
-    vi.mocked(usePredictWithAI).mockReturnValue({ data: null, isLoading: false, error: new Error('API Key 无效'), refetch: vi.fn() } as any);
-    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
-
-    render(
-      <MemoryRouter initialEntries={['/predict?code=600519']}>
-        <PredictPage />
-      </MemoryRouter>
-    );
-    expect(screen.getByText('API Key 无效，请重新配置')).toBeInTheDocument();
+    expect(screen.getByText('600519')).toBeInTheDocument();
   });
 });

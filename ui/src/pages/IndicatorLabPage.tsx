@@ -406,7 +406,7 @@ export default function IndicatorLabPage() {
                 {psychLoading ? '正在获取心理分析...' : (psychDetail || '点击刷新获取心理分析')}
               </div>
               <div className="h-1.5 rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-red-500 via-amber-500 to-emerald-500 transition-all"
+                <div className="h-full rounded-full bg-gray-500 transition-all"
                   style={{ width: `${psychology}%` }} />
               </div>
               <div className="flex justify-between text-[9px] mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>

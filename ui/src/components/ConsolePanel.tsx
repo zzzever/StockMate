@@ -89,7 +89,7 @@ export function ConsolePanel() {
   const warnCount = logs.filter(l => l.type === 'warn').length;
 
   return (
-    <div className="fixed bottom-3 right-3 z-50 w-96 max-h-96 bg-zinc-900/95 rounded-lg border border-zinc-700 shadow-2xl flex flex-col">
+    <div className="fixed bottom-3 right-3 z-50 w-96 max-h-96 bg-zinc-900 border border-zinc-700 flex flex-col">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-zinc-700">
         <div className="flex items-center gap-2">
           <Terminal size={14} className="text-violet-400" />

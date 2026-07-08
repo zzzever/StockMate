@@ -7,6 +7,7 @@ import SearchPage from '@/pages/SearchPage';
 import SectorStockRankPage from '@/pages/SectorStockRankPage';
 import StockDetailPage from '@/pages/StockDetailPage';
 import WatchlistPage from '@/pages/WatchlistPage';
+
 import BacktestPage from '@/pages/BacktestPage';
 import PredictPage from '@/pages/PredictPage';
 import RulesPage from '@/pages/RulesPage';
@@ -36,6 +37,7 @@ function App() {
               <Route path="/" element={<Navigate to="/watchlist" />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
+              <Route path="/quote" element={<StockDetailPage />} />
               <Route path="/sector" element={<SectorStockRankPage />} />
               <Route path="/stock" element={<StockDetailPage />} />
               <Route path="/backtest" element={<BacktestPage />} />

@@ -11,16 +11,20 @@ const mockStore = {
   toggleSidebar: vi.fn(),
   toggleDarkMode: vi.fn(),
   setSelectedStock: vi.fn(),
-  selectedStock: null,
+  selectedStock: null as { code: string; name: string } | null,
   theme: 'dark' as const,
+  debugOpen: false,
+  accent: 'red' as const,
 };
 
 vi.mock('@/store/useAppStore', () => ({
   useAppStore: (selector: any) => selector(mockStore),
+  initSystemThemeListener: () => () => {},
 }));
 
-vi.mock('@/components/ParticlesBackground', () => ({
-  default: () => <div data-testid="particles-bg" className="particles-container" />,
+vi.mock('@/hooks/useTauriQuery', () => ({
+  useRealtimePriceListener: () => {},
+  useDiagnoseDataSources: () => ({ data: null, isLoading: false }),
 }));
 
 vi.mock('framer-motion', () => ({
@@ -41,11 +45,9 @@ describe('Layout', () => {
         </Layout>
       </MemoryRouter>
     );
-    // Sidebar logo text updated to "股王" (was "StockMate" in old version)
-    expect(screen.getByText('股王')).toBeInTheDocument();
+    expect(screen.getAllByText(/StockMate/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('child')).toBeInTheDocument();
-    // TopBar placeholder updated to "輸入代碼…" (was "搜索股票代码或名称..." in old version)
-    expect(screen.getByPlaceholderText('輸入代碼…')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('輸入代碼… (Ctrl+K)')).toBeInTheDocument();
   });
 
   it('sets page based on route in useEffect', () => {

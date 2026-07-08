@@ -44,7 +44,7 @@ export interface PriceData {
   turnover_rate: number; // 换手率
 }
 
-export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'indicatorLab' | 'settings';
+export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'indicatorLab' | 'settings' | 'quote';
 
 // v0.2.0 new types
 export interface HotSector {
@@ -90,25 +90,24 @@ export interface StockFinance {
   gross_margin?: number;
   net_margin?: number;
   roe?: number;
-  revenue?: string;
-  net_profit?: string;
+  revenue?: number;
+  net_profit?: number;
   debt_ratio?: number;
-  eps?: string;
+  eps?: number;
   report_date?: string;
   pe?: number;
   pb?: number;
-  total_market_cap?: string;
+  total_market_cap?: number;
 }
 
 export interface FundFlow {
   stock_id: string;
   date: string;
-  main_inflow: string;
-  main_outflow: string;
-  retail_inflow: string;
-  retail_outflow: string;
-  net_main: string;
-  net_retail: string;
+  main_inflow?: number;
+  retail_inflow?: number;
+  large_order_inflow?: number;
+  medium_order_inflow?: number;
+  small_order_inflow?: number;
 }
 
 export interface MovingAverage {
@@ -124,10 +123,10 @@ export interface MovingAverage {
 
 export interface SupportResistance {
   stock_id: string;
-  supports: string[];
-  resistances: string[];
-  nearest_support?: string;
-  nearest_resistance?: string;
+  supports: number[];
+  resistances: number[];
+  nearest_support?: number;
+  nearest_resistance?: number;
 }
 
 export interface StrategySignal {

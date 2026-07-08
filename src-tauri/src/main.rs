@@ -278,6 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::get_intraday,
             api_tauri_commands::commands_v2::get_realtime_quote,
             api_tauri_commands::commands_v2::calculate_ma,
+            api_tauri_commands::commands_v2::get_index_quotes,
             api_tauri_commands::commands_v2::calculate_support_resistance,
             api_tauri_commands::commands_v2::test_network_connectivity,
             api_tauri_commands::commands_v2::diagnose_data_sources,

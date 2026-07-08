@@ -51,7 +51,7 @@ function ensureWsListener() {
  *
  * `stockId` can be in any format: "600519.SH", "sh600519", "600519", etc.
  */
-function getWsPrice(stockId: string): PriceData | undefined {
+export function getWsPrice(stockId: string): PriceData | undefined {
   // Try direct ticker match
   const cached = wsPriceCache.get(stockId);
   if (cached) return cached;

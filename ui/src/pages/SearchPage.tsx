@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2 } from 'lucide-react';
-import { useSearchStocks } from '@/hooks/useTauriQuery';
+import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2, Star } from 'lucide-react';
+import { useSearchStocks, useWatchlistAdd, useWatchlistCheck } from '@/hooks/useTauriQuery';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Stock } from '@/types';
 
 // Minimal type matching only the Stock fields addToHistory actually uses
@@ -51,11 +52,13 @@ function getExchangeLabel(exchange: string) {
 
 export default function SearchPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
+  const addWatchlistMutation = useWatchlistAdd();
 
   // Debounce input
   useEffect(() => {
@@ -107,6 +110,19 @@ export default function SearchPage() {
       }
     },
     [results, handleSelect],
+  );
+
+  const handleAddToWatchlist = useCallback(
+    (e: React.MouseEvent, stock: Stock) => {
+      e.stopPropagation();
+      e.preventDefault();
+      addWatchlistMutation.mutate(stock.ticker, {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+        },
+      });
+    },
+    [addWatchlistMutation, queryClient],
   );
 
   const handleClear = useCallback(() => {
@@ -253,6 +269,15 @@ export default function SearchPage() {
                         )}
                       </div>
                     </div>
+
+                    <button
+                      onClick={(e) => handleAddToWatchlist(e, stock)}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/15 text-amber-500 hover:bg-amber-200 dark:hover:bg-amber-500/25 transition-colors"
+                      title="加入自选"
+                      aria-label={`加入自选 ${stock.name}`}
+                    >
+                      <Star size={14} />
+                    </button>
 
                     <ChevronRight
                       size={18}

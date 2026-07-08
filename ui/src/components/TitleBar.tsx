@@ -51,7 +51,6 @@ export default function TitleBar() {
           className="text-[11px] font-bold tracking-wide"
           style={{ color: 'hsl(var(--text-secondary))' }}
         >
-          StockMate
         </span>
       </div>
 

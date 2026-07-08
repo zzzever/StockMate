@@ -8,6 +8,8 @@ const mockStore = {
   sidebarOpen: true,
   currentPage: 'sectors' as const,
   darkMode: false,
+  theme: 'dark' as const,
+  selectedStock: null as { code: string; name: string } | null,
   setPage: vi.fn(),
   toggleSidebar: vi.fn(),
   toggleDarkMode,
@@ -32,8 +34,7 @@ describe('TopBar', () => {
         <TopBar />
       </MemoryRouter>
     );
-    expect(screen.getByPlaceholderText('搜索股票代码或名称...')).toBeInTheDocument();
-    expect(screen.getByText('在线')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('輸入代碼… (Ctrl+K)')).toBeInTheDocument();
   });
 
   it('updates search value on input', () => {
@@ -42,7 +43,7 @@ describe('TopBar', () => {
         <TopBar />
       </MemoryRouter>
     );
-    const input = screen.getByPlaceholderText('搜索股票代码或名称...') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('輸入代碼… (Ctrl+K)') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '600519' } });
     expect(input.value).toBe('600519');
   });
@@ -66,7 +67,7 @@ describe('TopBar', () => {
         <TopBar />
       </MemoryRouter>
     );
-    const input = screen.getByPlaceholderText('搜索股票代码或名称...') as HTMLInputElement;
+    const input = screen.getByPlaceholderText('輸入代碼… (Ctrl+K)') as HTMLInputElement;
     fireEvent.change(input, { target: { value: '000001' } });
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
     // Navigation happens via react-router; we just verify input was handled

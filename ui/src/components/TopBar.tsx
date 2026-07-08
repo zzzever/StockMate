@@ -44,9 +44,6 @@ export default function TopBar() {
     <div className="topbar-glass flex h-12 items-center justify-between px-4 relative z-20">
       {/* Left section */}
       <div className="flex items-center gap-4">
-        <span className="text-sm font-bold tracking-wider hidden lg:block" style={{ color: 'hsl(var(--text-primary))' }}>
-          StockMate
-        </span>
         {selectedStock && (
           <span className="text-xs font-medium px-2.5 py-1 rounded-md"
             style={{ background: 'hsl(var(--bg-input))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>

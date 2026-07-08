@@ -1,4 +1,3 @@
-import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore, initSystemThemeListener } from '@/store/useAppStore';
 import Sidebar from '@/components/Sidebar';
 import TitleBar from '@/components/TitleBar';
@@ -21,40 +20,35 @@ export default function Layout({ children }: LayoutProps) {
       search: 'search', sector: 'sector', stock: 'stockDetail',
       backtest: 'backtest', predict: 'predict', rules: 'rules',
       settings: 'settings', 'indicator-lab': 'indicatorLab',
+      watchlist: 'search', quote: 'quote',
     };
     if (pageMap[path]) setPage(pageMap[path]);
   }, [location, setPage]);
 
-  // Initialise the system theme listener (reacts to OS dark/light changes)
   useEffect(() => {
     const cleanup = initSystemThemeListener();
     return () => cleanup();
   }, []);
 
-  // Initialise the WebSocket real-time price listener (receives push from Tauri backend)
   useRealtimePriceListener();
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'hsl(var(--bg-root))' }}>
-      <aside
-        className={`sidebar-glass relative z-10 flex flex-col transition-all duration-300 ${
-          sidebarOpen ? 'w-60' : 'w-16'
-        }`}
-      >
+    <div className="h-screen w-screen overflow-hidden" style={{
+      display: 'grid',
+      gridTemplateColumns: `${sidebarOpen ? '220px' : '56px'} 1fr`,
+      gridTemplateRows: '1fr',
+      transition: 'grid-template-columns 300ms',
+      background: 'var(--bg-root)',
+    }}>
+      <aside className="sidebar-glass relative z-10 flex flex-col">
         <Sidebar />
       </aside>
-      <div className="flex flex-1 flex-col overflow-hidden relative z-10">
+      <div className="flex flex-col overflow-hidden relative z-10">
         <TitleBar />
         <TopBar />
-        <motion.main
-          key={location.pathname}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="flex-1 overflow-auto p-3"
-        >
+        <main className="flex-1 overflow-auto" style={{ padding: 'var(--grid-unit)' }}>
           {children}
-        </motion.main>
+        </main>
       </div>
     </div>
   );

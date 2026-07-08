@@ -11,14 +11,20 @@ const mockStore = {
   toggleSidebar: vi.fn(),
   toggleDarkMode: vi.fn(),
   setSelectedStock: vi.fn(),
+  selectedStock: null as { code: string; name: string } | null,
+  theme: 'dark' as const,
+  debugOpen: false,
+  accent: 'red' as const,
 };
 
 vi.mock('@/store/useAppStore', () => ({
   useAppStore: (selector: any) => selector(mockStore),
+  initSystemThemeListener: () => () => {},
 }));
 
-vi.mock('@/components/ParticlesBackground', () => ({
-  default: () => <div data-testid="particles-bg" className="particles-container" />,
+vi.mock('@/hooks/useTauriQuery', () => ({
+  useRealtimePriceListener: () => {},
+  useDiagnoseDataSources: () => ({ data: null, isLoading: false }),
 }));
 
 vi.mock('framer-motion', () => ({
@@ -39,9 +45,9 @@ describe('Layout', () => {
         </Layout>
       </MemoryRouter>
     );
-    expect(screen.getByText('StockMate')).toBeInTheDocument();
+    expect(screen.getAllByText(/StockMate/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('child')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('搜索股票代码或名称...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('輸入代碼… (Ctrl+K)')).toBeInTheDocument();
   });
 
   it('sets page based on route in useEffect', () => {
@@ -55,7 +61,7 @@ describe('Layout', () => {
     expect(screen.getByText('Backtest Page')).toBeInTheDocument();
   });
 
-  it('renders particles background', () => {
+  it('renders layout without particles', () => {
     render(
       <MemoryRouter>
         <Layout>
@@ -63,6 +69,6 @@ describe('Layout', () => {
         </Layout>
       </MemoryRouter>
     );
-    expect(screen.getByTestId('particles-bg')).toBeInTheDocument();
+    expect(screen.getByText('Content')).toBeInTheDocument();
   });
 });

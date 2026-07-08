@@ -87,6 +87,7 @@ dependencies = [
  "domain",
  "reqwest 0.12.28",
  "rust_decimal",
+ "screener",
  "serde",
  "serde_json",
  "storage",

@@ -31,11 +31,21 @@ pub fn calculate_sr(quotes: &[Quote], stock_id: &str, lookback: usize) -> Suppor
         }
     }
 
-    let supports = cluster(&lows, 3);
-    let resistances = cluster(&highs, 3);
-
     let current_price = quotes.last().unwrap().close;
-    // Sort by proximity to current price to find the NEAREST (not most frequent)
+
+    // Cluster local lows → potential supports (must be BELOW current price)
+    let raw_supports = cluster(&lows, 5);
+    let supports: Vec<Decimal> = raw_supports.into_iter()
+        .filter(|s| *s < current_price)
+        .collect();
+
+    // Cluster local highs → potential resistances (must be ABOVE current price)
+    let raw_resistances = cluster(&highs, 5);
+    let resistances: Vec<Decimal> = raw_resistances.into_iter()
+        .filter(|r| *r > current_price)
+        .collect();
+
+    // Sort by proximity to current price — nearest first
     let supports_by_proximity = sort_by_proximity(&supports, current_price);
     let resistances_by_proximity = sort_by_proximity(&resistances, current_price);
 
@@ -44,8 +54,8 @@ pub fn calculate_sr(quotes: &[Quote], stock_id: &str, lookback: usize) -> Suppor
 
     SupportResistance {
         stock_id: stock_id.into(),
-        supports,
-        resistances,
+        supports: supports_by_proximity,
+        resistances: resistances_by_proximity,
         nearest_support,
         nearest_resistance,
     }

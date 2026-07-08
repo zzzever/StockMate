@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#0d1117"/>
+  <!-- Four horizontal bars — abstract K-line chart -->
+  <!-- Top row: two thick bars (candles) -->
+  <rect x="64" y="128" width="80" height="96" rx="4" fill="#f0f6fc"/>
+  <rect x="208" y="160" width="80" height="64" rx="4" fill="#f0f6fc"/>
+  <!-- Bottom row: two thick bars -->
+  <rect x="64" y="288" width="80" height="64" rx="4" fill="#f0f6fc"/>
+  <rect x="208" y="304" width="80" height="96" rx="4" fill="#f0f6fc"/>
+  <!-- Right accent line (thin, representing MA trend) -->
+  <line x1="352" y1="200" x2="448" y2="280" stroke="#2563eb" stroke-width="3" stroke-linecap="round"/>
+</svg>
