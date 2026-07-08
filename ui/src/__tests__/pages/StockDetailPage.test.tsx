@@ -35,7 +35,7 @@ vi.mock('lightweight-charts', () => ({
   createChart: vi.fn(() => ({
     addCandlestickSeries: vi.fn(() => ({ setData: vi.fn() })),
     addLineSeries: vi.fn(() => ({ setData: vi.fn() })),
-    addHistogramSeries: vi.fn(() => ({ setData: vi.fn() })),
+    addHistogramSeries: vi.fn(() => ({ setData: vi.fn(), setColor: vi.fn() })),
     timeScale: vi.fn(() => ({ applyOptions: vi.fn(), fitContent: vi.fn(), scrollToPosition: vi.fn(), getVisibleRange: vi.fn(() => ({ from: 0, to: 100 })), setVisibleRange: vi.fn(), subscribeVisibleTimeRangeChange: vi.fn(() => vi.fn()) })),
     subscribeCrosshairMove: vi.fn(),
     setCrosshairPosition: vi.fn(),
@@ -46,7 +46,7 @@ vi.mock('lightweight-charts', () => ({
 
 describe('StockDetailPage', () => {
   beforeEach(() => {
-    vi.mocked(useStockHistory).mockReturnValue({ data: [], isLoading: false } as any);
+    vi.mocked(useStockHistory).mockReturnValue({ data: [{ date: '2025-01-01', open: 100, high: 102, low: 99, close: 101, volume: 1000 }], isLoading: false } as any);
     vi.mocked(useStockFinance).mockReturnValue({ data: null, isLoading: false } as any);
     vi.mocked(useStockFundFlow).mockReturnValue({ data: [], isLoading: false } as any);
     vi.mocked(useSupportResistance).mockReturnValue({ data: null, isLoading: false } as any);

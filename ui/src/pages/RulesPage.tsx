@@ -5,6 +5,58 @@ import { Save, Trash2, AlertTriangle, CheckCircle, Edit3, TrendingUp, Plus, X, C
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { type StrategyMeta } from '@/types';
+import { RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
+import type { TradingRule } from '@/types';
+
+// ── Structured Rule List Component ──
+const STORAGE_KEY_RULES = 'stockmate_trading_rules_v2';
+
+function StructuredRuleList() {
+  const [rules, setRules] = useState<TradingRule[]>(() => {
+    try { const raw = localStorage.getItem(STORAGE_KEY_RULES); if (raw) { const parsed = JSON.parse(raw); return parsed.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex || i + 1, color: ruleColor(r.markerIndex || i) })); } return RULE_TEMPLATES; } catch { return RULE_TEMPLATES; }
+  });
+
+  const toggleRule = (id: string) => {
+    const updated = rules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r);
+    setRules(updated);
+    localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(updated));
+  };
+
+  const resetToDefaults = () => {
+    setRules(RULE_TEMPLATES);
+    localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(RULE_TEMPLATES));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          {rules.filter(r => r.enabled).length}/{rules.length} 已启用 · 在K线图上显示买卖标记
+        </span>
+        <button onClick={resetToDefaults} className="text-[10px] font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>重置默认</button>
+      </div>
+      {rules.map(rule => (
+        <div key={rule.id} className="flex items-center justify-between py-1.5 px-2 rounded" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex items-center justify-center w-5 h-5 rounded-full shrink-0 text-[10px] font-bold text-white"
+              style={{ backgroundColor: rule.color, opacity: rule.enabled ? 1 : 0.35 }}>
+              {rule.markerIndex}
+            </span>
+            <span className="text-[11px] font-bold truncate" style={{ color: rule.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))' }}>{rule.name}</span>
+            <span className="text-[10px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>
+              {rule.signal === 'buy' ? '买入' : rule.signal === 'sell' ? '卖出' : '提醒'}
+            </span>
+          </div>
+          <button onClick={() => toggleRule(rule.id)}
+            className={`px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${rule.enabled ? 'text-white' : ''}`}
+            style={{ backgroundColor: rule.enabled ? rule.color : 'hsl(var(--border-subtle))', color: rule.enabled ? 'white' : 'hsl(var(--text-tertiary))' }}>
+            {rule.enabled ? 'ON' : 'OFF'}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── Constants ──
 const STORAGE_KEY_STRATEGIES = 'stockmate_strategies';
@@ -490,6 +542,12 @@ export default function RulesPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* ══ Structured Rule Toggles (K-line markers) ══ */}
+      <div className="px-8 py-4" style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+        <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'hsl(var(--text-secondary))' }}>K线标记规则</h3>
+        <StructuredRuleList />
       </div>
 
       {/* Strategy grid */}

@@ -378,3 +378,33 @@ export interface DataSourceResult {
   response_time_ms: number;
   detail: string | null;
 }
+
+// ── Trading Rule Engine types ──
+
+export type RuleConditionType = 'ma_cross' | 'rsi_threshold' | 'price_breakout' | 'volume_surge' | 'macd_signal';
+
+export interface RuleCondition {
+  type: RuleConditionType;
+  params: Record<string, number | string>;
+}
+
+export interface TradingRule {
+  id: string;
+  name: string;
+  conditions: RuleCondition[];
+  signal: 'buy' | 'sell' | 'alert';
+  enabled: boolean;
+  color: string;
+  markerIndex: number;
+  createdAt: string;
+}
+
+export interface RuleSignal {
+  date: string;
+  action: 'buy' | 'sell';
+  price: number;
+  reason: string;
+  ruleId: string;
+  ruleName: string;
+  signalType: 'rule';
+}
