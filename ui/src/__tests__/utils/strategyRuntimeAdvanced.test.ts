@@ -5,6 +5,9 @@ import type { KlineItem } from '@/utils/ruleEngine';
 function bar(o: number, h: number, l: number, c: number, v: number): KlineItem {
   return { date: 'd', open: o, high: h, low: l, close: c, volume: v };
 }
+function dbar(date: string, o: number, h: number, l: number, c: number, v: number): KlineItem {
+  return { date, open: o, high: h, low: l, close: c, volume: v };
+}
 /** true iff expr holds at the last bar */
 function atLast(expr: string, data: KlineItem[]): boolean {
   return runStrategyCode(`i == ${data.length - 1} && (${expr})`, data).length === 1;
@@ -74,5 +77,30 @@ describe('SSLang runtime — indicator correctness fixes', () => {
     const d = Array.from({ length: 10 }, (_, i) => bar(100 + i, 102 + i, 98 + i, 100 + (i % 3), 100));
     // boll_upper - boll_middle == 2 * stddev
     expect(atLast('boll_upper(5, i) - boll_middle(5, i) > 2 * stddev(5, i) - 0.0001 && boll_upper(5, i) - boll_middle(5, i) < 2 * stddev(5, i) + 0.0001', d)).toBe(true);
+  });
+});
+
+describe('SSLang runtime — limit up/down and multi-timeframe', () => {
+  it('is_limit_up / is_limit_down (≈10% + closed at extreme)', () => {
+    const up = [bar(10, 10, 9.5, 10, 100), bar(10, 11.0, 10, 11.0, 100)]; // +10%, close==high
+    expect(atLast('is_limit_up(i)', up)).toBe(true);
+    const notUp = [bar(10, 10, 9.5, 10, 100), bar(10, 11.0, 10, 10.5, 100)]; // close != high
+    expect(atLast('is_limit_up(i)', notUp)).toBe(false);
+    const down = [bar(10, 10, 9.5, 10, 100), bar(10, 10, 9.0, 9.0, 100)]; // -10%, close==low
+    expect(atLast('is_limit_down(i)', down)).toBe(true);
+  });
+
+  it('tf() evaluates on the last COMPLETED weekly bar (no lookahead)', () => {
+    // 3 Mon-Fri weeks; each week closes at 10, 20, 30 respectively
+    const d: KlineItem[] = [];
+    const weeks = [['2025-01-06', '2025-01-07', '2025-01-08', '2025-01-09', '2025-01-10'],
+                   ['2025-01-13', '2025-01-14', '2025-01-15', '2025-01-16', '2025-01-17'],
+                   ['2025-01-20', '2025-01-21', '2025-01-22', '2025-01-23', '2025-01-24']];
+    const weekClose = [10, 20, 30];
+    weeks.forEach((wk, wi) => wk.forEach((date, di) => d.push(dbar(date, 5, 35, 1, di === wk.length - 1 ? weekClose[wi] : 5 + di, 100))));
+    // At the last daily bar (in week3), the last COMPLETED week is week2 → weekly close 20
+    expect(atLast('tf(close(i), "week") == 20', d)).toBe(true);
+    // In week1 (no completed prior week) → tf returns null → no hit
+    expect(runStrategyCode('i == 2 && tf(close(i), "week") > 0', d)).toEqual([]);
   });
 });

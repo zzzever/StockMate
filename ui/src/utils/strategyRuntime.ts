@@ -141,12 +141,13 @@ const FN_ARITY: Record<string, number> = {
   three_soldiers: 1, three_crows: 1,
   count_true: 3, consecutive: 3, highest_of: 3, lowest_of: 3,
   is_high_n: 2, is_low_n: 2, pct_change: 2,
+  is_limit_up: 1, is_limit_down: 1, tf: 2,
 };
 
 // ── Evaluation context ──
 type Val = number | string | boolean | null;
 interface Ctx { i: number; bars: KlineItem[]; cache: Cache; steps: { n: number }; }
-interface Cache { sma: Record<number, (number | null)[]>; ema: Record<number, (number | null)[]>; rsi: Record<number, (number | null)[]>; macd?: { diff: (number | null)[]; dea: (number | null)[]; hist: (number | null)[] }; bollStddev: Record<number, (number | null)[]>; atr: Record<number, (number | null)[]>; volume_sma: Record<number, (number | null)[]>; stddev: Record<number, (number | null)[]>; cci: Record<number, (number | null)[]>; kdj?: { k: (number | null)[]; d: (number | null)[]; j: (number | null)[] }; obv?: (number | null)[]; ad?: (number | null)[]; }
+interface Cache { sma: Record<number, (number | null)[]>; ema: Record<number, (number | null)[]>; rsi: Record<number, (number | null)[]>; macd?: { diff: (number | null)[]; dea: (number | null)[]; hist: (number | null)[] }; bollStddev: Record<number, (number | null)[]>; atr: Record<number, (number | null)[]>; volume_sma: Record<number, (number | null)[]>; stddev: Record<number, (number | null)[]>; cci: Record<number, (number | null)[]>; kdj?: { k: (number | null)[]; d: (number | null)[]; j: (number | null)[] }; obv?: (number | null)[]; ad?: (number | null)[]; tf?: Record<string, { bars: KlineItem[]; map: number[] }>; tfInner?: Record<string, Cache>; }
 
 const MAX_STEPS = 20000;
 
@@ -218,6 +219,31 @@ function bollStddevArr(bars: KlineItem[], n: number): (number | null)[] { return
 function kdjArrs(bars: KlineItem[]): { k: (number | null)[]; d: (number | null)[]; j: (number | null)[] } { const len = bars.length; const k: (number | null)[] = []; const d: (number | null)[] = []; const j: (number | null)[] = []; for (let i = 0; i < len; i++) { if (i < 8) { k.push(null); d.push(null); j.push(null); continue; } const slice = bars.slice(i - 8, i + 1); const hhv = Math.max(...slice.map((b) => b.high)); const llv = Math.min(...slice.map((b) => b.low)); const rsv = hhv === llv ? 0 : ((bars[i].close - llv) / (hhv - llv)) * 100; if (i === 8) { k.push(rsv); d.push(rsv); j.push(rsv); } else { const pk = k[k.length - 1] as number; const pd = d[d.length - 1] as number; const ck = (2 / 3) * pk + (1 / 3) * rsv; const cd = (2 / 3) * pd + (1 / 3) * ck; k.push(ck); d.push(cd); j.push(3 * ck - 2 * cd); } } return { k, d, j }; }
 function cciArr(bars: KlineItem[], n: number): (number | null)[] { return bars.map((_, i) => { if (i < n - 1) return null; const typical = (bars[i].high + bars[i].low + bars[i].close) / 3; const slice = bars.slice(i - n + 1, i + 1); const sumTp = slice.reduce((a, b) => a + (b.high + b.low + b.close) / 3, 0); const mean = sumTp / n; const md = slice.reduce((a, b) => a + Math.abs((b.high + b.low + b.close) / 3 - mean), 0) / n; return md === 0 ? 0 : (typical - mean) / (0.015 * md); }); }
 
+// ── Multi-timeframe resampling (tf) ──
+function weekKey(dateStr: string): string {
+  const m = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return dateStr;
+  const dt = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  const day = (dt.getUTCDay() + 6) % 7; // Monday = 0
+  dt.setUTCDate(dt.getUTCDate() - day);
+  return dt.toISOString().slice(0, 10); // Monday of that week
+}
+/** Resample daily bars into a coarser timeframe. Returns the aggregated bars and a
+ *  map from each original bar index → its aggregated-bar index. */
+function resample(bars: KlineItem[], period: string): { bars: KlineItem[]; map: number[] } {
+  const keyOf = period === 'month' ? (d: string) => d.slice(0, 7) : weekKey;
+  const tfBars: KlineItem[] = [];
+  const map: number[] = new Array(bars.length);
+  let curKey: string | null = null;
+  for (let i = 0; i < bars.length; i++) {
+    const k = keyOf(bars[i].date);
+    if (k !== curKey) { curKey = k; tfBars.push({ ...bars[i] }); }
+    else { const b = tfBars[tfBars.length - 1]; b.high = Math.max(b.high, bars[i].high); b.low = Math.min(b.low, bars[i].low); b.close = bars[i].close; b.volume += bars[i].volume; }
+    map[i] = tfBars.length - 1;
+  }
+  return { bars: tfBars, map };
+}
+
 function getBarField(bars: KlineItem[], idx: number, field: keyof KlineItem): Val {
   // NaN/±Infinity/non-integer indices must return null, not crash on bars[NaN].
   if (!Number.isFinite(idx) || (idx | 0) !== idx || idx < 0 || idx >= bars.length) return null;
@@ -256,6 +282,21 @@ function callHelper(name: string, argNodes: Node[], ctx: Ctx): Val {
     if (name === 'consecutive') return true;
     return ext;
   }
+  // tf(expr, "week"|"month") — evaluate expr on a coarser timeframe. arg0 is an
+  // expression using `i`; arg1 is the period. Resamples the SAME bars (no external data).
+  if (name === 'tf') {
+    const period = String(argNodes[1].k === 'str' ? argNodes[1].v : evalNode(argNodes[1], ctx)).toLowerCase();
+    if (period !== 'week' && period !== 'month') return null;
+    (ctx.cache.tf ??= {});
+    const tfData = (ctx.cache.tf[period] ??= resample(ctx.bars, period));
+    // Use the LAST COMPLETED higher-timeframe bar (map[i]-1) to avoid lookahead bias:
+    // the current forming week/month is not yet closed at bar i.
+    const tfIdx = tfData.map[ctx.i] - 1;
+    if (tfIdx == null || tfIdx < 0) return null;
+    (ctx.cache.tfInner ??= {});
+    const innerCache = (ctx.cache.tfInner[period] ??= newCache());
+    return evalNode(argNodes[0], { i: tfIdx, bars: tfData.bars, cache: innerCache, steps: ctx.steps });
+  }
   const args = argNodes.map((a) => evalNode(a, ctx));
   const { bars, cache } = ctx;
   switch (name) {
@@ -293,6 +334,9 @@ function callHelper(name: string, argNodes: Node[], ctx: Ctx): Val {
     case 'pct_change': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n < 0 || idx >= bars.length) return null; const prev = bars[idx - n].close; return prev === 0 ? null : ((bars[idx].close - prev) / prev) * 100; }
     case 'is_high_n': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n + 1 < 0 || idx >= bars.length) return false; const s = bars.slice(idx - n + 1, idx + 1).map((b) => b.close); return bars[idx].close >= Math.max(...s); }
     case 'is_low_n': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n + 1 < 0 || idx >= bars.length) return false; const s = bars.slice(idx - n + 1, idx + 1).map((b) => b.close); return bars[idx].close <= Math.min(...s); }
+    // Approximate limit-up/down (主板≈10%): closed at the day's high/low with ≈limit move vs prev close.
+    case 'is_limit_up': { const idx = toInt(args[0]); if (idx < 1 || idx >= bars.length) return false; const b = bars[idx]; const p = bars[idx - 1].close; return p > 0 && b.close >= p * 1.098 && b.close === b.high; }
+    case 'is_limit_down': { const idx = toInt(args[0]); if (idx < 1 || idx >= bars.length) return false; const b = bars[idx]; const p = bars[idx - 1].close; return p > 0 && b.close <= p * 0.902 && b.close === b.low; }
     // ── Volume / volatility ──
     case 'atr': { const n = toInt(args[0]); if (n < 1) return null; (cache.atr[n] ??= atrArr(bars, n)); return cache.atr[n][toInt(args[1])] ?? null; }
     case 'obv': { (cache.obv ??= obvArr(bars)); return cache.obv[toInt(args[0])] ?? null; }

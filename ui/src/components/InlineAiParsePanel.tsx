@@ -14,6 +14,7 @@ import {
 import type { TradingRule } from '@/types';
 import { useParseRules } from '@/hooks/useParseRules';
 import { ruleColor } from '@/utils/ruleEngine';
+import { ruleSignalLabel, ruleSignalColor } from '@/lib/signalLabels';
 import { useNavigate } from 'react-router-dom';
 
 const STORAGE_KEY_RULES = 'stockmate_trading_rules_v2';
@@ -504,18 +505,8 @@ export default function InlineAiParsePanel({
                   <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                     {parsedRules.map((rule) => {
                       const isSelected = selectedIds.has(rule.id);
-                      const signalLabel =
-                        rule.signal === 'buy'
-                          ? '买入'
-                          : rule.signal === 'sell'
-                            ? '卖出'
-                            : '提醒';
-                      const signalColor =
-                        rule.signal === 'buy'
-                          ? '#22c55e'
-                          : rule.signal === 'sell'
-                            ? '#ef4444'
-                            : '#f59e0b';
+                      const signalLabel = ruleSignalLabel(rule.signal);
+                      const signalColor = ruleSignalColor(rule.signal);
                       const signalBg =
                         rule.signal === 'buy'
                           ? '#22c55e20'

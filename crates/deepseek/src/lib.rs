@@ -1092,6 +1092,9 @@ lowest_of(expr, n, k) — expr 在近n根的最小值（用于指标背离）
 is_high_n(n, k) — 当前收盘创n日新高
 is_low_n(n, k) — 当前收盘创n日新低
 pct_change(n, k) — 距前n根的涨跌幅%
+is_limit_up(k) — 近似涨停（收于最高且较昨收≈+10%，主板近似）
+is_limit_down(k) — 近似跌停（收于最低且较昨收≈-10%）
+tf(expr, "week"|"month") — 多周期：把日线重采样为周/月线，在对应bar上求值expr（expr内的i是重采样后下标）。例 tf(cross(macddiff(i), macddea(i)), "week")
 
 ## 运算符（按优先级从高到低）
 
