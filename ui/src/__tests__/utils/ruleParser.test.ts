@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseRulesLocally } from '@/utils/ruleParser';
+import { parseRulesLocally, hasAdvancedConcepts } from '@/utils/ruleParser';
 
 describe('parseRulesLocally', () => {
   it('parses "连续三天缩量下跌" into a consecutive_days rule (the reported case)', () => {
@@ -63,5 +63,38 @@ describe('parseRulesLocally', () => {
 
   it('returns an empty array for unrecognized text (so the AI fallback runs)', () => {
     expect(parseRulesLocally('帮我随便看看这只票怎么样')).toEqual([]);
+  });
+});
+
+describe('hasAdvancedConcepts — routes incomplete inputs to AI', () => {
+  it('upgrades "连续3天缩量下跌后次日上涨，上升趋势" to a runnable code rule with above_ma', () => {
+    const rules = parseRulesLocally('连续3天缩量下跌后次日上涨，上升趋势');
+    expect(rules).toHaveLength(1);
+    expect(rules[0].kind).toBe('code');
+    expect(rules[0].code).toContain('above_ma(20, i)');
+    expect(rules[0].code).toContain('down(i-1, 3)');
+    expect(rules[0].code).toContain('close(i) > close(i-1)');
+    expect(rules[0].signal).toBe('buy');
+  });
+
+  it('appends below_ma for a 下降趋势 qualifier', () => {
+    const rules = parseRulesLocally('连续3天放量上涨，下降趋势');
+    expect(rules[0].kind).toBe('code');
+    expect(rules[0].code).toContain('below_ma(20, i)');
+  });
+  it('flags "上升趋势" so the reported input goes to DeepSeek even though a line matched', () => {
+    expect(hasAdvancedConcepts('连续3天缩量下跌后次日上涨，上升趋势')).toBe(true);
+  });
+
+  it('flags advanced indicators / patterns the local parser cannot model', () => {
+    for (const t of ['布林带下轨支撑', 'KDJ金叉', '出现锤子线', '价格站上20日均线上方', '成交量比大于2', 'MACD背离', '红三兵']) {
+      expect(hasAdvancedConcepts(t), t).toBe(true);
+    }
+  });
+
+  it('does NOT flag simple parser-owned phrases (avoids needless AI calls)', () => {
+    for (const t of ['连续三天缩量下跌', '连续三天缩量下跌，次日上涨', '均线金叉', 'RSI超卖', '放量突破前高']) {
+      expect(hasAdvancedConcepts(t), t).toBe(false);
+    }
   });
 });

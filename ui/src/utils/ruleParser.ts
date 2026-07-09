@@ -15,6 +15,49 @@ function parseCount(raw: string): number {
 }
 
 let idCounter = 0;
+/** Generate a viewable, runnable strategy-code expression from structured conditions. */
+export function conditionsToCode(conditions: RuleCondition[]): string {
+  const frag = (c: RuleCondition): string => {
+    const p = c.params;
+    switch (c.type) {
+      case 'consecutive_days': {
+        const days = Number(p.days ?? 3);
+        const dir = String(p.direction ?? 'down');
+        const vol = String(p.volume ?? 'any');
+        const next = String(p.next ?? 'none');
+        const at = next === 'up' || next === 'down' ? 'i-1' : 'i';
+        const parts = [dir === 'up' ? `up(${at}, ${days})` : `down(${at}, ${days})`];
+        if (vol === 'shrink') parts.push(`shrink(${at}, ${days})`);
+        if (vol === 'surge') parts.push(`surge(${at}, ${days})`);
+        if (next === 'up') parts.push('close(i) > close(i-1)');
+        if (next === 'down') parts.push('close(i) < close(i-1)');
+        return parts.join(' && ');
+      }
+      case 'ma_cross': {
+        const fast = Number(p.fastPeriod ?? 5); const slow = Number(p.slowPeriod ?? 10);
+        return p.direction === 'below' ? `crossunder(sma(${fast}, i), sma(${slow}, i))` : `cross(sma(${fast}, i), sma(${slow}, i))`;
+      }
+      case 'rsi_threshold': {
+        const period = Number(p.period ?? 14); const t = Number(p.threshold ?? 30);
+        return p.direction === 'above' ? `rsi(${period}, i) > ${t}` : `rsi(${period}, i) < ${t}`;
+      }
+      case 'price_breakout': {
+        const period = Number(p.period ?? 20);
+        return p.direction === 'below' ? `close(i) < llv(${period}, i-1)` : `close(i) > hhv(${period}, i-1)`;
+      }
+      case 'volume_surge': {
+        const mult = Number(p.multiplier ?? 1.5);
+        return `volume(i) > volume(i-1) * ${mult}`;
+      }
+      case 'macd_signal':
+        return p.direction === 'below' ? 'crossunder(macddiff(i), macddea(i))' : 'cross(macddiff(i), macddea(i))';
+      default:
+        return 'false';
+    }
+  };
+  return conditions.map(frag).join(' && ');
+}
+
 function mkRule(name: string, conditions: RuleCondition[], signal: TradingRule['signal']): TradingRule {
   const idx = idCounter++;
   return {
@@ -26,11 +69,14 @@ function mkRule(name: string, conditions: RuleCondition[], signal: TradingRule['
     color: ruleColor(idx),
     markerIndex: idx + 1,
     createdAt: '',
+    kind: 'condition',
+    code: `// ${name}\n${conditionsToCode(conditions)} => SIGNAL('${signal}')`,
+    explanation: name,
   };
 }
 
 /** Parse a single natural-language line into a rule, or null if nothing matches. */
-function parseLine(line: string): TradingRule | null {
+function parseBaseLine(line: string): TradingRule | null {
   const hasMacd = /macd/i.test(line);
   const shrink = line.includes('缩量');
   const surge = line.includes('放量');
@@ -101,6 +147,33 @@ function parseLine(line: string): TradingRule | null {
 }
 
 /**
+ * Parse a line, then — if it also mentions a trend qualifier the base parser can't
+ * express as a condition (上升趋势 / 下降趋势) — upgrade it to a runnable CODE rule
+ * whose expression appends `above_ma(20,i)` / `below_ma(20,i)`. This makes inputs
+ * like "连续3天缩量下跌后次日上涨，上升趋势" fully correct even offline (no AI needed).
+ */
+function parseLine(line: string): TradingRule | null {
+  const base = parseBaseLine(line);
+  if (!base) return null;
+
+  const trendUp = /上升趋势|上涨趋势|多头排列|均线多头/.test(line);
+  const trendDown = /下降趋势|下跌趋势|空头排列|均线空头/.test(line);
+  if (!trendUp && !trendDown) return base;
+
+  const baseExpr = conditionsToCode(base.conditions);
+  const trendExpr = trendUp ? 'above_ma(20, i)' : 'below_ma(20, i)';
+  const trendLabel = trendUp ? '升势' : '跌势';
+  const expression = `${baseExpr} && ${trendExpr}`;
+  return {
+    ...base,
+    name: `${base.name}·${trendLabel}`,
+    kind: 'code',
+    code: `// ${base.name}（价格在20日均线${trendUp ? '上方' : '下方'}）\n${expression} => SIGNAL('${base.signal}')`,
+    explanation: `${base.explanation}，且价格处于20日均线${trendUp ? '上方（上升趋势）' : '下方（下降趋势）'}`,
+  };
+}
+
+/**
  * Deterministic local parser for common quantifiable Chinese/English rule phrases.
  * Returns the rules it can recognize; an empty array means "let the AI handle it".
  * Runs before the DeepSeek call so common patterns work instantly and offline.
@@ -113,4 +186,26 @@ export function parseRulesLocally(text: string): TradingRule[] {
     if (rule) rules.push(rule);
   }
   return rules;
+}
+
+/**
+ * Returns the portion of `text` that the local parser could NOT turn into rules.
+ * If this is non-empty (and not just whitespace/punctuation), the input should
+ * still be sent to DeepSeek for a full SSLang code generation — the local parser
+ * didn't cover everything.
+ */
+export function getUnmatchedText(text: string): string {
+  const lines = text.split(/[\n;；。]+/).map((l) => l.trim()).filter(Boolean);
+  const unmatched = lines.filter((l) => !parseLine(l));
+  return unmatched.join('；').replace(/[，,\s]+/g, ' ').trim();
+}
+
+/**
+ * Detects concepts the local parser does NOT model even when a line "matches"
+ * (trend qualifiers, advanced indicators, candlestick patterns). Their presence
+ * means the local rules are INCOMPLETE and the input should also go to DeepSeek.
+ * Deliberately excludes parser-handled terms (金叉/死叉/超买/超卖/突破/跌破/连续/缩量/放量/次日).
+ */
+export function hasAdvancedConcepts(text: string): boolean {
+  return /趋势|上方|下方|之上|之下|站上|站稳|高于|低于|布林|boll|kdj|cci|atr|obv|量比|乖离|威廉|\bwr\b|锤子|十字|吞没|晨星|暮星|红三兵|乌鸦|跳空|背离|支撑|压力|阻力|回踩|回调|波动率|标准差|能量潮/i.test(text);
 }

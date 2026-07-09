@@ -4,7 +4,7 @@ use domain::{ApiError, Stock, Quote};
 use deepseek::{
     DeepSeekClient, DeepSeekAnalysis, DeepSeekPrediction, StrategyScript,
     StockRef, QuoteRef, StockFinanceRef, FundFlowRef, MovingAverageRef, DeepSeekError,
-    MultiDimensionAnalysis, TradingRuleResponse,
+    MultiDimensionAnalysis, TradingRuleResponse, GeneratedRuleResponse,
 };
 
 use crate::AppState;
@@ -242,6 +242,39 @@ pub async fn parse_rules_with_ai(
             ApiError {
                 code,
                 message: format!("规则解析失败: {}", e),
+                details: None,
+            }
+        })?;
+
+    Ok(result)
+}
+
+// ============================================================
+// AI Strategy Code Generation
+// ============================================================
+
+#[tauri::command]
+pub async fn generate_rule_code(
+    rules: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<GeneratedRuleResponse>, ApiError> {
+    cmd_log("generate_rule_code", &rules);
+
+    let client = create_deepseek_client(&state.db_pool).await?;
+
+    let result = client
+        .generate_rule_code(&rules)
+        .await
+        .map_err(|e| {
+            let code = match &e {
+                DeepSeekError::NoApiKey => 401,
+                DeepSeekError::RateLimited => 429,
+                DeepSeekError::ParseError(_) => 422,
+                _ => 500,
+            };
+            ApiError {
+                code,
+                message: format!("策略代码生成失败: {}", e),
                 details: None,
             }
         })?;

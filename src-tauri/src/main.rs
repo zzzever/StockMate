@@ -300,6 +300,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::deepseek_commands::analyze_psychology,
             api_tauri_commands::deepseek_commands::design_great_wall,
             api_tauri_commands::deepseek_commands::parse_rules_with_ai,
+            api_tauri_commands::deepseek_commands::generate_rule_code,
             api_tauri_commands::commands_v2::watchlist_list,
             api_tauri_commands::commands_v2::watchlist_add,
             api_tauri_commands::commands_v2::watchlist_remove,

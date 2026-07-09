@@ -997,6 +997,170 @@ signal字段取值: "buy"(买入), "sell"(卖出), "alert"(提醒)
         ))
     }
 
+    /// Generate runnable, sandboxed strategy CODE (per-bar boolean expressions) from
+    /// free text. The code is executed by the frontend `strategyRuntime` interpreter
+    /// (no eval; whitelisted helpers only).
+    pub async fn generate_rule_code(
+        &self,
+        free_text_rules: &str,
+    ) -> Result<Vec<GeneratedRuleResponse>, DeepSeekError> {
+        let sanitized = sanitize_user_input(free_text_rules.trim(), 2000);
+        if sanitized.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let system_prompt = format!(r#"你是一位股票策略代码生成专家。请把用户的自然语言交易规则，翻译为 SSLang（Stock Strategy Language）格式的策略代码，交给 StockMate 的沙箱解释器执行。
+
+下面是 SSLang 语言完整规范。你只能使用规范中列出的函数、运算符和语法。不能用任何超出白名单的内容。
+
+---
+
+# SSLang v1.0 — Stock Strategy Language
+
+## 程序格式
+
+每个策略文件由零或多个 RULE 块组成。每个 RULE 块描述一条规则：
+
+RULE "规则名称"
+  SIGNAL BUY | SELL | ALERT
+  WHEN 布尔表达式
+  NOTE "自然语言说明"
+
+## 内置变量
+
+`i` — 当前求值的 bar 下标（从第 0 根 K 线开始）
+
+## 数据访问函数
+
+open(k) high(k) low(k) close(k) volume(k) — 第 k 根 bar 的开/高/低/收/量。也可用下标：close[k]
+
+## 技术指标函数
+
+sma(n, k) — n 日简单均线在 bar k 的值
+ema(n, k) — n 日 EMA
+rsi(n, k)  — n 日 RSI (0-100)
+wr(n, k) — 威廉指标 %R (-100~0)
+cci(n, k) — 顺势指标 CCI
+momentum(n, k) — 动量 close(k)-close(k-n)
+roc(n, k) — 变化率 %
+bias(n, k) — 乖离率 %（价格偏离 n 日均线）
+macddiff(k) — MACD DIF (12-26 EMA 差)
+macddea(k)  — MACD DEA (DIF 的 9-EMA)
+macdhist(k) — MACD 柱 (DIF-DEA)
+kdj_k(k) kdj_d(k) kdj_j(k) — KDJ 的 K/D/J 值 (9,3,3)
+boll_upper(n, k) boll_middle(n, k) boll_lower(n, k) — 布林带上/中/下轨 (SMA ± 2σ)
+atr(n, k) — 平均真实波幅
+stddev(n, k) — n 日收盘价标准差
+highest(n, k) — 近 n 根 bar 收盘价的最高值
+lowest(n, k)  — 近 n 根 bar 收盘价的最低值
+hhv(n, k) — 近 n 根 bar 最高价的最大值
+llv(n, k) — 近 n 根 bar 最低价的最小值
+volume_ma(n, k) — n 日成交量均线
+volume_ratio(k) — 量比 volume(k)/volume_ma(5,k)
+obv(k) — 能量潮 OBV（累计）
+ad(k) — 累积/派发线 Chaikin A/D
+
+## 形态函数
+
+down(k, n)    — k-n+1 到 k 连续 n 天收盘价递减 → true/false
+up(k, n)      — k-n+1 到 k 连续 n 天收盘价递增 → true/false
+shrink(k, n)  — k-n+1 到 k 连续 n 天成交量递减 → true/false
+surge(k, n)   — k-n+1 到 k 连续 n 天成交量递增 → true/false
+cross(a, b)      — a 上穿 b（当前bar > 前一根bar，自动检测）
+crossunder(a, b) — a 下穿 b（当前bar < 前一根bar，自动检测）
+
+## K线形态函数（返回 true/false）
+
+hammer(k) 锤子线 | inv_hammer(k) 倒锤子 | doji(k) 十字星
+engulf_bull(k) 牛市吞没 | engulf_bear(k) 熊市吞没
+morning_star(k) 晨星 | evening_star(k) 暮星
+gap_up(k) 向上跳空 | gap_down(k) 向下跳空
+three_soldiers(k) 红三兵 | three_crows(k) 三只乌鸦
+
+## 辅助函数
+
+abs(x) min(a, b) max(a, b)
+above_ma(n, k) — close(k) > sma(n,k)，价格高于n日均线（上升趋势）
+below_ma(n, k) — close(k) < sma(n,k)，价格低于n日均线（下降趋势）
+
+## 运算符（按优先级从高到低）
+
+() [] 分组下标 → ! - 一元 → * / % → + - → == != < <= > >= → && → || → ?: 三元
+
+## null 语义
+
+越界/数据不足返回 null。null 参与比较 → false；null 参与算术 → null
+
+## 信号
+
+BUY（买入）、SELL（卖出）、ALERT（提醒）
+
+## 常用模板示例
+
+均线金叉：
+RULE "MA金叉买入"  SIGNAL BUY  WHEN cross(sma(5, i), sma(10, i))  NOTE "5日线上穿10日线"
+
+RSI超卖：
+RULE "RSI超卖"  SIGNAL BUY  WHEN rsi(14, i) < 30  NOTE "14日RSI低于30"
+
+MACD金叉：
+RULE "MACD金叉"  SIGNAL BUY  WHEN cross(macddiff(i), macddea(i))  NOTE "DIF上穿DEA"
+
+连续缩量跌后反弹：
+RULE "缩量跌后反弹"  SIGNAL BUY  WHEN i >= 4 && down(i-1, 3) && shrink(i-1, 3) && close(i) > close(i-1)  NOTE "连跌3天缩量后次日收阳"
+
+放量突破20日高点：
+RULE "放量突破"  SIGNAL BUY  WHEN close(i) > hhv(20, i-1) && volume(i) > volume(i-1) * 1.5  NOTE "放量突破20日高点"
+
+## 输出要求
+
+你必须只返回一个 JSON 对象，格式如下。code 字段必须是完整的 SSLang 代码文本（可包含多个 RULE 块）。无法翻译时返回 {{"rules":[]}}。最多 10 条规则。
+
+JSON Schema:
+{{"rules":[{{"name":"规则名称","code":"完整SSLang代码（含RULE/SIGNAL/WHEN/NOTE）","explanation":"30字内中文说明","signal":"buy|sell|alert"}}]}}
+
+## 大功告成！
+
+严格按上述规范生成。禁止 eval/window/fetch/setTimeout/import/require 或任何不在白名单中的标识符。
+"#);
+
+        let user_prompt = format!("请为以下交易规则生成策略代码：\n\n{}", sanitized);
+
+        let resp = self.chat_completion(&system_prompt, &user_prompt, true).await?;
+
+        let cleaned = resp
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_start_matches("```JSON")
+            .trim_end_matches("```")
+            .trim()
+            .to_string();
+
+        if let Ok(wrapper) = serde_json::from_str::<GenRulesWrapper>(&cleaned) {
+            return Ok(wrapper.rules.into_iter().take(10).collect());
+        }
+        if let Ok(rules) = serde_json::from_str::<Vec<GeneratedRuleResponse>>(&cleaned) {
+            return Ok(rules.into_iter().take(10).collect());
+        }
+        if let Some(extracted) = robust_json_extract(&cleaned) {
+            if let Ok(wrapper) = serde_json::from_str::<GenRulesWrapper>(&extracted) {
+                return Ok(wrapper.rules.into_iter().take(10).collect());
+            }
+            if let Ok(rules) = serde_json::from_str::<Vec<GeneratedRuleResponse>>(&extracted) {
+                return Ok(rules.into_iter().take(10).collect());
+            }
+        }
+
+        tracing::warn!(
+            "generate_rule_code: failed to parse AI response. raw preview (300 chars): {}",
+            &resp.chars().take(300).collect::<String>()
+        );
+        Err(DeepSeekError::ParseError(
+            "AI返回的策略代码格式无法解析，请重试".to_string(),
+        ))
+    }
+
     /// Psychology analysis — market sentiment from price/volume data
     pub async fn analyze_psychology(&self, prompt: &str) -> Result<String, DeepSeekError> {
         let system_prompt = r#"你是市场心理学专家。分析当日交易数据，从散户/主力心理角度判断支撑压力。
@@ -1203,6 +1367,20 @@ pub struct RuleConditionResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ParseRulesResponse {
     rules: Vec<TradingRuleResponse>,
+}
+
+/// A single AI-generated code rule (per-bar boolean expression executed by strategyRuntime).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GeneratedRuleResponse {
+    pub name: String,
+    pub code: String,
+    pub explanation: String,
+    pub signal: String, // "buy" | "sell" | "alert"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GenRulesWrapper {
+    rules: Vec<GeneratedRuleResponse>,
 }
 
 // ============================================================

@@ -204,7 +204,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
     // (e.g. macdHist while indicator === 'none') or the time isn't in that pane. It's a
     // purely cosmetic sync, so swallow those cases instead of letting them bubble up.
     const safeSetCrosshair = (chart: IChartApi, series: ISeriesApi<any>, time: Time) => {
-      try { chart.setCrosshairPosition(0, time, series); } catch (e) { console.warn('[SimpleKLine] setCrosshairPosition skipped:', e); }
+      try { chart.setCrosshairPosition(0, time, series); } catch (e) { /* target series has no data at this time — expected when indicator is 'none' */ }
     };
     mc.subscribeCrosshairMove((param: MouseEventParams) => {
       if (!param.time || param.point === undefined) {
@@ -216,9 +216,10 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       const items = dataRef.current; const timeStr = String(param.time);
       const item = items.find((i: any) => String(i.date || i.time) === timeStr);
       if (item) { onCrosshairMoveRef.current?.({ time: timeStr, open: item.open, high: item.high, low: item.low, close: item.close, volume: item.volume }); }
-      // Forward crosshair position to sub-charts
+      // Forward crosshair position to sub-charts. The indicator pane is empty when
+      // indicator === 'none' — forwarding then would throw "Value is null", so guard it.
       safeSetCrosshair(vc, vol, param.time as Time);
-      safeSetCrosshair(ic, macdHist, param.time as Time);
+      if (indicatorActiveRef.current) safeSetCrosshair(ic, macdHist, param.time as Time);
     });
     vc.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; safeSetCrosshair(mc, candle, param.time as Time); });
     ic.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; safeSetCrosshair(mc, candle, param.time as Time); });

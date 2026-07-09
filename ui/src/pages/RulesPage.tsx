@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
 import type { TradingRule } from '@/types';
 import InlineAiParsePanel from '@/components/InlineAiParsePanel';
+import CodeViewerModal from '@/components/CodeViewerModal';
 
 const STORAGE_KEY_RULES = 'stockmate_trading_rules_v2';
 
@@ -12,7 +13,7 @@ function loadRules(): TradingRule[] {
 function saveRules(rules: TradingRule[]) { try { localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(rules)); } catch (e) { console.warn('Failed to save rules:', e); } }
 
 // ── K线标记规则列表 (with edit/delete/toggle) ──
-function RuleList() {
+function RuleList({ onViewCode }: { onViewCode: (r: TradingRule) => void }) {
   const [rules, setRules] = useState<TradingRule[]>(loadRules);
 
   const toggleRule = useCallback((id: string) => {
@@ -66,6 +67,10 @@ function RuleList() {
               </span>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => onViewCode(rule)} disabled={!rule.code}
+                className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:opacity-70"
+                style={{ color: rule.code ? 'hsl(var(--text-tertiary))' : 'hsl(var(--border-subtle))', border: '1px solid hsl(var(--border-subtle))' }}
+                title={rule.code ? '查看代码' : '此规则无可查看的代码'}>&lt;/&gt;</button>
               <button onClick={() => toggleRule(rule.id)}
                 className="px-2 py-0.5 text-[10px] font-bold rounded transition-colors hover:brightness-110"
                 style={{ backgroundColor: rule.enabled ? rule.color : 'hsl(var(--border-subtle))', color: rule.enabled ? 'white' : 'hsl(var(--text-tertiary))' }}>
@@ -87,6 +92,7 @@ function RuleList() {
 export default function RulesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [aiParseAutoOpen, setAiParseAutoOpen] = useState(false);
+  const [viewingCodeRule, setViewingCodeRule] = useState<TradingRule | null>(null);
 
   const handleRulesAdded = useCallback(() => { setRefreshKey(k => k + 1); setAiParseAutoOpen(false); }, []);
 
@@ -110,7 +116,7 @@ export default function RulesPage() {
         {/* K-line marking rules */}
         <div className="pb-4" style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
           <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'hsl(var(--text-secondary))' }}>K线标记规则</h3>
-          <RuleList key={refreshKey} />
+          <RuleList key={refreshKey} onViewCode={setViewingCodeRule} />
         </div>
 
         {/* Preset templates */}
@@ -140,6 +146,7 @@ export default function RulesPage() {
           </div>
         </div>
       </div>
+      <CodeViewerModal rule={viewingCodeRule} onClose={() => setViewingCodeRule(null)} />
     </motion.div>
   );
 }

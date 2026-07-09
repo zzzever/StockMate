@@ -132,6 +132,9 @@ export default function InlineAiParsePanel({
         color: ruleColor(maxIndex + i),
         markerIndex: maxIndex + i + 1,
         createdAt: new Date().toISOString(),
+        kind: rule.kind ?? 'condition',
+        code: rule.code,
+        explanation: rule.explanation,
       }));
 
       const updated = [...existing, ...newRules];

@@ -1,4 +1,5 @@
 import type { TradingRule, RuleCondition, RuleSignal } from '@/types';
+import { runStrategyCode, runSSLang } from '@/utils/strategyRuntime';
 
 export interface KlineItem { date: string; open: number; high: number; low: number; close: number; volume: number; }
 
@@ -170,6 +171,22 @@ export function evaluateRules(rules: TradingRule[], rawData: any[]): RuleSignal[
   const data: KlineItem[] = rawData.map((d: any) => ({ date: d.date || d.time, open: Number(d.open), high: Number(d.high), low: Number(d.low), close: Number(d.close), volume: Number(d.volume) }));
   const allSignals: RuleSignal[] = [];
   for (const rule of enabled) {
+    if ((rule.kind ?? 'condition') === 'code' && rule.code) {
+      // Code rule → run the sandboxed strategy interpreter (no eval; CSP-safe).
+      // If the code contains SSLang RULE blocks, run them all with their own signal/name.
+      try {
+        if (/\bRULE\s+"/i.test(rule.code)) {
+          for (const hit of runSSLang(rule.code, data)) {
+            allSignals.push({ date: data[hit.index].date, action: hit.signal === 'alert' ? 'buy' : hit.signal, price: data[hit.index].close, reason: hit.reason, ruleId: rule.id, ruleName: hit.ruleName, signalType: 'rule' });
+          }
+        } else {
+          for (const hit of runStrategyCode(rule.code, data)) {
+            allSignals.push(makeSignal(data[hit.index], rule, rule.explanation || rule.name));
+          }
+        }
+      } catch (e) { console.warn(`Code rule eval failed: ${rule.name}`, e); }
+      continue;
+    }
     for (const cond of rule.conditions) {
       const fn = EVALUATORS[cond.type];
       if (!fn) continue;

@@ -397,6 +397,13 @@ export interface TradingRule {
   color: string;
   markerIndex: number;
   createdAt: string;
+  // ── v0.7: AI/locally generated runnable strategy code (all optional → backward compatible) ──
+  /** 'code' rules run via the sandboxed strategyRuntime; default/undefined = 'condition' */
+  kind?: 'condition' | 'code';
+  /** Per-bar boolean expression executed by strategyRuntime (viewable in the code viewer) */
+  code?: string;
+  /** Natural-language explanation of the rule/code */
+  explanation?: string;
 }
 
 export interface RuleSignal {
