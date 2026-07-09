@@ -82,6 +82,18 @@ describe('hasAdvancedConcepts — routes incomplete inputs to AI', () => {
     expect(rules[0].kind).toBe('code');
     expect(rules[0].code).toContain('below_ma(20, i)');
   });
+
+  it('uses a real MA-alignment expression for 多头排列', () => {
+    const rules = parseRulesLocally('连续3天缩量下跌后次日上涨，均线多头排列');
+    expect(rules[0].kind).toBe('code');
+    expect(rules[0].code).toContain('sma(5, i) > sma(10, i) && sma(10, i) > sma(20, i)');
+    expect(hasAdvancedConcepts('连续3天缩量下跌后次日上涨，均线多头排列')).toBe(true);
+  });
+
+  it('uses a bearish MA-alignment expression for 空头排列', () => {
+    const rules = parseRulesLocally('放量突破前高，空头排列');
+    expect(rules[0].code).toContain('sma(5, i) < sma(10, i) && sma(10, i) < sma(20, i)');
+  });
   it('flags "上升趋势" so the reported input goes to DeepSeek even though a line matched', () => {
     expect(hasAdvancedConcepts('连续3天缩量下跌后次日上涨，上升趋势')).toBe(true);
   });

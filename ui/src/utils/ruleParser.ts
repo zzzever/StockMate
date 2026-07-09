@@ -156,20 +156,25 @@ function parseLine(line: string): TradingRule | null {
   const base = parseBaseLine(line);
   if (!base) return null;
 
-  const trendUp = /上升趋势|上涨趋势|多头排列|均线多头/.test(line);
-  const trendDown = /下降趋势|下跌趋势|空头排列|均线空头/.test(line);
-  if (!trendUp && !trendDown) return base;
+  const bullAlign = /多头排列|均线多头/.test(line);
+  const bearAlign = /空头排列|均线空头/.test(line);
+  const trendUp = /上升趋势|上涨趋势/.test(line);
+  const trendDown = /下降趋势|下跌趋势/.test(line);
+  if (!bullAlign && !bearAlign && !trendUp && !trendDown) return base;
 
-  const baseExpr = conditionsToCode(base.conditions);
-  const trendExpr = trendUp ? 'above_ma(20, i)' : 'below_ma(20, i)';
-  const trendLabel = trendUp ? '升势' : '跌势';
-  const expression = `${baseExpr} && ${trendExpr}`;
+  let trendExpr: string, trendLabel: string, trendDesc: string;
+  if (bullAlign) { trendExpr = 'sma(5, i) > sma(10, i) && sma(10, i) > sma(20, i)'; trendLabel = '多头'; trendDesc = '均线多头排列（MA5>MA10>MA20）'; }
+  else if (bearAlign) { trendExpr = 'sma(5, i) < sma(10, i) && sma(10, i) < sma(20, i)'; trendLabel = '空头'; trendDesc = '均线空头排列（MA5<MA10<MA20）'; }
+  else if (trendUp) { trendExpr = 'above_ma(20, i)'; trendLabel = '升势'; trendDesc = '价格在20日均线上方（上升趋势）'; }
+  else { trendExpr = 'below_ma(20, i)'; trendLabel = '跌势'; trendDesc = '价格在20日均线下方（下降趋势）'; }
+
+  const expression = `${conditionsToCode(base.conditions)} && ${trendExpr}`;
   return {
     ...base,
     name: `${base.name}·${trendLabel}`,
     kind: 'code',
-    code: `// ${base.name}（价格在20日均线${trendUp ? '上方' : '下方'}）\n${expression} => SIGNAL('${base.signal}')`,
-    explanation: `${base.explanation}，且价格处于20日均线${trendUp ? '上方（上升趋势）' : '下方（下降趋势）'}`,
+    code: `// ${base.name}（${trendDesc}）\n${expression} => SIGNAL('${base.signal}')`,
+    explanation: `${base.explanation}，且${trendDesc}`,
   };
 }
 
@@ -207,5 +212,5 @@ export function getUnmatchedText(text: string): string {
  * Deliberately excludes parser-handled terms (金叉/死叉/超买/超卖/突破/跌破/连续/缩量/放量/次日).
  */
 export function hasAdvancedConcepts(text: string): boolean {
-  return /趋势|上方|下方|之上|之下|站上|站稳|高于|低于|布林|boll|kdj|cci|atr|obv|量比|乖离|威廉|\bwr\b|锤子|十字|吞没|晨星|暮星|红三兵|乌鸦|跳空|背离|支撑|压力|阻力|回踩|回调|波动率|标准差|能量潮/i.test(text);
+  return /趋势|多头|空头|排列|上方|下方|之上|之下|站上|站稳|高于|低于|布林|boll|kdj|cci|atr|obv|量比|乖离|威廉|\bwr\b|锤子|十字|吞没|晨星|暮星|红三兵|乌鸦|跳空|背离|支撑|压力|阻力|回踩|回调|波动率|标准差|能量潮/i.test(text);
 }
