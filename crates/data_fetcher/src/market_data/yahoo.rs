@@ -6,7 +6,7 @@
 //! - interval: 1d, 5d, 1wk, 1mo, 3mo
 //! - range: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
 
-use chrono::{NaiveDate, TimeZone};
+use chrono::TimeZone;
 use serde::Deserialize;
 
 use super::{HistoryQuote, PriceData};
@@ -31,6 +31,7 @@ struct YahooResult {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)] // serde API response shape; fields document API contract
 struct YahooMeta {
     regular_market_price: Option<f64>,
     previous_close: Option<f64>,

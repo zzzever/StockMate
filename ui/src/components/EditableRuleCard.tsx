@@ -19,6 +19,7 @@ const CONDITION_TYPE_LABELS: Record<RuleConditionType, string> = {
   price_breakout: '价格突破',
   volume_surge: '成交量放大',
   macd_signal: 'MACD信号',
+  consecutive_days: '连续涨跌',
 };
 
 const CONDITION_SUBTITLES: Record<RuleConditionType, string> = {
@@ -27,6 +28,7 @@ const CONDITION_SUBTITLES: Record<RuleConditionType, string> = {
   price_breakout: '价格突破近期高/低点',
   volume_surge: '成交量倍量放大',
   macd_signal: 'MACD DIF与DEA交叉',
+  consecutive_days: '连续N天涨跌（可选缩量/放量）',
 };
 
 interface ParamFieldMeta {
@@ -63,6 +65,9 @@ const CONDITION_PARAMS: Record<RuleConditionType, ParamFieldMeta[]> = {
     { key: 'slow', label: '慢线', type: 'number', defaultValue: 26, min: 10, max: 100, step: 1 },
     { key: 'signal', label: '信号线', type: 'number', defaultValue: 9, min: 3, max: 30, step: 1 },
     { key: 'direction', label: '方向', type: 'direction', defaultValue: 'above' },
+  ],
+  consecutive_days: [
+    { key: 'days', label: '天数', type: 'number', defaultValue: 3, min: 2, max: 20, step: 1 },
   ],
 };
 
@@ -137,6 +142,13 @@ function conditionSummary(cond: RuleCondition): string {
       const sig = p.signal ?? 9;
       const dir = p.direction === 'above' ? '↑' : '↓';
       return `MACD(${fast},${slow},${sig})${dir}`;
+    }
+    case 'consecutive_days': {
+      const days = p.days ?? 3;
+      const dir = p.direction === 'up' ? '涨' : '跌';
+      const vol = p.volume === 'shrink' ? '缩量' : p.volume === 'surge' ? '放量' : '';
+      const next = p.next === 'up' ? '→次日涨' : p.next === 'down' ? '→次日跌' : '';
+      return `连续${days}天${vol}${dir}${next}`;
     }
   }
 }

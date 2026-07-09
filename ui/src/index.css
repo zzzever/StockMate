@@ -43,11 +43,13 @@
   --border-subtle: #e5e5e5;
   --border-strong: #0d1117;
 
-  /* ── Zero decoration ── */
-  --radius-sm: 4px;
-  --radius-md: 4px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
+  /* ── Radius scale (DESIGN_LANGUAGE 2.2) ── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-xxl: 28px;
 
   /* ── Sidebar ── */
   --sidebar-width: 220px;
@@ -154,15 +156,20 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--swiss-gray-300); border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: var(--swiss-gray-700); }
 
+/* Mini watchlist window — thinner, subtler scrollbar for the compact 300px window */
+.mini-scroll::-webkit-scrollbar { width: 4px; }
+.mini-scroll::-webkit-scrollbar-track { background: transparent; }
+.mini-scroll::-webkit-scrollbar-thumb { background: hsl(var(--border-default)); border-radius: 2px; }
+
 /* ═══════════════════════════════════════════════════════
    Typography — Swiss modular scale (1.25 ratio), Inter-only
    ═══════════════════════════════════════════════════════ */
 
-/* Monospace numbers: Inter tabular-nums only (no JetBrains Mono) */
+/* Monospace numbers: JetBrains Mono with tabular-nums */
 .font-mono-nums {
+  font-family: 'JetBrains Mono','SF Mono',ui-monospace,'Fira Code',monospace;
   font-variant-numeric: tabular-nums;
-  font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
-  font-feature-settings: "calt" off, "cv05" on, "ss01" on;
+  font-feature-settings: "zero" on,"ss19" on,"calt" on;
 }
 
 /* No serif headings — all Inter */

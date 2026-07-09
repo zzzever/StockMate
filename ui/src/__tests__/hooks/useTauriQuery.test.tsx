@@ -7,13 +7,19 @@ import {
   useHotSectors,
   useStockHistory,
   useDeepSeekConfig,
+  useWsRealtimeQuote,
 } from '@/hooks/useTauriQuery';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(),
+}));
+
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,5 +92,22 @@ describe('useTauriQuery', () => {
     const { result } = renderHook(() => useStockList(), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBeDefined();
+  });
+
+  it('useWsRealtimeQuote unsubscribes even when listen() resolves after unmount', async () => {
+    const listenMock = listen as ReturnType<typeof vi.fn>;
+    const unlisten = vi.fn();
+    let resolveListen: ((fn: () => void) => void) | undefined;
+    // Every listen() call returns a promise we control; keep the last resolver (the hook's own).
+    listenMock.mockImplementation(() => new Promise<() => void>((res) => { resolveListen = res; }));
+
+    const { unmount } = renderHook(() => useWsRealtimeQuote('600519.SH'), { wrapper });
+    // Cleanup runs before the subscription promise resolves (the race we hardened against).
+    unmount();
+    // listen() resolves late — the hook must still unsubscribe the handler it just received.
+    resolveListen?.(unlisten);
+    await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
+
+    listenMock.mockReset();
   });
 });

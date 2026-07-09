@@ -72,6 +72,7 @@ struct EmKlineData {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // serde API response shape; fields document API contract
 struct EmBoardItem {
     #[serde(rename = "f12")] code: String,
     #[serde(rename = "f14")] name: String,

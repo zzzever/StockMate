@@ -1,62 +1,15 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Star, Search, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
-import { useWatchlist, useWatchlistRemove, getWsPrice } from '@/hooks/useTauriQuery';
+import { useWatchlist, useWatchlistRemove, useWatchlistWithRealtime } from '@/hooks/useTauriQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import { fmtPrice, fmtPct, fmtVolume } from '@/lib/format';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { type WatchlistQuoteItem } from '@/types';
-
-function safeNumber(v: unknown): number {
-  return Number.isFinite(Number(v)) ? Number(v) : 0;
-}
 
 function getChangeColor(value: number): string {
   if (value > 0) return 'text-[hsl(var(--price-up))]';
   if (value < 0) return 'text-[hsl(var(--price-down))]';
   return 'text-[hsl(var(--text-secondary))]';
-}
-
-/**
- * Merges the 10s-polled watchlist with real-time WebSocket price pushes.
- * When a WS price arrives for a stock, it overrides the polling data with
- * the live price, giving instant feedback without waiting for the next poll.
- */
-function useWatchlistWithRealtime(watchlist: WatchlistQuoteItem[] | undefined): WatchlistQuoteItem[] | undefined {
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | undefined;
-    listen('realtime-quote', () => {
-      setTick((t) => t + 1);
-    })
-      .then((fn) => { unlisten = fn; })
-      .catch(() => {});
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
-
-  if (!watchlist) return watchlist;
-
-  return watchlist.map((item) => {
-    const wsPrice = getWsPrice(item.stock_code);
-    if (!wsPrice || wsPrice.current_price <= 0) return item;
-    return {
-      ...item,
-      price: wsPrice.current_price,
-      change: wsPrice.change,
-      change_percent: wsPrice.change_percent,
-      volume: wsPrice.volume,
-      amount: wsPrice.amount,
-      high: wsPrice.high,
-      low: wsPrice.low,
-      open: wsPrice.open,
-      prev_close: wsPrice.prev_close,
-      turnover_rate: wsPrice.turnover_rate,
-    };
-  });
 }
 
 export default function WatchlistPage() {

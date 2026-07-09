@@ -155,7 +155,6 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
             pnl,
             pnl_pct,
         });
-        position = Decimal::ZERO;
         equity_curve.push((last_q.date, capital));
     }
 

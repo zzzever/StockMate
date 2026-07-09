@@ -10,7 +10,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
-use chrono::{NaiveDate, Datelike};
+use chrono::NaiveDate;
 use moka::future::Cache;
 use reqwest::Client;
 use rust_decimal::Decimal;
@@ -47,6 +47,7 @@ struct DataServiceInner {
     client: Client,
     db_pool: Option<DbPool>,
     spot_cache: Cache<String, Value>,
+    #[allow(dead_code)] // kept: reserved for future sector-level caching, initialized with other caches
     sector_cache: Cache<String, Value>,
     finance_cache: Cache<String, Value>,
     history_cache: Cache<String, Value>,
@@ -1153,127 +1154,6 @@ fn mock_five_day_change(ticker: &str, change_percent: f64) -> f64 {
     (change_percent * 3.0 + variation).clamp(-25.0, 25.0)
 }
 
-/// Aggregate daily OHLCV quotes into period-level candles (week/month).
-/// Expects quotes in ascending date order.
-fn aggregate_quotes_by_period(quotes: &[Quote], period: &str) -> Vec<Quote> {
-    if quotes.is_empty() || period == "day" {
-        return quotes.to_vec();
-    }
-
-    let mut result: Vec<Quote> = Vec::new();
-    let mut group_start: usize = 0;
-
-    for i in 1..=quotes.len() {
-        let is_new_group = if i < quotes.len() {
-            period_group_key(&quotes[i].date, period) != period_group_key(&quotes[i - 1].date, period)
-        } else {
-            true
-        };
-
-        if is_new_group {
-            let group = &quotes[group_start..i];
-            if !group.is_empty() {
-                let first = &group[0];
-                let last = &group[group.len() - 1];
-
-                let mut high = Decimal::ZERO;
-                let mut low = Decimal::MAX;
-                let mut volume: u64 = 0;
-
-                for q in group {
-                    if q.high > high {
-                        high = q.high;
-                    }
-                    if q.low < low {
-                        low = q.low;
-                    }
-                    volume += q.volume;
-                }
-
-                result.push(Quote {
-                    stock_id: first.stock_id.clone(),
-                    date: first.date,
-                    time: String::new(),
-                    open: first.open,
-                    high,
-                    low,
-                    close: last.close,
-                    volume,
-                    adjusted_close: last.adjusted_close,
-                });
-            }
-            group_start = i;
-        }
-    }
-
-    result
-}
-
-/// Return a grouping key for a date based on the period granularity.
-fn period_group_key(date: &NaiveDate, period: &str) -> i32 {
-    match period {
-        "week" => {
-            let iso = date.iso_week();
-            iso.year() * 100 + iso.week() as i32
-        }
-        "month" => date.year() * 100 + date.month() as i32,
-        _ => date.year() * 10000 + date.month() as i32 * 100 + date.day() as i32,
-    }
-}
-
-/// Generate deterministic mock history quotes for a stock, given a base price and day count.
-/// When `period` is "week" or "month", generates enough daily data and aggregates it.
-fn generate_mock_history(stock_id: &str, base_price: f64, days: u32, period: &str) -> Vec<Quote> {
-    // For week/month, generate enough daily data then aggregate.
-    // Use 31 days per month (not 30) because consecutive calendar days
-    // can span at most 31 calendar days in a month, so days*31 guarantees
-    // we generate at least `days` monthly groups after aggregation.
-    let daily_count = match period {
-        "week" => days * 7,
-        "month" => days * 31,
-        _ => days,
-    };
-
-    let mut state = {
-        let mut hasher = DefaultHasher::new();
-        stock_id.hash(&mut hasher);
-        hasher.finish()
-    };
-    let mut quotes = Vec::new();
-    for i in (0..daily_count).rev() {
-        let date = chrono::Local::now().naive_local().date()
-            - chrono::TimeDelta::try_days(i as i64).unwrap();
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        let noise = ((state % 200) as f64 - 100.0) / 2000.0;
-        let close = base_price * (1.0 + noise);
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        let high_offset = ((state % 50) as f64) / 1000.0;
-        let high = close * (1.0 + high_offset);
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        let low_offset = ((state % 50) as f64) / 1000.0;
-        let low = close * (1.0 - low_offset);
-        let open = (high + low) / 2.0;
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-        let volume = (state % 10_000_000) as u64 + 1_000_000;
-        quotes.push(Quote {
-            stock_id: stock_id.into(),
-            date,
-            time: String::new(),
-            open: Decimal::from_f64_retain(open).unwrap_or_default(),
-            high: Decimal::from_f64_retain(high).unwrap_or_default(),
-            low: Decimal::from_f64_retain(low).unwrap_or_default(),
-            close: Decimal::from_f64_retain(close).unwrap_or_default(),
-            volume,
-            adjusted_close: Decimal::from_f64_retain(close).unwrap_or_default(),
-        });
-    }
-    // Aggregate by period if needed and truncate to requested count
-    if period != "day" {
-        quotes = aggregate_quotes_by_period(&quotes, period);
-        quotes.truncate(days as usize);
-    }
-    quotes
-}
 
 
 pub fn mock_card_data(stock_id: &str) -> CardData {

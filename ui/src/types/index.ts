@@ -381,7 +381,7 @@ export interface DataSourceResult {
 
 // ── Trading Rule Engine types ──
 
-export type RuleConditionType = 'ma_cross' | 'rsi_threshold' | 'price_breakout' | 'volume_surge' | 'macd_signal';
+export type RuleConditionType = 'ma_cross' | 'rsi_threshold' | 'price_breakout' | 'volume_surge' | 'macd_signal' | 'consecutive_days';
 
 export interface RuleCondition {
   type: RuleConditionType;

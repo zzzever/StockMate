@@ -227,11 +227,92 @@ export const chartThemes: Record<ChartStyle, ChartThemeConfig> = {
 
 export const defaultChartStyle: ChartStyle = 'classic';
 
-export function getChartTheme(style: ChartStyle): ChartThemeConfig {
+/**
+ * Chart "chrome" colors (grid / crosshair / axis text / borders) that must follow the
+ * app's light/dark mode, independent of the data-color chartStyle. The per-style palettes
+ * above hard-code dark-background values (light translucent white) which are invisible on a
+ * light background — this resolves the correct chrome for the active mode.
+ */
+export function getChartChrome(isDark: boolean) {
+  return isDark
+    ? {
+        textColor: '#c9d1d9',
+        gridVertColor: 'rgba(255,255,255,0.04)',
+        gridHorzColor: 'rgba(255,255,255,0.08)',
+        borderColor: 'rgba(255,255,255,0.10)',
+        crosshairColor: 'rgba(255,255,255,0.35)',
+        rightPriceScaleBorder: 'rgba(255,255,255,0.10)',
+        leftPriceScaleBorder: 'rgba(255,255,255,0.10)',
+      }
+    : {
+        textColor: '#4b5563',
+        gridVertColor: 'rgba(0,0,0,0.045)',
+        gridHorzColor: 'rgba(0,0,0,0.075)',
+        borderColor: 'rgba(0,0,0,0.14)',
+        crosshairColor: 'rgba(0,0,0,0.45)',
+        rightPriceScaleBorder: 'rgba(0,0,0,0.14)',
+        leftPriceScaleBorder: 'rgba(0,0,0,0.14)',
+      };
+}
+
+export function getChartTheme(style: ChartStyle, isDark: boolean = true): ChartThemeConfig {
   const theme = chartThemes[style];
   if (!theme) {
     console.warn(`[chartThemes] Unknown chart style "${style}", falling back to ${defaultChartStyle}`);
-    return chartThemes[defaultChartStyle];
+    return applyClassicPriceColors({ ...chartThemes[defaultChartStyle], ...getChartChrome(isDark) }, defaultChartStyle);
   }
-  return theme;
+  return applyClassicPriceColors({ ...theme, ...getChartChrome(isDark) }, style);
+}
+
+// ── Single source of truth for A-share red/green ──
+// The "classic" style's up/down family is resolved at runtime from the app's CSS
+// variables (--price-up / --price-down in index.css) so K-line candles match the price
+// text, watchlist and DailyReport exactly, and follow light/dark automatically.
+// Falls back to the static hexes when there is no DOM (tests/SSR) or the vars are absent.
+
+/** Parse an "H S% L%" CSS triple into [r,g,b] 0-255, or null if unparseable. */
+export function hslTripleToRgb(triple: string): [number, number, number] | null {
+  const m = triple.trim().match(/^([\d.]+)\s+([\d.]+)%\s+([\d.]+)%$/);
+  if (!m) return null;
+  const h = parseFloat(m[1]);
+  const s = parseFloat(m[2]) / 100;
+  const l = parseFloat(m[3]) / 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const mm = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else { r = c; b = x; }
+  return [Math.round((r + mm) * 255), Math.round((g + mm) * 255), Math.round((b + mm) * 255)];
+}
+
+/** Resolve a CSS custom property to concrete rgb / rgba builders, or null when unavailable. */
+function resolvePriceVar(varName: string): { solid: string; alpha: (a: number) => string } | null {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  let raw = '';
+  try { raw = getComputedStyle(document.documentElement).getPropertyValue(varName); } catch { return null; }
+  const rgb = raw ? hslTripleToRgb(raw) : null;
+  if (!rgb) return null;
+  const [r, g, b] = rgb;
+  return { solid: `rgb(${r}, ${g}, ${b})`, alpha: (a: number) => `rgba(${r}, ${g}, ${b}, ${a})` };
+}
+
+function applyClassicPriceColors(theme: ChartThemeConfig, style: ChartStyle): ChartThemeConfig {
+  if (style !== 'classic') return theme;
+  const up = resolvePriceVar('--price-up');
+  const down = resolvePriceVar('--price-down');
+  if (!up || !down) return theme; // keep static hexes in tests / SSR / when vars absent
+  return {
+    ...theme,
+    upColor: up.solid, borderUpColor: up.solid, wickUpColor: up.alpha(0.45),
+    downColor: down.solid, borderDownColor: down.solid, wickDownColor: down.alpha(0.45),
+    volumeUpColor: up.alpha(0.5), volumeDownColor: down.alpha(0.5),
+    supportColor: down.solid, resistanceColor: up.solid,
+    macdHistUpColor: up.solid, macdHistDownColor: down.solid,
+    legendUpColor: up.solid, legendDownColor: down.solid,
+  };
 }

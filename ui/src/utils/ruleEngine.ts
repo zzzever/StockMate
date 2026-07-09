@@ -114,6 +114,41 @@ function evaluateMACD(data: KlineItem[], cond: RuleCondition, rule: TradingRule)
   return sigs;
 }
 
+// ── 6. Consecutive up/down days (optionally with shrinking/surging volume,
+//       and an optional follow-up "next day" confirmation) ──
+// Handles "连续三天缩量下跌" (mark the 3rd down day) and the sequential
+// "连续三天缩量下跌，次日上涨" (mark the rebound day after the streak).
+function evaluateConsecutiveDays(data: KlineItem[], cond: RuleCondition, rule: TradingRule): RuleSignal[] {
+  const days = Math.max(1, Math.floor(Number(cond.params.days || 3)));
+  const dir = String(cond.params.direction || 'down'); // 'down' | 'up'
+  const vol = String(cond.params.volume || 'any'); // 'shrink' | 'surge' | 'any'
+  const next = String(cond.params.next || 'none'); // 'up' | 'down' | 'none'
+  const volLabel = vol === 'shrink' ? '缩量' : vol === 'surge' ? '放量' : '';
+  const baseLabel = `连续${days}天${volLabel}${dir === 'up' ? '上涨' : '下跌'}`;
+  const sigs: RuleSignal[] = [];
+  // Need a prior bar for the first day in the window → start at index `days`.
+  for (let i = days; i < data.length; i++) {
+    let ok = true;
+    for (let k = i - days + 1; k <= i; k++) {
+      const priceOk = dir === 'up' ? data[k].close > data[k - 1].close : data[k].close < data[k - 1].close;
+      if (!priceOk) { ok = false; break; }
+      if (vol === 'shrink' && !(data[k].volume < data[k - 1].volume)) { ok = false; break; }
+      if (vol === 'surge' && !(data[k].volume > data[k - 1].volume)) { ok = false; break; }
+    }
+    if (!ok) continue;
+    if (next === 'up' || next === 'down') {
+      // Sequential: require the day after the streak to confirm; mark that day.
+      const j = i + 1;
+      if (j >= data.length) continue;
+      const nextOk = next === 'up' ? data[j].close > data[j - 1].close : data[j].close < data[j - 1].close;
+      if (nextOk) sigs.push(makeSignal(data[j], rule, `${baseLabel}后次日${next === 'up' ? '上涨' : '下跌'}`));
+    } else {
+      sigs.push(makeSignal(data[i], rule, baseLabel));
+    }
+  }
+  return sigs;
+}
+
 // ── Helpers ──
 function makeSignal(bar: KlineItem, rule: TradingRule, reason: string): RuleSignal {
   return { date: bar.date, action: (rule.signal === 'alert' ? 'buy' : rule.signal) as 'buy' | 'sell', price: bar.close, reason, ruleId: rule.id, ruleName: rule.name, signalType: 'rule' };
@@ -125,6 +160,7 @@ const EVALUATORS: Record<string, (data: KlineItem[], cond: RuleCondition, rule: 
   price_breakout: evaluatePriceBreakout,
   volume_surge: evaluateVolumeSurge,
   macd_signal: evaluateMACD,
+  consecutive_days: evaluateConsecutiveDays,
 };
 
 // ── Main entry ──

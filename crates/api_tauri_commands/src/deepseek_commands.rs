@@ -600,21 +600,6 @@ fn quote_to_ref(quote: &Quote) -> QuoteRef {
 // Psychology Analysis — DeepSeek evaluates market sentiment
 // ============================================================
 
-#[derive(serde::Serialize)]
-struct PsychRequest {
-    stock_name: String,
-    ticker: String,
-    current_price: f64,
-    prev_close: f64,
-    change_pct: f64,
-    volume: u64,
-    avg_volume: u64,
-    high: f64,
-    low: f64,
-    recent_trend: String,
-    volume_ratio: f64,
-}
-
 #[tauri::command]
 pub async fn analyze_psychology(
     _stock_id: String,

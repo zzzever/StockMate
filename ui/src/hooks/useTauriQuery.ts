@@ -119,16 +119,20 @@ export function useWsRealtimeQuote(stockId: string) {
       }
     };
 
-    // Listen for new events
+    // Listen for new events. `listen()` is async — if this effect is cleaned up before the
+    // promise resolves, we must still unsubscribe the handler that arrives late, otherwise it
+    // leaks and fires with a stale `stockId` closure. The `cancelled` flag handles that race.
+    let cancelled = false;
     let unlisten: UnlistenFn | undefined;
     listen<PriceData>('realtime-quote', (event) => {
       checkForUpdate(event.payload);
     })
-      .then((fn) => { unlisten = fn; })
-      .catch(() => {});
+      .then((fn) => { if (cancelled) { fn(); } else { unlisten = fn; } })
+      .catch((err) => { console.warn('[useWsRealtimeQuote] failed to subscribe to realtime-quote:', err); });
 
     return () => {
-      if (unlisten) unlisten();
+      cancelled = true;
+      if (unlisten) { unlisten(); unlisten = undefined; }
     };
   }, [stockId]);
 
@@ -636,6 +640,44 @@ export function useWatchlist() {
       }
     },
     refetchInterval: 10000,
+  });
+}
+
+/**
+ * Merges the 10s-polled watchlist with real-time WebSocket price pushes.
+ * When a WS price arrives for a stock, it overrides the polling data with the
+ * live price, giving instant feedback without waiting for the next poll.
+ * Shared by the main watchlist page and the mini watchlist window.
+ */
+export function useWatchlistWithRealtime(watchlist: WatchlistQuoteItem[] | undefined): WatchlistQuoteItem[] | undefined {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    listen('realtime-quote', () => { setTick((t) => t + 1); })
+      .then((fn) => { unlisten = fn; })
+      .catch((err) => { console.warn('[useWatchlistWithRealtime] subscribe failed:', err); });
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
+  if (!watchlist) return watchlist;
+
+  return watchlist.map((item) => {
+    const wsPrice = getWsPrice(item.stock_code);
+    if (!wsPrice || wsPrice.current_price <= 0) return item;
+    return {
+      ...item,
+      price: wsPrice.current_price,
+      change: wsPrice.change,
+      change_percent: wsPrice.change_percent,
+      volume: wsPrice.volume,
+      amount: wsPrice.amount,
+      high: wsPrice.high,
+      low: wsPrice.low,
+      open: wsPrice.open,
+      prev_close: wsPrice.prev_close,
+      turnover_rate: wsPrice.turnover_rate,
+    };
   });
 }
 

@@ -338,7 +338,7 @@ JSON 结构如下：
     }
 
     /// Offline analysis without API call, based on local technical summary.
-    pub fn analyze_stock_offline(&self, summary: &TechnicalSummary, finance: &StockFinanceRef) -> DeepSeekAnalysis {
+    pub fn analyze_stock_offline(&self, summary: &TechnicalSummary, _finance: &StockFinanceRef) -> DeepSeekAnalysis {
         let trend = if summary.macd_signal == "金叉" || summary.recent_pattern == "近期高点" {
             "bullish"
         } else if summary.macd_signal == "死叉" || summary.recent_pattern == "近期低点" {
@@ -576,7 +576,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
     }
 
     async fn analyze_technical_dimension(
-        &self, stock_info: &StockRef, quotes: &[QuoteRef], mas: &MovingAverageRef, summary: &TechnicalSummary,
+        &self, stock_info: &StockRef, quotes: &[QuoteRef], _mas: &MovingAverageRef, summary: &TechnicalSummary,
     ) -> Result<DimensionScore, DeepSeekError> {
         let system_prompt = r#"你是技术分析专家。分析K线形态、均线、MACD、RSI、布林带。
 返回 JSON: {"score":0-100,"label":"技术面","summary":"...","key_points":["..."],"signals":[{"name":"...","direction":"bullish|bearish|neutral","strength":0.0-1.0}],"recommendation":"看多|观望|看空","confidence":0.0-1.0}"#;
@@ -927,6 +927,7 @@ target_price必须基于最新价格合理推算（看涨则高于现价，看�
 3. price_breakout（价格突破）: {"period": 观察周期, "direction": "above"(突破) 或 "below"(跌破)}
 4. volume_surge（成交量放大）: {"ratio": 倍率(如1.5表示1.5倍), "period": 均量计算周期(默认5)}
 5. macd_signal（MACD信号）: {"direction": "golden_cross"(金叉), "death_cross"(死叉), "above_zero"(在零轴上), "below_zero"(在零轴下)}
+6. consecutive_days（连续N天涨跌，可含次日确认）: {"days": 天数, "direction": "down"(连续下跌) 或 "up"(连续上涨), "volume": "shrink"(缩量) / "surge"(放量) / "any"(不限), "next": "up"(次日上涨) / "down"(次日下跌) / "none"(无次日条件，默认)}
 
 signal字段取值: "buy"(买入), "sell"(卖出), "alert"(提醒)
 
@@ -1349,7 +1350,7 @@ where
     let cleaned = text.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
     match serde_json::from_str(cleaned) {
         Ok(v) => Ok(v),
-        Err(e) => {
+        Err(_e) => {
             // Try robust JSON extraction
             if let Some(extracted) = robust_json_extract(cleaned) {
                 match serde_json::from_str(&extracted) {
