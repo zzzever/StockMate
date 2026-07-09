@@ -139,6 +139,7 @@ export default function InlineAiParsePanel({
 
       const updated = [...existing, ...newRules];
       localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(updated));
+      window.dispatchEvent(new Event('stockmate:rules-changed'));
 
       setAdded(true);
       onRulesAdded?.();
@@ -589,12 +590,14 @@ export default function InlineAiParsePanel({
                                 color: 'hsl(var(--text-tertiary))',
                               }}
                             >
-                              {rule.conditions
-                                .map(
-                                  (c) =>
-                                    `${c.type}(${Object.values(c.params).join(', ')})`,
-                                )
-                                .join('; ')}
+                              {rule.kind === 'code' || rule.conditions.length === 0
+                                ? (rule.explanation || (rule.code ? rule.code.replace(/^\/\/.*\n?/, '').slice(0, 48) : 'AI 生成代码规则'))
+                                : rule.conditions
+                                    .map(
+                                      (c) =>
+                                        `${c.type}(${Object.values(c.params).join(', ')})`,
+                                    )
+                                    .join('; ')}
                             </p>
                           </div>
 

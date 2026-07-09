@@ -10,7 +10,7 @@ const STORAGE_KEY_RULES = 'stockmate_trading_rules_v2';
 function loadRules(): TradingRule[] {
   try { const raw = localStorage.getItem(STORAGE_KEY_RULES); if (raw) { const parsed = JSON.parse(raw); return parsed.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex ?? i + 1, color: ruleColor(r.markerIndex ?? i) })); } return RULE_TEMPLATES; } catch (e) { console.warn('Failed to load rules:', e); return RULE_TEMPLATES; }
 }
-function saveRules(rules: TradingRule[]) { try { localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(rules)); } catch (e) { console.warn('Failed to save rules:', e); } }
+function saveRules(rules: TradingRule[]) { try { localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(rules)); window.dispatchEvent(new Event('stockmate:rules-changed')); } catch (e) { console.warn('Failed to save rules:', e); } }
 
 // ── K线标记规则列表 (with edit/delete/toggle) ──
 function RuleList({ onViewCode }: { onViewCode: (r: TradingRule) => void }) {
@@ -107,7 +107,13 @@ export default function RulesPage() {
           ✦ AI 提炼
         </button>
       </div>
-      <p className="text-xs mb-6" style={{ color: 'hsl(var(--text-tertiary))' }}>K线标记规则 · 统一管理买卖信号</p>
+      <p className="text-xs mb-3" style={{ color: 'hsl(var(--text-tertiary))' }}>K线标记规则 · 统一管理买卖信号</p>
+
+      {/* Permanent risk / compliance notice — rules & markers are for research only */}
+      <div className="mb-4 rounded-lg px-3 py-2 text-[11px] leading-relaxed shrink-0" style={{ background: 'hsl(var(--price-up) / 0.06)', border: '1px solid hsl(var(--price-up) / 0.25)', color: 'hsl(var(--text-secondary))' }}>
+        <span className="font-bold" style={{ color: 'hsl(var(--price-up))' }}>风险提示：</span>
+        规则与 K 线标记由 AI 根据您的描述生成，仅供学习研究参考，<b>不构成任何投资建议</b>。AI 可能误解您的意图或产生错误，请务必核对规则逻辑；历史信号表现不代表未来收益。投资有风险，决策需谨慎。
+      </div>
 
       <div className="flex-1 overflow-auto space-y-6">
         {/* AI Parse Panel (collapsible) */}

@@ -434,7 +434,15 @@ export default function StockDetailPage() {
   const secondaryErrors = [financeError ? '财务' : null, fundFlowError ? '资金流' : null, srError ? '支撑阻力' : null, dayHistoryError ? '5日历史' : null].filter(Boolean) as string[];
   const retrySecondary = () => { if (financeError) refetchFinance(); if (fundFlowError) refetchFundFlow(); if (srError) refetchSr(); if (dayHistoryError) refetchDayHistory(); };
 
-  const [tradingRules, setTradingRules] = useState<TradingRule[]>(() => { try { const raw = localStorage.getItem('stockmate_trading_rules_v2'); const loaded: TradingRule[] = raw ? JSON.parse(raw) : RULE_TEMPLATES; return loaded.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex || i + 1, color: ruleColor(r.markerIndex || i) })); } catch (e) { console.warn('[StockDetailPage] failed to parse trading rules from localStorage:', e); return RULE_TEMPLATES; } });
+  const loadTradingRules = (): TradingRule[] => { try { const raw = localStorage.getItem('stockmate_trading_rules_v2'); const loaded: TradingRule[] = raw ? JSON.parse(raw) : RULE_TEMPLATES; return loaded.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex || i + 1, color: ruleColor(r.markerIndex || i) })); } catch (e) { console.warn('[StockDetailPage] failed to parse trading rules from localStorage:', e); return RULE_TEMPLATES; } };
+  const [tradingRules, setTradingRules] = useState<TradingRule[]>(loadTradingRules);
+  // Re-read rules when they change on the Rules page (same tab via custom event, other tabs via storage).
+  useEffect(() => {
+    const sync = () => setTradingRules(loadTradingRules());
+    window.addEventListener('stockmate:rules-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => { window.removeEventListener('stockmate:rules-changed', sync); window.removeEventListener('storage', sync); };
+  }, []);
   const ruleSignals = useMemo(() => evaluateRules(tradingRules, chartData), [tradingRules, chartData]);
   const ruleMarkerOverlays = useMemo(() => { const ruleMap = new Map(tradingRules.filter(r => r.enabled).map(r => [r.id, r])); return ruleSignals.map(s => { const rule = ruleMap.get(s.ruleId); return { time: s.date, color: rule?.color ?? '#888', label: String(rule?.markerIndex ?? 0) }; }); }, [ruleSignals, tradingRules]);
 

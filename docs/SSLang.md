@@ -190,6 +190,34 @@ i >= 4      -- 至少需要 5 根 bar（常见于 lookback 保护）
 | `min(a, b)` | 取最小值 | |
 | `max(a, b)` | 取最大值 | |
 
+## 7b. 统计 / 聚合函数（对表达式在窗口内求值）
+
+这些函数的第一个参数是一个**用 `i` 表示当前 bar 的表达式**，会在窗口内每根 bar 上重新求值。
+
+| 函数 | 参数 | 说明 |
+|---|---|---|
+| `count_true(expr, n, k)` | expr=布尔表达式, n=窗口, k=结束bar | 近 n 根 bar 中 expr 为真的次数。例：`count_true(rsi(14, i) < 30, 10, i)` = 近10天 RSI<30 的天数 |
+| `consecutive(expr, n, k)` | 同上 | 近 n 根 bar expr 是否**连续**为真。例：`consecutive(close(i) > open(i), 3, i)` = 连续3根阳线 |
+| `highest_of(expr, n, k)` | expr=数值表达式 | expr 在近 n 根 bar 的最大值。例：`highest_of(macddiff(i), 20, i)` |
+| `lowest_of(expr, n, k)` | 同上 | expr 在近 n 根 bar 的最小值（可用于指标背离检测） |
+| `is_high_n(n, k)` | n=窗口 | 当前收盘价是否为近 n 根 bar 最高（创新高） |
+| `is_low_n(n, k)` | n=窗口 | 当前收盘价是否为近 n 根 bar 最低（创新低） |
+| `pct_change(n, k)` | n=周期 | 距前 n 根 bar 的涨跌幅 %（同 `roc`） |
+
+### 用统计函数表达的策略示例
+```
+-- RSI 连续 5 天超卖后买入（无需展开写 5 个 &&）
+RULE "RSI持续超卖" SIGNAL BUY WHEN consecutive(rsi(14, i) < 30, 5, i) NOTE "连续5天RSI低于30"
+
+-- 近 10 天有 7 天放量
+RULE "持续放量" SIGNAL ALERT WHEN count_true(volume(i) > volume_ma(5, i), 10, i) >= 7 NOTE "近10天7天放量"
+
+-- MACD 底背离（价格创20日新低，但 DIF 高于20日 DIF 最低值）
+RULE "MACD底背离" SIGNAL BUY WHEN is_low_n(20, i) && macddiff(i) > lowest_of(macddiff(i), 20, i-1) NOTE "价格新低但MACD未新低"
+```
+
+> **说明**：`atr` 采用 Wilder 平滑（与同花顺/通达信/TradingView 一致）；`stddev` 与布林带均使用总体标准差（除以 n）；`ema`/`macd` 在数据不足的前 n-1 根 bar 返回 null（用 SMA 播种），与 `sma`/`rsi` 行为一致。
+
 ---
 
 ## 8. 运算符

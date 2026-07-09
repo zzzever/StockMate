@@ -35,8 +35,9 @@ function tokenize(src: string): Tok[] {
   while (i < src.length) {
     const c = src[i];
     if (c === ' ' || c === '\t' || c === '\n' || c === '\r') { i++; continue; }
-    // line comment
+    // line comment: // ... or -- ... (SSLang spec uses --)
     if (c === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+    if (c === '-' && src[i + 1] === '-') { while (i < src.length && src[i] !== '\n') i++; continue; }
     if (c >= '0' && c <= '9') {
       let j = i + 1;
       while (j < src.length && /[0-9.]/.test(src[j])) j++;
@@ -138,6 +139,8 @@ const FN_ARITY: Record<string, number> = {
   morning_star: 1, evening_star: 1,
   gap_up: 1, gap_down: 1,
   three_soldiers: 1, three_crows: 1,
+  count_true: 3, consecutive: 3, highest_of: 3, lowest_of: 3,
+  is_high_n: 2, is_low_n: 2, pct_change: 2,
 };
 
 // ── Evaluation context ──
@@ -151,10 +154,15 @@ function smaArr(bars: KlineItem[], n: number): (number | null)[] {
   return bars.map((_, i) => i < n - 1 ? null : bars.slice(i - n + 1, i + 1).reduce((a, b) => a + b.close, 0) / n);
 }
 function emaArr(bars: KlineItem[], n: number): (number | null)[] {
-  if (!bars.length) return [];
-  const r: number[] = [bars[0].close]; const k = 2 / (n + 1);
-  for (let i = 1; i < bars.length; i++) r.push(bars[i].close * k + r[i - 1] * (1 - k));
-  return r;
+  const len = bars.length;
+  if (len < n) return bars.map(() => null);
+  // Warmup null for the first n-1 bars, SMA seed at index n-1, then standard EMA recursion.
+  const out: (number | null)[] = Array(n - 1).fill(null);
+  let ema = bars.slice(0, n).reduce((a, b) => a + b.close, 0) / n;
+  out.push(ema);
+  const k = 2 / (n + 1);
+  for (let i = n; i < len; i++) { ema = bars[i].close * k + ema * (1 - k); out.push(ema); }
+  return out;
 }
 function rsiArr(bars: KlineItem[], n: number): (number | null)[] {
   const closes = bars.map((b) => b.close);
@@ -169,19 +177,33 @@ function rsiArr(bars: KlineItem[], n: number): (number | null)[] {
 function macdArrs(bars: KlineItem[]) {
   const e12 = emaArr(bars, 12), e26 = emaArr(bars, 26);
   const diff = e12.map((v, i) => (v == null || e26[i] == null ? null : (v as number) - (e26[i] as number)));
-  const valid = diff.map((v) => (v == null ? 0 : v));
-  const dea: (number | null)[] = []; const k = 2 / (9 + 1); let prev = valid[0] ?? 0;
-  for (let i = 0; i < valid.length; i++) { prev = i === 0 ? valid[0] : valid[i] * k + prev * (1 - k); dea.push(diff[i] == null ? null : prev); }
+  // DEA = 9-EMA of DIF, seeded with the SMA of the first 9 valid DIF values; null before.
+  const dea: (number | null)[] = diff.map(() => null);
+  const firstValid = diff.findIndex((v) => v != null);
+  const need = 9;
+  if (firstValid >= 0 && firstValid + need - 1 < diff.length) {
+    const seedEnd = firstValid + need - 1;
+    let seed = 0; for (let i = firstValid; i <= seedEnd; i++) seed += diff[i] as number; seed /= need;
+    dea[seedEnd] = seed;
+    const k = 2 / (need + 1); let prev = seed;
+    for (let i = seedEnd + 1; i < diff.length; i++) { prev = (diff[i] as number) * k + prev * (1 - k); dea[i] = prev; }
+  }
   const hist = diff.map((v, i) => (v == null || dea[i] == null ? null : (v as number) - (dea[i] as number)));
   return { diff, dea, hist };
 }
 
 // ── Extended precomputation (SSLang v1.1) ──
 function atrArr(bars: KlineItem[], n: number): (number | null)[] {
-  if (!bars.length) return [];
+  const len = bars.length;
+  if (len < n) return bars.map(() => null);
   const tr: number[] = [bars[0].high - bars[0].low];
-  for (let i = 1; i < bars.length; i++) { const hl = bars[i].high - bars[i].low; const hc = Math.abs(bars[i].high - bars[i - 1].close); const lc = Math.abs(bars[i].low - bars[i - 1].close); tr.push(Math.max(hl, hc, lc)); }
-  return tr.map((_, i) => i < n - 1 ? null : tr.slice(i - n + 1, i + 1).reduce((a, b) => a + b, 0) / n);
+  for (let i = 1; i < len; i++) { const hl = bars[i].high - bars[i].low; const hc = Math.abs(bars[i].high - bars[i - 1].close); const lc = Math.abs(bars[i].low - bars[i - 1].close); tr.push(Math.max(hl, hc, lc)); }
+  // Wilder smoothing (matches TradingView / 同花顺 / 通达信): seed with SMA(TR,n), then recursive.
+  const out: (number | null)[] = Array(n - 1).fill(null);
+  let atr = tr.slice(0, n).reduce((a, b) => a + b, 0) / n;
+  out.push(atr);
+  for (let i = n; i < len; i++) { atr = (atr * (n - 1) + tr[i]) / n; out.push(atr); }
+  return out;
 }
 function obvArr(bars: KlineItem[]): (number | null)[] {
   if (!bars.length) return [];
@@ -190,20 +212,21 @@ function obvArr(bars: KlineItem[]): (number | null)[] {
   return arr;
 }
 function volumeSmaArr(bars: KlineItem[], n: number): (number | null)[] { return bars.map((_, i) => i < n - 1 ? null : bars.slice(i - n + 1, i + 1).reduce((a, b) => a + b.volume, 0) / n); }
-function stddevArr(bars: KlineItem[], n: number): (number | null)[] { return bars.map((_, i) => { if (i < n - 1) return null; const slice = bars.slice(i - n + 1, i + 1).map((b) => b.close); const mean = slice.reduce((a, b) => a + b, 0) / n; return Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1)); }); }
+function stddevArr(bars: KlineItem[], n: number): (number | null)[] { return bars.map((_, i) => { if (i < n - 1) return null; const slice = bars.slice(i - n + 1, i + 1).map((b) => b.close); const mean = slice.reduce((a, b) => a + b, 0) / n; return Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / n); }); }
 function adArr(bars: KlineItem[]): (number | null)[] { if (!bars.length) return []; const arr: number[] = []; let cum = 0; for (let i = 0; i < bars.length; i++) { const { high, low, close, volume } = bars[i]; if (high === low) { arr.push(cum); continue; } cum += ((close - low) - (high - close)) / (high - low) * volume; arr.push(cum); } return arr; }
 function bollStddevArr(bars: KlineItem[], n: number): (number | null)[] { return bars.map((_, i) => { if (i < n - 1) return null; const slice = bars.slice(i - n + 1, i + 1); const mean = slice.reduce((a, b) => a + b.close, 0) / n; return Math.sqrt(slice.reduce((a, b) => a + (b.close - mean) ** 2, 0) / n); }); }
 function kdjArrs(bars: KlineItem[]): { k: (number | null)[]; d: (number | null)[]; j: (number | null)[] } { const len = bars.length; const k: (number | null)[] = []; const d: (number | null)[] = []; const j: (number | null)[] = []; for (let i = 0; i < len; i++) { if (i < 8) { k.push(null); d.push(null); j.push(null); continue; } const slice = bars.slice(i - 8, i + 1); const hhv = Math.max(...slice.map((b) => b.high)); const llv = Math.min(...slice.map((b) => b.low)); const rsv = hhv === llv ? 0 : ((bars[i].close - llv) / (hhv - llv)) * 100; if (i === 8) { k.push(rsv); d.push(rsv); j.push(rsv); } else { const pk = k[k.length - 1] as number; const pd = d[d.length - 1] as number; const ck = (2 / 3) * pk + (1 / 3) * rsv; const cd = (2 / 3) * pd + (1 / 3) * ck; k.push(ck); d.push(cd); j.push(3 * ck - 2 * cd); } } return { k, d, j }; }
 function cciArr(bars: KlineItem[], n: number): (number | null)[] { return bars.map((_, i) => { if (i < n - 1) return null; const typical = (bars[i].high + bars[i].low + bars[i].close) / 3; const slice = bars.slice(i - n + 1, i + 1); const sumTp = slice.reduce((a, b) => a + (b.high + b.low + b.close) / 3, 0); const mean = sumTp / n; const md = slice.reduce((a, b) => a + Math.abs((b.high + b.low + b.close) / 3 - mean), 0) / n; return md === 0 ? 0 : (typical - mean) / (0.015 * md); }); }
 
 function getBarField(bars: KlineItem[], idx: number, field: keyof KlineItem): Val {
-  if (idx < 0 || idx >= bars.length) return null;
+  // NaN/±Infinity/non-integer indices must return null, not crash on bars[NaN].
+  if (!Number.isFinite(idx) || (idx | 0) !== idx || idx < 0 || idx >= bars.length) return null;
   return bars[idx][field] as number;
 }
 
 function toNum(v: Val): number { return typeof v === 'number' ? v : v === true ? 1 : 0; }
 function toInt(v: Val): number { return Math.trunc(toNum(v)); }
-function truthy(v: Val): boolean { return v !== null && v !== false && v !== 0 && v !== ''; }
+function truthy(v: Val): boolean { return v !== null && v !== false && v !== 0 && v !== '' && !(typeof v === 'number' && Number.isNaN(v)); }
 
 function callHelper(name: string, argNodes: Node[], ctx: Ctx): Val {
   // cross / crossunder need the previous-bar values → evaluate arg ASTs at i and i-1
@@ -215,6 +238,23 @@ function callHelper(name: string, argNodes: Node[], ctx: Ctx): Val {
     return name === 'cross'
       ? toNum(aCur) > toNum(bCur) && toNum(aPrev) <= toNum(bPrev)
       : toNum(aCur) < toNum(bCur) && toNum(aPrev) >= toNum(bPrev);
+  }
+  // count_true / consecutive / highest_of / lowest_of evaluate arg0 (an expression using `i`)
+  // at each bar in a window, so they must re-evaluate the AST (like cross) rather than a value.
+  if (name === 'count_true' || name === 'consecutive' || name === 'highest_of' || name === 'lowest_of') {
+    const n = toInt(evalNode(argNodes[1], ctx));
+    const k = toInt(evalNode(argNodes[2], ctx));
+    if (n < 1 || k - n + 1 < 0 || k >= ctx.bars.length) return name === 'count_true' ? 0 : name === 'consecutive' ? false : null;
+    let count = 0; let ext: number | null = null;
+    for (let j = k - n + 1; j <= k; j++) {
+      const v = evalNode(argNodes[0], { ...ctx, i: j });
+      if (name === 'count_true') { if (truthy(v)) count++; }
+      else if (name === 'consecutive') { if (!truthy(v)) return false; }
+      else { if (v == null) continue; const num = toNum(v); ext = ext == null ? num : name === 'highest_of' ? Math.max(ext, num) : Math.min(ext, num); }
+    }
+    if (name === 'count_true') return count;
+    if (name === 'consecutive') return true;
+    return ext;
   }
   const args = argNodes.map((a) => evalNode(a, ctx));
   const { bars, cache } = ctx;
@@ -250,6 +290,9 @@ function callHelper(name: string, argNodes: Node[], ctx: Ctx): Val {
     case 'cci': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1) return null; (cache.cci[n] ??= cciArr(bars, n)); return cache.cci[n][idx] ?? null; }
     case 'momentum': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n < 0 || idx >= bars.length) return null; return bars[idx].close - bars[idx - n].close; }
     case 'roc': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n < 0 || idx >= bars.length) return null; const prev = bars[idx - n].close; return prev === 0 ? null : ((bars[idx].close - prev) / prev) * 100; }
+    case 'pct_change': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n < 0 || idx >= bars.length) return null; const prev = bars[idx - n].close; return prev === 0 ? null : ((bars[idx].close - prev) / prev) * 100; }
+    case 'is_high_n': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n + 1 < 0 || idx >= bars.length) return false; const s = bars.slice(idx - n + 1, idx + 1).map((b) => b.close); return bars[idx].close >= Math.max(...s); }
+    case 'is_low_n': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx - n + 1 < 0 || idx >= bars.length) return false; const s = bars.slice(idx - n + 1, idx + 1).map((b) => b.close); return bars[idx].close <= Math.min(...s); }
     // ── Volume / volatility ──
     case 'atr': { const n = toInt(args[0]); if (n < 1) return null; (cache.atr[n] ??= atrArr(bars, n)); return cache.atr[n][toInt(args[1])] ?? null; }
     case 'obv': { (cache.obv ??= obvArr(bars)); return cache.obv[toInt(args[0])] ?? null; }
@@ -360,7 +403,7 @@ export function parseSSLang(text: string): ParsedSSRule[] {
     // Find the end of this block — next RULE or end of text
     let blockEnd = text.indexOf('\nRULE', blockStart);
     if (blockEnd === -1) blockEnd = text.length;
-    const body = text.slice(blockStart, blockEnd);
+    const body = text.slice(blockStart, blockEnd).replace(/--[^\n]*/g, ''); // strip -- comments
 
     const sigM = body.match(/\bSIGNAL\s+(BUY|SELL|ALERT)\b/i);
     // WHEN captures until NOTE keyword, end-of-line, or end-of-string
@@ -425,13 +468,15 @@ export function validateStrategyCode(code: string): { valid: boolean; error?: st
   }
 }
 
+function newCache(): Cache { return { sma: {}, ema: {}, rsi: {}, bollStddev: {}, atr: {}, volume_sma: {}, stddev: {}, cci: {} }; }
+
 /**
  * Run strategy code against a bar series. Returns the indices where the per-bar
  * boolean expression holds true. Throws StrategyCodeError on parse/security errors.
+ * An external `cache` may be shared across rules to avoid recomputing indicators.
  */
-export function runStrategyCode(code: string, bars: KlineItem[]): { index: number }[] {
+export function runStrategyCode(code: string, bars: KlineItem[], cache: Cache = newCache()): { index: number }[] {
   const ast = new Parser(tokenize(stripToExpression(code))).parse();
-  const cache: Cache = { sma: {}, ema: {}, rsi: {}, bollStddev: {}, atr: {}, volume_sma: {}, stddev: {}, cci: {} };
   const hits: { index: number }[] = [];
   for (let i = 0; i < bars.length; i++) {
     const ctx: Ctx = { i, bars, cache, steps: { n: 0 } };
@@ -448,9 +493,10 @@ export function runStrategyCode(code: string, bars: KlineItem[]): { index: numbe
 export function runSSLang(text: string, bars: KlineItem[]): { ruleName: string; signal: 'buy' | 'sell' | 'alert'; reason: string; index: number }[] {
   const rules = parseSSLang(text);
   const all: { ruleName: string; signal: 'buy' | 'sell' | 'alert'; reason: string; index: number }[] = [];
+  const cache = newCache(); // shared across all rules — indicators computed once
   for (const r of rules) {
     try {
-      for (const hit of runStrategyCode(r.expression, bars)) {
+      for (const hit of runStrategyCode(r.expression, bars, cache)) {
         all.push({ ruleName: r.name, signal: r.signal, reason: r.explanation || r.name, index: hit.index });
       }
     } catch (e) { console.warn(`[SSLang] Rule "${r.name}" eval failed:`, e); }

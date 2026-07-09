@@ -1083,6 +1083,16 @@ abs(x) min(a, b) max(a, b)
 above_ma(n, k) — close(k) > sma(n,k)，价格高于n日均线（上升趋势）
 below_ma(n, k) — close(k) < sma(n,k)，价格低于n日均线（下降趋势）
 
+## 统计/聚合函数（第一参数是用 i 表示当前bar的表达式，在窗口内逐bar求值）
+
+count_true(expr, n, k) — 近n根bar中 expr 为真的次数，例 count_true(rsi(14,i)<30, 10, i)
+consecutive(expr, n, k) — 近n根bar expr 是否连续为真，例 consecutive(close(i)>open(i), 3, i)（连续3阳）
+highest_of(expr, n, k) — expr 在近n根的最大值
+lowest_of(expr, n, k) — expr 在近n根的最小值（用于指标背离）
+is_high_n(n, k) — 当前收盘创n日新高
+is_low_n(n, k) — 当前收盘创n日新低
+pct_change(n, k) — 距前n根的涨跌幅%
+
 ## 运算符（按优先级从高到低）
 
 () [] 分组下标 → ! - 一元 → * / % → + - → == != < <= > >= → && → || → ?: 三元

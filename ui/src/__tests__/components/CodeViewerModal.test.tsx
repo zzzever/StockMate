@@ -24,7 +24,8 @@ describe('CodeViewerModal', () => {
     render(<CodeViewerModal rule={rule} onClose={() => {}} />);
     expect(screen.getByText('三天缩量跌后反弹')).toBeInTheDocument();
     expect(screen.getByText('买入')).toBeInTheDocument();
-    expect(screen.getByText(/down\(i-1, 3\)/)).toBeInTheDocument();
+    // Code is syntax-highlighted (split across spans) — assert via the <pre> text content
+    expect(document.querySelector('pre')?.textContent).toContain('down(i-1, 3)');
     expect(screen.getByText('连续3天缩量下跌后次日收阳买入')).toBeInTheDocument();
   });
 

@@ -1,10 +1,35 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Copy, Check } from 'lucide-react';
 import type { TradingRule } from '@/types';
 
 const SIGNAL_LABELS: Record<string, string> = { buy: '买入', sell: '卖出', alert: '提醒' };
 const SIGNAL_COLORS: Record<string, string> = { buy: '#22c55e', sell: '#ef4444', alert: '#f59e0b' };
+
+const SSL_KEYWORDS = new Set(['RULE', 'SIGNAL', 'WHEN', 'NOTE', 'BUY', 'SELL', 'ALERT', 'true', 'false', 'null']);
+
+/** Lightweight SSLang syntax highlighter — colors keywords / functions / numbers / strings / comments. */
+function highlightLine(line: string): React.ReactNode {
+  // Whole-line comment
+  const commentIdx = Math.min(...['--', '//'].map((c) => { const k = line.indexOf(c); return k < 0 ? Infinity : k; }));
+  const codePart = commentIdx === Infinity ? line : line.slice(0, commentIdx);
+  const comment = commentIdx === Infinity ? '' : line.slice(commentIdx);
+  const tokens = codePart.split(/(\s+|[()[\],]|"[^"]*"|&&|\|\||[+\-*/%<>=!?:])/g).filter((t) => t !== '');
+  return (
+    <>
+      {tokens.map((t, i) => {
+        let color = 'hsl(var(--text-primary))';
+        if (/^"[^"]*"$/.test(t)) color = '#22c55e';
+        else if (/^\d+(\.\d+)?$/.test(t)) color = '#f59e0b';
+        else if (SSL_KEYWORDS.has(t)) color = '#c084fc';
+        else if (/^[a-z_][a-z0-9_]*$/i.test(t) && tokens[i + 1] === '(') color = '#60a5fa'; // function call
+        else if (/^(&&|\|\||[+\-*/%<>=!?:])$/.test(t)) color = 'hsl(var(--text-tertiary))';
+        return <Fragment key={i}><span style={{ color }}>{t}</span></Fragment>;
+      })}
+      {comment && <span style={{ color: 'hsl(var(--text-tertiary))', opacity: 0.7 }}>{comment}</span>}
+    </>
+  );
+}
 
 interface Props {
   rule: TradingRule | null;
@@ -67,7 +92,7 @@ export default function CodeViewerModal({ rule, onClose }: Props) {
                   {lines.map((ln, i) => (
                     <div key={i} className="flex px-0">
                       <span className="inline-block text-right pr-3 shrink-0 select-none" style={{ width: 40, color: 'hsl(var(--text-tertiary))', opacity: 0.45, fontSize: 11 }}>{i + 1}</span>
-                      <span className="whitespace-pre pr-4" style={{ color: 'hsl(var(--text-primary))' }}>{ln || ' '}</span>
+                      <span className="whitespace-pre pr-4" style={{ color: 'hsl(var(--text-primary))' }}>{ln ? highlightLine(ln) : ' '}</span>
                     </div>
                   ))}
                 </pre>
