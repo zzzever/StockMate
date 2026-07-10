@@ -220,11 +220,12 @@ describe('StockDetailPage', () => {
       isLoading: false,
     } as any);
     renderPage(client, '/stock?code=600519');
+    // PE displayed in compact metrics strip
     expect(screen.getByText('35.2')).toBeInTheDocument();
-    expect(screen.getByText('8.5')).toBeInTheDocument();
-    expect(screen.getByText(/0\.52%/)).toBeInTheDocument();
+    // Turnover rate displayed once in compact strip
+    expect(screen.getByText('0.52%')).toBeInTheDocument();
+    // Amount displayed (9,000,000,000 → 90.0亿)
     expect(screen.getByText(/90\.0亿/)).toBeInTheDocument();
-    expect(screen.getByText(/18\.0%/)).toBeInTheDocument();
   });
 
   // ── 7. Empty realtime ──

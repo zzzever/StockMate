@@ -60,6 +60,11 @@
   --chart-text: #404040;
   --chart-border: #d4d4d4;
 
+  /* ── Risk level indicators ── */
+  --risk-safe: 145 55% 35%;       /* green — safe/low-risk */
+  --risk-warning: 35 85% 48%;     /* amber — moderate risk */
+  --risk-danger: 0 75% 45%;       /* red — high risk */
+
   color-scheme: light;
 }
 
@@ -94,6 +99,11 @@
   --chart-grid: #21262d;
   --chart-text: #8b949e;
   --chart-border: #30363d;
+
+  /* ── Risk level indicators (dark) ── */
+  --risk-safe: 145 50% 45%;
+  --risk-warning: 35 80% 52%;
+  --risk-danger: 0 70% 55%;
 
   color-scheme: dark;
 }

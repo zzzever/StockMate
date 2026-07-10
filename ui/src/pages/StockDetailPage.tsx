@@ -5,13 +5,14 @@ import { Star, RefreshCw } from 'lucide-react';
 import { useStockList, useStockDetail, useStockHistory, useStockFinance, useRealtimeQuote, useStockFundFlow, useIntraday, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove, useSupportResistance } from '@/hooks/useTauriQuery';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
-import { fmtPrice, fmtPct, fmtVolume, fmtAmount } from '@/lib/format';
+import { fmtPrice, fmtPct, fmtVolume } from '@/lib/format';
 import { getChartTheme } from '@/config/chartThemes';
 import type { StockFinance } from '@/types';
 import type { PriceData, Quote } from '@/types';
 import type { TradingRule } from '@/types';
 import { invoke } from '@tauri-apps/api/core';
 import { IntradayChart } from '@/components/IntradayChart';
+import StockMetricsPanel from '@/components/StockMetricsPanel';
 import { evaluateRules, RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
 
 function safeNumber(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
@@ -57,6 +58,8 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
   // Indicator sub-chart only holds data when an indicator is active; syncing its time range
   // while empty makes lightweight-charts throw "Value is null". Track it for the sync guard.
   const indicatorActiveRef = useRef(indicator !== 'none'); indicatorActiveRef.current = indicator !== 'none';
+  // Volume chart also throws "Value is null" if synced before data is loaded.
+  const volumeLoadedRef = useRef(false);
   // Single source of truth for draw mode: driven by the `drawMode` prop, read live in the
   // click handler via this ref. No closure/state double-tracking that can drift on remount.
   const drawModeRef = useRef(drawMode); drawModeRef.current = drawMode;
@@ -156,7 +159,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
         console.warn(`[SimpleKLine] Failed to sync ${label} chart time range:`, e);
       }
     };
-    mc.timeScale().subscribeVisibleTimeRangeChange(() => { syncSub(vc, 'volume'); if (indicatorActiveRef.current) syncSub(ic, 'indicator'); updateOverlays(); });
+    mc.timeScale().subscribeVisibleTimeRangeChange(() => { if (volumeLoadedRef.current) syncSub(vc, 'volume'); if (indicatorActiveRef.current) syncSub(ic, 'indicator'); updateOverlays(); });
 
     // --- Wheel event forwarding: sub-chart containers → main chart zoom ---
     const forwardWheelToMain = (e: WheelEvent) => {
@@ -293,7 +296,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
     try {
       const candleData = data.map((d: any) => ({ time: d.date || d.time, open: Number(d.open), high: Number(d.high), low: Number(d.low), close: Number(d.close) }));
       const volData = data.map((d: any) => ({ time: d.date || d.time, value: Number(d.volume), color: Number(d.close) >= Number(d.open) ? T.volumeUpColor : T.volumeDownColor }));
-      c.candle.setData(candleData); c.vol.setData(volData);
+      c.candle.setData(candleData); c.vol.setData(volData); volumeLoadedRef.current = true;
       const ml = (vals: (number | null)[]) => vals.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v ?? undefined }));
       c.ma5.setData(ml(maData.ma5)); c.ma10.setData(ml(maData.ma10)); c.ma20.setData(ml(maData.ma20)); c.ma60.setData(ml(maData.ma60));
       // BOLL toggleable
@@ -520,15 +523,13 @@ export default function StockDetailPage() {
           <InlineError message={`${secondaryErrors.join('、')}数据加载失败`} onRetry={retrySecondary} />
         </div>
       )}
-      <div className="shrink-0 px-1 py-1" style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-        <div className="grid grid-cols-4 gap-x-4 gap-y-1">
-          {[{ label: '市盈率', value: finance.pe != null ? finance.pe.toFixed(1) : '--' }, { label: '市净率', value: finance.pb != null ? finance.pb.toFixed(1) : '--' }, { label: '换手率', value: hasQuote ? `${safeNumber(realtimeQuote.turnover_rate).toFixed(2)}%` : '--' }, { label: '成交额', value: hasQuote ? fmtAmount(safeNumber(realtimeQuote.amount)) : '--' }, { label: 'ROE', value: finance.roe != null ? `${(finance.roe * 100).toFixed(1)}%` : '--' }, { label: '量比', value: hasQuote ? safeNumber(realtimeQuote.ratio).toFixed(2) : '--' }, { label: '振幅', value: hasQuote && prevClose > 0 ? `${(((safeNumber(realtimeQuote.high) - safeNumber(realtimeQuote.low)) / prevClose) * 100).toFixed(2)}%` : '--' }, { label: '主力净流入', value: mainFlow ? (mainFlow > 0 ? '+' : '') + fmtAmount(Math.abs(mainFlow)) : '--' }].map((item, i) => (<div key={i} className="flex items-baseline gap-1.5 min-w-0"><span className="text-[10px] font-bold uppercase tracking-wide shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{item.label}</span><span className="text-[12px] font-mono-nums font-bold truncate" style={{ color: item.label === '主力净流入' && mainFlow ? (mainFlow > 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))') : 'hsl(var(--text-primary))' }}>{item.value}</span></div>))}
-        </div>
-      </div>
-      <div className="shrink-0 flex items-baseline gap-6 px-1 py-1">
-        <div className="flex items-baseline gap-1.5"><span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'hsl(var(--text-tertiary))' }}>最近阻力</span><span className="text-[12px] font-mono-nums font-bold" style={{ color: 'hsl(var(--price-up))' }}>{sr?.resistances?.[0] != null ? fmtPrice(sr.resistances[0]) : '--'}</span></div>
-        <div className="flex items-baseline gap-1.5"><span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: 'hsl(var(--text-tertiary))' }}>最近支撑</span><span className="text-[12px] font-mono-nums font-bold" style={{ color: 'hsl(var(--price-down))' }}>{sr?.supports?.[0] != null ? fmtPrice(sr.supports[0]) : '--'}</span></div>
-      </div>
+      <StockMetricsPanel
+        finance={finance}
+        realtimeQuote={hasQuote ? realtimeQuote : null}
+        mainFlow={mainFlow}
+        prevClose={prevClose}
+        supportResistance={sr}
+      />
     </div>
   );
 }

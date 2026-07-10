@@ -1,12 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { Minus, Square, X, PictureInPicture2 } from 'lucide-react';
+import { Minus, Square, X, PictureInPicture2, Terminal } from 'lucide-react';
 import { toggleMiniWindow } from '@/lib/miniWindow';
+import { useAppStore } from '@/store/useAppStore';
+import { getConsoleErrorCount, onConsoleChange } from '@/components/ConsolePanel';
 
 export default function TitleBar() {
   const [isMaxed, setIsMaxed] = useState(false);
   const [miniOpen, setMiniOpen] = useState(false);
+  const [consoleErrors, setConsoleErrors] = useState(0);
+  const debugOpen = useAppStore((s) => s.debugOpen);
+  const toggleDebug = useAppStore((s) => s.toggleDebug);
   // Lazy init: defer getCurrentWindow() call so it does not run during pure render
   const appWindowRef = useRef<(() => ReturnType<typeof getCurrentWindow> | null) | null>(null);
   if (!appWindowRef.current) {
@@ -54,6 +59,12 @@ export default function TitleBar() {
     return () => { cleanup?.(); };
   }, []);
 
+  // Subscribe to console error count changes for the badge.
+  useEffect(() => {
+    setConsoleErrors(getConsoleErrorCount());
+    return onConsoleChange(() => setConsoleErrors(getConsoleErrorCount()));
+  }, []);
+
   return (
     <div
       onMouseDown={handleMouseDown}
@@ -79,6 +90,23 @@ export default function TitleBar() {
           style={{ color: miniOpen ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', background: miniOpen ? 'hsl(var(--bg-card))' : 'transparent' }}
         >
           <PictureInPicture2 size={13} />
+        </button>
+        <button
+          onClick={toggleDebug}
+          aria-label={debugOpen ? '关闭控制台' : '控制台'}
+          title={debugOpen ? '关闭控制台' : '控制台'}
+          className="w-10 h-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors relative"
+          style={{ color: debugOpen ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', background: debugOpen ? 'hsl(var(--bg-card))' : 'transparent' }}
+        >
+          <Terminal size={13} />
+          {consoleErrors > 0 && (
+            <span
+              className="absolute top-1 right-1 min-w-[12px] h-3 flex items-center justify-center bg-red-500 text-white text-[9px] font-bold px-0.5 rounded-full leading-none"
+              style={{ lineHeight: '12px' }}
+            >
+              {consoleErrors > 99 ? '99+' : consoleErrors}
+            </span>
+          )}
         </button>
         <button
           onClick={handleMinimize}

@@ -1,10 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Terminal, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Terminal, X, Trash2 } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
 
 interface LogEntry { type: 'log' | 'warn' | 'error'; msg: string; time: string; }
 
 const logs: LogEntry[] = [];
 let listeners: (() => void)[] = [];
+
+/** Get current console error count — for external badges (e.g. title bar). */
+export function getConsoleErrorCount(): number {
+  return logs.filter((l) => l.type === 'error').length;
+}
+
+/** Subscribe to console log changes — returns unsubscribe function. */
+export function onConsoleChange(fn: () => void): () => void {
+  listeners.push(fn);
+  return () => { listeners = listeners.filter((l) => l !== fn); };
+}
 
 function notify() { listeners.forEach(fn => fn()); }
 
@@ -45,7 +57,8 @@ const windowRejectionHandler = (e: PromiseRejectionEvent) => {
 
 export function ConsolePanel() {
   const [, setTick] = useState(0);
-  const [open, setOpen] = useState(false);
+  const open = useAppStore((s) => s.debugOpen);
+  const toggleOpen = useAppStore((s) => s.toggleDebug);
   const [filter, setFilter] = useState<'all' | 'error' | 'warn'>('all');
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -71,17 +84,7 @@ export function ConsolePanel() {
 
   const clear = () => { logs.length = 0; setTick(t => t + 1); };
 
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="fixed bottom-3 right-3 z-50 bg-zinc-900/90 text-violet-400 text-xs px-3 py-1.5 rounded-lg border border-zinc-700 hover:border-violet-500 flex items-center gap-1.5">
-        <Terminal size={14} />
-        <span>控制台</span>
-        {logs.filter(l => l.type === 'error').length > 0 && (
-          <span className="bg-red-500 text-white text-[10px] px-1 rounded">{logs.filter(l => l.type === 'error').length}</span>
-        )}
-      </button>
-    );
-  }
+  if (!open) return null;
 
   const filtered = filter === 'all' ? logs : logs.filter(l => l.type === filter);
   const last50 = filtered.slice(-50);
@@ -101,7 +104,7 @@ export function ConsolePanel() {
           <button onClick={() => setFilter('error')} aria-pressed={filter === 'error'} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'error' ? 'bg-red-500/20 text-red-400' : 'text-zinc-500'}`}>{errCount} 错误</button>
           <button onClick={() => setFilter('warn')} aria-pressed={filter === 'warn'} className={`text-[10px] px-1.5 py-0.5 rounded ${filter === 'warn' ? 'bg-amber-500/20 text-amber-400' : 'text-zinc-500'}`}>{warnCount} 警告</button>
           <button onClick={clear} title="清空"><Trash2 size={12} className="text-zinc-500 hover:text-zinc-300" /></button>
-          <button onClick={() => setOpen(false)} title="关闭"><X size={14} className="text-zinc-500 hover:text-zinc-300" /></button>
+          <button onClick={toggleOpen} title="关闭"><X size={14} className="text-zinc-500 hover:text-zinc-300" /></button>
         </div>
       </div>
       <div className="flex-1 overflow-auto p-2 space-y-0.5 font-mono text-[11px]" aria-live="polite" role="log">
