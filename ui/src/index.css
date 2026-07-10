@@ -20,6 +20,9 @@
   --swiss-gray-300: #d4d4d4;
   --swiss-gray-700: #737373;
   --swiss-accent: 221 83% 53%;        /* blue #2563eb */
+  --swiss-accent-ghost: 221 83% 53% / 0.08;
+  --swiss-accent-subtle: 221 83% 53% / 0.15;
+  --swiss-accent-strong: 221 83% 53% / 0.85;
   --price-up: 350 75% 38%;            /* Chinese convention: red = up */
   --price-down: 145 55% 30%;          /* Chinese convention: green = down */
   --price-up-bg: 350 75% 95%;
@@ -31,6 +34,7 @@
   --bg-topbar: #ffffff;
   --bg-card: #ffffff;
   --bg-input: #f5f5f5;
+  --bg-hover: #f0f0f0;
 
   /* ── Text ── */
   --text-primary: #0d1117;
@@ -43,7 +47,12 @@
   --border-subtle: #e5e5e5;
   --border-strong: #0d1117;
 
-  /* ── Radius scale (DESIGN_LANGUAGE 2.2) ── */
+  /* ── Shadows ── */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.08);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.12);
+
+  /* ── Radius scale ── */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -54,6 +63,11 @@
   /* ── Sidebar ── */
   --sidebar-width: 220px;
   --sidebar-collapsed: 56px;
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease-out;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
 
   /* ── Chart colors ── */
   --chart-grid: #e5e5e5;
@@ -86,6 +100,7 @@
   --bg-topbar: #161b22;
   --bg-card: #161b22;
   --bg-input: #21262d;
+  --bg-hover: #1c2128;
 
   --text-primary: #f0f6fc;
   --text-secondary: #8b949e;
@@ -95,6 +110,10 @@
   --border-default: #30363d;
   --border-subtle: #21262d;
   --border-strong: #8b949e;
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.3);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.4);
 
   --chart-grid: #21262d;
   --chart-text: #8b949e;
@@ -138,10 +157,12 @@ body {
   border-bottom: 1px solid var(--border-default);
 }
 
-/* Cards — Swiss: no shadow, no radius, border only */
+/* Cards — with shadow, radius, border */
 .glass-card {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
 }
 .glass-card:hover {
   border-color: var(--border-strong);
@@ -149,6 +170,12 @@ body {
 .glass-card-compact {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+}
+.glass-card-flat {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
 }
 
 .sticky-price-bar {
@@ -202,12 +229,54 @@ h1, h2, h3 {
 
 .btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
 
-/* Row hover surfaces — token-driven so light/dark stay consistent.
-   --bg-input is a hex token, so reference it directly (no hsl() wrapper);
-   --risk-danger is an HSL triplet, so it is wrapped in hsl(). */
-.hover-surface { transition: background-color 0.15s ease; }
-.hover-surface:hover { background: var(--bg-input); }
-.hover-danger { transition: color 0.15s ease, background-color 0.15s ease; }
+/* ── Typography scale ── */
+.text-display { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.3; }
+.text-heading { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.4; }
+.text-heading-sm { font-size: 0.875rem; font-weight: 600; letter-spacing: -0.005em; line-height: 1.4; }
+.text-body { font-size: 0.8125rem; font-weight: 400; line-height: 1.5; }
+.text-data-sm { font-size: 0.75rem; font-weight: 500; line-height: 1.4; }
+.text-data-xs { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; line-height: 1.3; }
+
+/* ── Button system ── */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-1.5;
+  height: 32px; padding: 0 14px;
+  font-size: 0.8125rem; font-weight: 500;
+  border-radius: var(--radius-sm);
+  background: hsl(var(--swiss-accent));
+  color: #fff;
+  border: none;
+  transition: opacity var(--transition-fast), box-shadow var(--transition-fast);
+}
+.btn-primary:hover { opacity: 0.9; box-shadow: 0 1px 4px hsl(var(--swiss-accent) / 0.3); }
+.btn-primary:active { opacity: 0.8; }
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-1.5;
+  height: 32px; padding: 0 14px;
+  font-size: 0.8125rem; font-weight: 500;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+.btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+.btn-ghost {
+  @apply inline-flex items-center justify-center gap-1.5;
+  height: 32px; padding: 0 10px;
+  font-size: 0.8125rem; font-weight: 500;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Row hover surfaces */
+.hover-surface { transition: background-color var(--transition-fast); }
+.hover-surface:hover { background: var(--bg-hover); }
+.hover-danger { transition: color var(--transition-fast), background-color var(--transition-fast); }
 .hover-danger:hover { color: hsl(var(--risk-danger)); background: hsl(var(--risk-danger) / 0.1); }
 
 .progress-bar-track { height: 4px; background: var(--border-subtle); overflow: hidden; border-radius: 0; }
