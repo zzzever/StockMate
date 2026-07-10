@@ -80,8 +80,8 @@ describe('Sidebar', () => {
       </MemoryRouter>
     );
     const sectorsLink = screen.getByText('板塊').closest('a');
-    // Swiss style: active = border-left-* + font-bold, not bg-violet-100
-    expect(sectorsLink).toHaveClass('font-bold');
+    // Swiss style: active = border-left-* + font-semibold, not bg-violet-100
+    expect(sectorsLink).toHaveClass('font-semibold');
   });
 
   it('shows SM when collapsed', () => {

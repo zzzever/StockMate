@@ -52,7 +52,11 @@ function tokenize(src: string): Tok[] {
     if (/[A-Za-z_]/.test(c)) {
       let j = i + 1;
       while (j < src.length && /[A-Za-z0-9_]/.test(src[j])) j++;
-      toks.push({ t: 'id', v: src.slice(i, j) }); i = j; continue;
+      const word = src.slice(i, j);
+      // Treat AND/OR as logical operators (case-insensitive)
+      if (word.toLowerCase() === 'and') { toks.push({ t: 'op', v: '&&' }); i = j; continue; }
+      if (word.toLowerCase() === 'or') { toks.push({ t: 'op', v: '||' }); i = j; continue; }
+      toks.push({ t: 'id', v: word }); i = j; continue;
     }
     const two = src.slice(i, i + 2);
     if (MULTI_OPS.includes(two)) { toks.push({ t: 'op', v: two }); i += 2; continue; }
