@@ -19,14 +19,14 @@ const SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width
   </defs>
   <!-- Dark terminal-style rounded square background -->
   <rect width="512" height="512" rx="64" fill="url(#bg)"/>
-  <!--
-    Geometric "S" mark — constructed from staggered thick bars.
-    Simultaneously reads as:
-    (a) The letter "S" — StockMate brand monogram
-    (b) An ascending stock chart — three levels stepping up and right
-  -->
-  <path d="M 128 80 L 384 80 L 384 176 L 128 176 L 128 336 L 384 336 L 384 432 L 128 432"
-        fill="none" stroke="url(#accent)" stroke-width="96" stroke-linecap="butt" stroke-linejoin="miter"/>
+  <!-- Smooth "S" monogram — proper cubic bezier curve.
+      128 × 96px stroke → bold, visible even at 16×16.
+      64px padding on all sides keeps the mark centered in the square. -->
+  <path d="M 160 128
+           C 400 128, 400 208, 256 208
+           C 112 208, 112 336, 352 336
+           C 400 336, 400 400, 160 400"
+        fill="none" stroke="url(#accent)" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
 
 async function main() {
