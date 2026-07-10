@@ -71,32 +71,40 @@ export default function TitleBar() {
       className="flex items-center justify-between h-8 shrink-0 select-none cursor-grab active:cursor-grabbing"
       style={{ background: 'hsl(var(--bg-sidebar))', borderBottom: '1px solid hsl(var(--border-subtle))' }}
     >
-      {/* Left: app icon + title */}
+      {/* Left: app logo/name + tagline */}
       <div className="flex items-center gap-2 pl-3 pointer-events-none">
-        <span
-          className="text-[11px] font-bold tracking-wide"
-          style={{ color: 'hsl(var(--text-secondary))' }}
-        >
+        <span className="text-display">StockMate</span>
+        <span className="text-data-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          股票分析终端
         </span>
       </div>
 
       {/* Right: window controls */}
       <div className="flex h-full">
+        {/* PiP toggle */}
         <button
           onClick={handleToggleMini}
           aria-label={miniOpen ? '关闭小窗' : '小窗模式'}
           title={miniOpen ? '关闭小窗' : '小窗模式（自选股）'}
-          className="w-10 h-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-          style={{ color: miniOpen ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', background: miniOpen ? 'hsl(var(--bg-card))' : 'transparent' }}
+          className="w-10 h-full flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors duration-[var(--transition-fast)]"
+          style={{
+            color: miniOpen ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))',
+            background: miniOpen ? 'var(--bg-hover)' : 'transparent',
+          }}
         >
           <PictureInPicture2 size={13} />
         </button>
+
+        {/* Terminal toggle */}
         <button
           onClick={toggleDebug}
           aria-label={debugOpen ? '关闭控制台' : '控制台'}
           title={debugOpen ? '关闭控制台' : '控制台'}
-          className="w-10 h-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors relative"
-          style={{ color: debugOpen ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', background: debugOpen ? 'hsl(var(--bg-card))' : 'transparent' }}
+          className="w-10 h-full flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors duration-[var(--transition-fast)] relative"
+          style={{
+            color: debugOpen ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))',
+            background: debugOpen ? 'var(--bg-hover)' : 'transparent',
+          }}
         >
           <Terminal size={13} />
           {consoleErrors > 0 && (
@@ -108,26 +116,32 @@ export default function TitleBar() {
             </span>
           )}
         </button>
+
+        {/* Minimize */}
         <button
           onClick={handleMinimize}
           aria-label="最小化"
-          className="w-10 h-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          className="w-10 h-full flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors duration-[var(--transition-fast)]"
           style={{ color: 'hsl(var(--text-tertiary))' }}
         >
           <Minus size={12} />
         </button>
+
+        {/* Maximize / Restore */}
         <button
           onClick={handleToggleMaximize}
           aria-label={isMaxed ? '还原' : '最大化'}
-          className="w-10 h-full flex items-center justify-center hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          className="w-10 h-full flex items-center justify-center hover:bg-[var(--bg-hover)] transition-colors duration-[var(--transition-fast)]"
           style={{ color: 'hsl(var(--text-tertiary))' }}
         >
           <Square size={10} />
         </button>
+
+        {/* Close */}
         <button
           onClick={handleClose}
           aria-label="关闭"
-          className="w-10 h-full flex items-center justify-center hover:bg-red-700 hover:text-white transition-colors"
+          className="w-10 h-full flex items-center justify-center hover:bg-red-600 hover:text-white transition-colors duration-[var(--transition-fast)]"
           style={{ color: 'hsl(var(--text-tertiary))' }}
         >
           <X size={13} />

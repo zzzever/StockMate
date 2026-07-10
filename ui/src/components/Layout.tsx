@@ -33,20 +33,24 @@ export default function Layout({ children }: LayoutProps) {
   useRealtimePriceListener();
 
   return (
-    <div className="h-screen w-screen overflow-hidden" style={{
-      display: 'grid',
-      gridTemplateColumns: `${sidebarOpen ? '220px' : '56px'} 1fr`,
-      gridTemplateRows: '1fr',
-      transition: 'grid-template-columns 300ms',
-      background: 'var(--bg-root)',
-    }}>
-      <aside className="sidebar-glass relative z-10 flex flex-col">
+    <div
+      className={`h-screen w-screen overflow-hidden grid transition-all duration-[var(--transition-slow)] bg-[var(--bg-root)] ${
+        sidebarOpen
+          ? 'grid-cols-[var(--sidebar-width)_1fr]'
+          : 'grid-cols-[var(--sidebar-collapsed)_1fr]'
+      }`}
+    >
+      <aside
+        className={`sidebar-glass relative z-10 flex flex-col transition-all duration-[var(--transition-slow)] ${
+          sidebarOpen ? 'w-sidebar' : 'w-sidebar-collapsed'
+        }`}
+      >
         <Sidebar />
       </aside>
       <div className="flex flex-col overflow-hidden relative z-10">
         <TitleBar />
         <TopBar />
-        <main className="flex-1 overflow-auto" style={{ padding: 'var(--grid-unit)' }}>
+        <main className="flex-1 overflow-auto p-4">
           {children}
         </main>
       </div>
