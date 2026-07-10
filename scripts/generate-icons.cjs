@@ -37,6 +37,17 @@ async function main() {
     ['256x256.png', 256],
     ['icon-512.png', 512],
     ['icon.png', 512],
+    // Windows Store tiles
+    ['Square30x30Logo.png', 30],
+    ['Square44x44Logo.png', 44],
+    ['Square71x71Logo.png', 71],
+    ['Square89x89Logo.png', 89],
+    ['Square107x107Logo.png', 107],
+    ['Square142x142Logo.png', 142],
+    ['Square150x150Logo.png', 150],
+    ['Square284x284Logo.png', 284],
+    ['Square310x310Logo.png', 310],
+    ['StoreLogo.png', 50],
   ];
 
   for (const [name, size] of sizes) {
