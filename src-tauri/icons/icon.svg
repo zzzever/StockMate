@@ -4,19 +4,14 @@
       <stop offset="0%" stop-color="#0d1117"/>
       <stop offset="100%" stop-color="#161b22"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#2563eb"/>
-    </linearGradient>
   </defs>
   <!-- Dark terminal-style rounded square background -->
   <rect width="512" height="512" rx="64" fill="url(#bg)"/>
-  <!-- Smooth "S" monogram — proper cubic bezier curve.
-      128 × 96px stroke → bold, visible even at 16×16.
-      64px padding on all sides keeps the mark centered in the square. -->
+  <!-- Crisp "S" monogram — solid accent blue, no gradient, butt caps for sharp edges.
+       96px stroke → at 32px = 6px, at 16px = 3px — always legible. -->
   <path d="M 160 128
            C 400 128, 400 208, 256 208
            C 112 208, 112 336, 352 336
            C 400 336, 400 400, 160 400"
-        fill="none" stroke="url(#accent)" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
+        fill="none" stroke="#2563eb" stroke-width="96" stroke-linecap="butt" stroke-linejoin="miter"/>
 </svg>
