@@ -383,8 +383,8 @@ export default function StockDetailPage() {
     return () => window.removeEventListener('kline-draw-exit', onExit);
   }, []);
 
-  const { data: stockList, error: stockListError } = useStockList();
-  const { data: stockDetail, error: stockDetailError } = useStockDetail(stockId);
+  const { data: stockList, error: stockListError, refetch: refetchStockList } = useStockList();
+  const { data: stockDetail, error: stockDetailError, refetch: refetchStockDetail } = useStockDetail(stockId);
   const stock = useMemo(() => stockList?.find(s => s.id === stockId || s.ticker === stockId) || stockDetail, [stockList, stockDetail, stockId]);
   const effectiveCode = stock?.id || stockId;
   const periodDays: Record<string, number> = { day: 250, week: 104, month: 60 };
@@ -451,7 +451,18 @@ export default function StockDetailPage() {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {primaryError && <div className="px-1 py-2 text-xs font-bold" style={{ color: 'hsl(var(--price-up))' }}>加载失败: {primaryError.message}</div>}
+      {primaryError && (
+        <div className="flex items-center gap-2 px-1 py-2" style={{ color: 'hsl(var(--price-up))' }}>
+          <span className="text-xs font-bold">数据加载失败: {primaryError.message}</span>
+          <button
+            onClick={() => { if (stockListError) refetchStockList(); if (stockDetailError) refetchStockDetail(); queryClient.invalidateQueries({ queryKey: ['stocks', 'list'] }); queryClient.invalidateQueries({ queryKey: ['stocks', 'detail', stockId] }); }}
+            className="text-[10px] font-bold underline decoration-dotted underline-offset-2"
+            style={{ color: 'hsl(var(--text-tertiary))' }}
+          >
+            重试
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between shrink-0 px-1 pt-2 pb-1 overflow-hidden">
         <div className="flex items-center gap-2 min-w-0 pt-1">
           <button onClick={() => navigate(-1)} className="text-[11px] font-medium shrink-0" style={{ color: 'hsl(var(--text-secondary))' }}>←</button>

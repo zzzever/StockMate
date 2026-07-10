@@ -415,3 +415,29 @@ export interface RuleSignal {
   ruleName: string;
   signalType: 'rule';
 }
+
+// ── SSLang Editor types ──
+export interface SSLangSuggestion {
+  label: string;
+  detail: string;
+  insertText: string;
+}
+
+export interface SSLangSyntaxError {
+  message: string;
+  line: number;
+  column: number;
+  length: number;
+}
+
+export interface DataSourceCacheStats {
+  memory_entries: number;
+  sqlite_size_bytes: number;
+  sqlite_size_str: string;
+}
+
+export interface PreloadResult {
+  symbol: string;
+  status: 'success' | 'error';
+  message?: string;
+}

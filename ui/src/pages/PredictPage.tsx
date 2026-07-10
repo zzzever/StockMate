@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Minus, Bot, ArrowLeft, RefreshCw,
   Target, BarChart3, AlertTriangle, CheckCircle2, Activity,
-  Zap, Globe, ShieldAlert, Calendar,
+  Zap, Globe, ShieldAlert, Calendar, Settings,
 } from 'lucide-react';
 import { useAnalyzeAll, useStockHistory, useRealtimeQuote, useStockFinance, useDeepSeekConfig, useStockDetail } from '@/hooks/useTauriQuery';
 import type { DeepSeekPrediction, MultiDimensionAnalysis, CardData, MarketEnvironment, Quote } from '@/types';
@@ -55,16 +55,16 @@ export default function PredictPage() {
   const stockId = searchParams.get('code') || '';
   const isValidStock = stockId.includes('.');
   const effectiveId = isValidStock ? stockId : '';
-  const { data: config } = useDeepSeekConfig();
+  const { data: config, isLoading: configLoading, error: configError, refetch: refetchConfig } = useDeepSeekConfig();
   const hasKey = config?.has_key ?? false;
 
   // Read cached data from stock detail page
-  const { data: stockDetail, error: detailError } = useStockDetail(effectiveId);
-  const { data: dailyQuotes, error: dailyError } = useStockHistory(effectiveId, 60, 'day');
-  const { data: weeklyQuotes, error: weeklyError } = useStockHistory(effectiveId, 12, 'week');
-  const { data: monthlyQuotes, error: monthlyError } = useStockHistory(effectiveId, 12, 'month');
-  const { data: realtimeQuote, error: quoteError } = useRealtimeQuote(effectiveId);
-  const { data: finance, error: financeError } = useStockFinance(effectiveId);
+  const { data: stockDetail, error: detailError, refetch: refetchDetail } = useStockDetail(effectiveId);
+  const { data: dailyQuotes, error: dailyError, refetch: refetchDaily } = useStockHistory(effectiveId, 60, 'day');
+  const { data: weeklyQuotes, error: weeklyError, refetch: refetchWeekly } = useStockHistory(effectiveId, 12, 'week');
+  const { data: monthlyQuotes, error: monthlyError, refetch: refetchMonthly } = useStockHistory(effectiveId, 12, 'month');
+  const { data: realtimeQuote, error: quoteError, refetch: refetchQuote } = useRealtimeQuote(effectiveId);
+  const { data: finance, error: financeError, refetch: refetchFinanceData } = useStockFinance(effectiveId);
 
   const currentPrice = Number(realtimeQuote?.current_price ?? dailyQuotes?.[dailyQuotes.length - 1]?.close ?? 0);
 
@@ -128,9 +128,15 @@ export default function PredictPage() {
 
   const [activeTab, setActiveTab] = useState<'predict' | 'multi' | 'card' | 'market' | 'history'>('predict');
 
-  const anyLoading = isLoading;
+  const anyLoading = isLoading || configLoading;
   const errors = error ? [error] : [];
-  const dataErrors = [detailError, dailyError, weeklyError, monthlyError, quoteError, financeError].filter(Boolean);
+  const dataErrors: { label: string; error: Error; retry: () => void }[] = [];
+  if (detailError) dataErrors.push({ label: '个股详情', error: detailError, retry: () => refetchDetail() });
+  if (dailyError) dataErrors.push({ label: '日线数据', error: dailyError, retry: () => refetchDaily() });
+  if (weeklyError) dataErrors.push({ label: '周线数据', error: weeklyError, retry: () => refetchWeekly() });
+  if (monthlyError) dataErrors.push({ label: '月线数据', error: monthlyError, retry: () => refetchMonthly() });
+  if (quoteError) dataErrors.push({ label: '实时行情', error: quoteError, retry: () => refetchQuote() });
+  if (financeError) dataErrors.push({ label: '财务数据', error: financeError, retry: () => refetchFinanceData() });
 
   const refreshAll = useCallback(() => {
     setSelectedDate(''); setHistoryData(null);
@@ -169,13 +175,25 @@ export default function PredictPage() {
             <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300">历史: {selectedDate}</span>
           )}
           {dataErrors.length > 0 && (
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 border border-amber-300">
-              部分数据加载失败 ({dataErrors.length})
+            <div className="flex flex-wrap items-center gap-1">
+              {dataErrors.map((de, i) => (
+                <span key={i} className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 border border-amber-300">
+                  {de.label} 失败
+                  <button onClick={de.retry} className="underline decoration-dotted underline-offset-2 hover:text-amber-900">重试</button>
+                </span>
+              ))}
+            </div>
+          )}
+          {configError && (
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 border border-amber-300 flex items-center gap-1">
+              <AlertTriangle size={12} /> 配置加载失败
+              <button onClick={() => refetchConfig()} className="underline decoration-dotted underline-offset-2">重试</button>
             </span>
           )}
           {errors.length > 0 && (
-            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300">
-              {errors.length === 1 ? '查询失败' : `${errors.length} 个查询失败`}
+            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300 flex items-center gap-1">
+              <AlertTriangle size={12} /> {errors.length === 1 ? 'AI 查询失败' : `${errors.length} 个查询失败`}
+              <button onClick={() => refetch()} className="underline decoration-dotted underline-offset-2">重试</button>
             </span>
           )}
           {import.meta.env.DEV && (
@@ -205,19 +223,34 @@ export default function PredictPage() {
         <div className="flex-1 flex items-center justify-center">
           <p className="text-lg font-bold opacity-40" style={{ color: 'hsl(var(--ink))' }}>请先选择一只股票（格式：代码.交易所，如 000001.SZ）</p>
         </div>
+      ) : configLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <RefreshCw size={24} className="animate-spin" style={{ color: 'hsl(var(--text-tertiary))' }} />
+        </div>
       ) : !hasKey ? (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-3">
             <ShieldAlert size={40} className="mx-auto text-red-400" />
             <p className="text-lg font-bold" style={{ color: 'hsl(var(--ink))' }}>请先在设置页配置 DeepSeek API Key</p>
+            <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: '#6366f1', color: '#ffffff' }}>
+              <Settings size={12} /> 前往设置
+            </button>
           </div>
         </div>
       ) : error ? (
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center space-y-2">
+          <div className="text-center space-y-3">
             <AlertTriangle size={40} className="mx-auto text-red-500" />
-            <p className="text-sm font-bold text-red-700 dark:text-red-400">加载失败</p>
-            <p className="text-xs text-gray-500">{error.message}</p>
+            <p className="text-sm font-bold text-red-700 dark:text-red-400">AI 分析失败</p>
+            <p className="text-xs max-w-md" style={{ color: 'hsl(var(--text-secondary))' }}>{error.message || 'DeepSeek API 调用异常，请检查网络连接和 API Key 配置'}</p>
+            <div className="flex items-center justify-center gap-3">
+              <button onClick={() => refetch()} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: '#6366f1', color: '#ffffff' }}>
+                <RefreshCw size={12} /> 重试
+              </button>
+              <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: 'hsl(var(--bg-card))', color: 'hsl(var(--text-secondary))', border: '1px solid hsl(var(--border-default))' }}>
+                <Settings size={12} /> 配置设置
+              </button>
+            </div>
           </div>
         </div>
       ) : (

@@ -21,6 +21,13 @@ async fn get_stock_list(state: State<'_, AppState>) -> Result<Vec<Stock>, ApiErr
 
 #[tauri::command]
 async fn search_stocks(query: String, state: State<'_, AppState>) -> Result<Vec<Stock>, ApiError> {
+    // Normalize & validate input: trim whitespace, reject blank, cap length to
+    // 64 chars so a pathological giant string can't reach the DB or online APIs.
+    let query: String = query.trim().chars().take(64).collect();
+    if query.is_empty() {
+        return Ok(vec![]);
+    }
+
     // 1. Search local DB
     let local = state.stock_repo.search(&query).await.map_err(|e| ApiError {
         code: 500, message: e.to_string(), details: None,
@@ -29,13 +36,25 @@ async fn search_stocks(query: String, state: State<'_, AppState>) -> Result<Vec<
         return Ok(local);
     }
 
-    // 2. No local results — try online lookup
-    if query.chars().any(|c| c as u32 > 127) {
+    // 2. No local results — try online lookup. Newly found stocks are inserted
+    //    into the local DB by the lookup helpers, so re-run the local search to
+    //    give them the same relevance ranking as local hits.
+    let online = if query.chars().any(|c| c as u32 > 127) {
         // Chinese name → try Sina suggest API
-        return lookup_by_name(&query, &state).await;
+        lookup_by_name(&query, &state).await?
+    } else {
+        // Numeric code → try East Money directly
+        lookup_by_code(&query, &state).await?
+    };
+    if online.is_empty() {
+        return Ok(vec![]);
     }
-    // Numeric code → try East Money directly
-    return lookup_by_code(&query, &state).await;
+    let ranked = state.stock_repo.search(&query).await.map_err(|e| ApiError {
+        code: 500, message: e.to_string(), details: None,
+    })?;
+    // If re-search can't see the inserted rows (e.g. the online name doesn't
+    // contain the query substring), fall back to the raw online results.
+    if ranked.is_empty() { Ok(online) } else { Ok(ranked) }
 }
 
 /// Look up a stock by numeric code via East Money API, insert into local DB.
@@ -52,10 +71,12 @@ async fn lookup_by_code(query: &str, state: &AppState) -> Result<Vec<Stock>, Api
             name: price.name.clone(), sector: None, industry: None, market_cap: None, currency: "CNY".into(),
             stock_type: "stock".into(),
         };
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             "INSERT OR IGNORE INTO stocks (id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type) VALUES (?1,?2,?3,?4,NULL,NULL,NULL,?5,?6)"
         ).bind(&stock.id).bind(&stock.ticker).bind(&stock.exchange).bind(&stock.name).bind(&stock.currency).bind(&stock.stock_type)
-            .execute(&state.db_pool).await;
+            .execute(&state.db_pool).await {
+            tracing::warn!("[search] cache insert failed for {}: {}", stock.id, e);
+        }
         return Ok(vec![stock]);
     }
     Ok(vec![])
@@ -106,10 +127,12 @@ async fn lookup_single(ticker: &str, state: &AppState) -> Option<Stock> {
         name: price.name.clone(), sector: None, industry: None, market_cap: None, currency: "CNY".into(),
         stock_type: "stock".into(),
     };
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT OR IGNORE INTO stocks (id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type) VALUES (?1,?2,?3,?4,NULL,NULL,NULL,?5,?6)"
     ).bind(&stock.id).bind(&stock.ticker).bind(&stock.exchange).bind(&stock.name).bind(&stock.currency).bind(&stock.stock_type)
-        .execute(&state.db_pool).await;
+        .execute(&state.db_pool).await {
+        tracing::warn!("[search] cache insert failed for {}: {}", stock.id, e);
+    }
     Some(stock)
 }
 
@@ -141,9 +164,11 @@ async fn get_stock_detail(id: String, state: State<'_, AppState>) -> Result<Opti
             name: price_data.name.clone(), sector: None, industry: None, market_cap: None, currency: "CNY".into(),
             stock_type: "stock".into(),
         };
-        let _ = sqlx::query("INSERT OR IGNORE INTO stocks (id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type) VALUES (?1,?2,?3,?4,NULL,NULL,NULL,?5,?6)")
+        if let Err(e) = sqlx::query("INSERT OR IGNORE INTO stocks (id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type) VALUES (?1,?2,?3,?4,NULL,NULL,NULL,?5,?6)")
             .bind(&stock.id).bind(&stock.ticker).bind(&stock.exchange).bind(&stock.name).bind(&stock.currency).bind(&stock.stock_type)
-            .execute(&state.db_pool).await;
+            .execute(&state.db_pool).await {
+            tracing::warn!("[get_stock_detail] cache insert failed for {}: {}", stock.id, e);
+        }
         return Ok(Some(stock));
     }
     Ok(None)
@@ -163,6 +188,15 @@ async fn get_quotes(stock_id: String, state: State<'_, AppState>) -> Result<Vec<
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize structured logging
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
+        )
+        .with_target(false)
+        .init();
+
     // P0-6: Use OS standard data directory
     let data_dir = dirs::data_dir()
         .ok_or("Cannot get OS data directory")?
@@ -172,7 +206,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_path = data_dir.join("stockmate.db");
     
     let pool: DbPool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(10)
+        .min_connections(2)
         .connect_with(
             sqlx::sqlite::SqliteConnectOptions::new()
                 .filename(&db_path)
@@ -191,7 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start DataService with HTTP client and caching
     let data_service = data_fetcher::DataService::new_offline(Some(pool.clone()));
     // Start background real-time sector data refresh (every 5 seconds)
-    data_service.start_realtime_refresh();
+    data_service.start_realtime_refresh().await;
 
     // ── WebSocket real-time push (Sina Finance) ──
     // Collect all known stock tickers from the seed registry, convert to "CODE.EXCH" format
@@ -204,7 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!("Starting WS client with {} subscribed tickers", all_tickers.len());
     // Start WS background task; returns a broadcast receiver we'll use for Tauri event emission
-    let mut ws_event_rx = data_service.start_ws_client(&all_tickers);
+    let mut ws_event_rx = data_service.start_ws_client(&all_tickers).await;
 
     // P0-5: Initialize CacheManager and clean expired on startup
     let cache_manager = data_fetcher::CacheManager::new(Some(pool.clone()));
@@ -305,6 +340,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::watchlist_add,
             api_tauri_commands::commands_v2::watchlist_remove,
             api_tauri_commands::commands_v2::watchlist_check,
+            api_tauri_commands::commands_v2::evaluate_sslang,
+            api_tauri_commands::commands_v2::validate_sslang,
+            api_tauri_commands::commands_v2::parse_sslang_rules,
+            api_tauri_commands::commands_v2::backtest_strategy,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

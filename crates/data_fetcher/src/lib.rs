@@ -6,6 +6,7 @@ pub mod market_data;
 
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -34,6 +35,17 @@ const TTL_HISTORICAL_SECS: u64 = 24 * 60 * 60; // 1 day
 const TTL_FINANCE_SECS: u64 = 24 * 60 * 60;    // 1 day
 const TTL_INTRADAY_SECS: u64 = 5;             // 5s for intraday to match frontend 3s poll
 
+/// Maximum age for serving stale data: 2x the normal TTL.
+const MAX_STALE_REALTIME_SECS: u64 = TTL_REALTIME_SECS * 2;
+const MAX_STALE_HISTORICAL_SECS: u64 = TTL_HISTORICAL_SECS * 2;
+const MAX_STALE_FINANCE_SECS: u64 = TTL_FINANCE_SECS * 2;
+const MAX_STALE_INTRADAY_SECS: u64 = TTL_INTRADAY_SECS * 2;
+
+/// Stale-while-revalidate store: serves stale cached data while a background
+/// refresh fetches a fresh copy. Prevents observable latency from cold moka
+/// cache after eviction or restart.
+type StaleStore = Arc<RwLock<HashMap<String, (Value, Instant)>>>;
+
 // ============================================================
 // DataService
 // ============================================================
@@ -60,6 +72,14 @@ struct DataServiceInner {
     ws_cache: Arc<RwLock<HashMap<String, market_data::PriceData>>>,
     sector_realtime: RwLock<Option<Vec<HotSector>>>,
     refresh_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
+    /// Handle for the inner WS reconnect task (spawned by start_ws_client_with_rx),
+    /// stored so shutdown can abort the perpetual reconnect loop.
+    ws_inner_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
+    /// Handle for the WebSocket background task, stored so it can be aborted on shutdown.
+    ws_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
+    /// Stale-while-revalidate store: holds stale values after moka cache eviction
+    /// so we can serve them immediately while refreshing in the background.
+    stale_store: StaleStore,
 }
 
 /// Build a moka cache with the given TTL and capacity.
@@ -99,38 +119,101 @@ impl DataService {
             ws_cache: Arc::new(RwLock::new(HashMap::new())),
             sector_realtime: RwLock::new(None),
             refresh_handle: RwLock::new(None),
+            ws_inner_handle: RwLock::new(None),
+            ws_handle: RwLock::new(None),
+            stale_store: Arc::new(RwLock::new(HashMap::new())),
         });
         DataService { inner }
     }
 
-    /// Shut down any background refresh tasks.
+    /// Shut down any background refresh and WebSocket tasks.
     pub async fn shutdown(&self) {
         // Abort the background refresh task if running
         if let Some(handle) = self.inner.refresh_handle.write().await.take() {
             tracing::info!("Aborting background refresh task...");
             handle.abort();
         }
+        // Abort the inner WS reconnect task first (source of the data stream)
+        if let Some(handle) = self.inner.ws_inner_handle.write().await.take() {
+            tracing::info!("Aborting inner WS reconnect task...");
+            handle.abort();
+        }
+        // Abort the outer WebSocket background task if running
+        if let Some(handle) = self.inner.ws_handle.write().await.take() {
+            tracing::info!("Aborting WebSocket task...");
+            handle.abort();
+        }
     }
 
     // ============================================================
-    // Generic fetch with 3-tier fallback
+    // Generic fetch with stale-while-revalidate
     // ============================================================
     async fn fetch(
         &self,
         cache: &Cache<String, Value>,
         endpoint: &str,
         params: &[(&str, &str)],
+        max_stale_secs: u64,
     ) -> Result<Value, ApiError> {
         let cache_key = format!("{}|{}", endpoint, serialize_params(params));
 
-        // 1. Cache
+        // 1. Moka cache (fastest, authoritative when present)
         if let Some(v) = cache.get(&cache_key).await {
             tracing::debug!("Cache hit for {}", endpoint);
+            // Refresh stale store timestamp so stale data is available after eviction
+            self.inner.stale_store.write().await.insert(
+                cache_key.clone(),
+                (v.clone(), Instant::now()),
+            );
             return Ok(v);
         }
 
-        // 2. SQLite (handled per-endpoint in public methods)
-        // 3. Mock (handled per-endpoint in public methods)
+        // 2. Stale-while-revalidate: serve stale data while refreshing in background
+        {
+            let stale = self.inner.stale_store.read().await;
+            if let Some((value, cached_at)) = stale.get(&cache_key) {
+                let age = cached_at.elapsed();
+                if age <= Duration::from_secs(max_stale_secs) {
+                    tracing::debug!(
+                        "[STALE] Serving stale data for {} (age={:?}, max_stale={}s)",
+                        endpoint, age, max_stale_secs
+                    );
+                    // Clone the value before spawning the background refresh
+                    let stale_value = value.clone();
+                    let inner = self.inner.clone();
+                    let cache_key = cache_key.clone();
+                    // Spawn a background eviction — removes the stale entry so
+                    // the *next* request re-triggers a real fetch through the
+                    // per-endpoint callers (get_hot_stocks, get_stock_finance, etc.).
+                    tokio::spawn(async move {
+                        inner.stale_store.write().await.remove(&cache_key);
+                        tracing::debug!(
+                            "[STALE] Evicted stale entry — next request will fetch fresh"
+                        );
+                    });
+                    return Ok(stale_value);
+                } else {
+                    tracing::debug!(
+                        "[STALE] Stale data too old for {} (age={:?}, max_stale={}s), discarding",
+                        endpoint, age, max_stale_secs
+                    );
+                    // Data too old — remove it so next request falls through.
+                    // Also purge all stale entries that have exceeded the maximum
+                    // allowed stale window. This prevents abandoned stale entries
+                    // from accumulating indefinitely in the stale store.
+                    drop(stale);
+                    {
+                        let mut stale_writer = self.inner.stale_store.write().await;
+                        stale_writer.remove(&cache_key);
+                        stale_writer.retain(|_, (_, cached_at)| {
+                            cached_at.elapsed() < Duration::from_secs(MAX_STALE_HISTORICAL_SECS * 2)
+                        });
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: per-endpoint callers handle SQLite / provider / mock
         tracing::debug!("[FETCH_FALLBACK] endpoint={} returning Null (cache_key={})", endpoint, cache_key);
         Ok(Value::Null)
     }
@@ -142,7 +225,8 @@ impl DataService {
     /// `broadcast::Receiver` can be used for Tauri event emission.
     ///
     /// `tickers` — list of internal-format tickers (e.g. `"600519.SH"`, `"000001.SZ"`).
-    pub fn start_ws_client(
+    /// The spawned task handle is stored internally and will be aborted on `shutdown()`.
+    pub async fn start_ws_client(
         &self,
         tickers: &[String],
     ) -> tokio::sync::broadcast::Receiver<market_data::PriceData> {
@@ -155,10 +239,13 @@ impl DataService {
         let (tx, rx) = tokio::sync::broadcast::channel(256);
         let cache_for_task = self.inner.ws_cache.clone();
 
-        tokio::spawn(async move {
-            let (_, mut ws_rx) =
-                market_data::ws::start_ws_client_with_rx(&sina_codes);
+        // Start the inner WS reconnect task and capture its handle so shutdown()
+        // can abort the perpetual reconnect loop.
+        let (_, mut ws_rx, inner_handle) =
+            market_data::ws::start_ws_client_with_rx(&sina_codes);
+        *self.inner.ws_inner_handle.write().await = Some(inner_handle);
 
+        let handle = tokio::spawn(async move {
             // Forward parsed prices into both the ws_cache HashMap and the broadcast channel
             loop {
                 match tokio::time::timeout(Duration::from_secs(60), ws_rx.recv()).await {
@@ -171,7 +258,7 @@ impl DataService {
                         let _ = tx.send(price);
                     }
                     Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => {
-                        tracing::warn!("[DataService] WS broadcast channel closed, restarting...");
+                        tracing::warn!("[DataService] WS broadcast channel closed, shutting down task");
                         break;
                     }
                     Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(n))) => {
@@ -187,6 +274,9 @@ impl DataService {
             }
         });
 
+        // Store the outer JoinHandle so shutdown() can abort the forwarding task
+        *self.inner.ws_handle.write().await = Some(handle);
+
         rx
     }
 
@@ -199,10 +289,19 @@ impl DataService {
 
     /// Start background refresh — fetch all constituent stock prices from Tencent,
     /// compute per-sector averages, and update the in-memory cache.
-    pub fn start_realtime_refresh(&self) {
-        let inner = self.inner.clone();
-        let inner_for_task = inner.clone();
-        tokio::spawn(async move {
+    /// Only one refresh loop can run at a time; subsequent calls are no-ops.
+    pub async fn start_realtime_refresh(&self) {
+        // Atomic check-and-set: prevents TOCTOU race where two concurrent callers
+        // could both pass a read-check and double-spawn the refresh loop.
+        {
+            let mut guard = self.inner.refresh_handle.write().await;
+            if guard.is_some() {
+                tracing::warn!("[DataService] Background refresh already running, skipping duplicate call");
+                return;
+            }
+
+            let inner = self.inner.clone();
+            let inner_for_task = inner.clone();
             let handle = tokio::spawn(async move {
                 let all_sectors = DataService::get_all_sector_stocks();
 
@@ -283,10 +382,8 @@ impl DataService {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                 }
             });
-            // Store the JoinHandle so we can abort the refresh task on shutdown
-            // Stored in the same async block — no separate tokio::spawn, avoiding the race condition
-            *inner.refresh_handle.write().await = Some(handle);
-        });
+            *guard = Some(handle);
+        }
     }
 
     // ============================================================
@@ -370,7 +467,7 @@ impl DataService {
 
 pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let val = self
-            .fetch(&self.inner.spot_cache, "/hot_stocks", &[])
+            .fetch(&self.inner.spot_cache, "/hot_stocks", &[], MAX_STALE_REALTIME_SECS)
             .await?;
 
         if !val.is_null() {
@@ -383,7 +480,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             let mut stocks = Vec::new();
             for item in arr.iter().take(100) {
                 let code = item.get("代码").and_then(|v| v.as_str()).unwrap_or("");
-                let suffix = if code.starts_with("920") { "BJ" } else if code.starts_with("6") || code.starts_with("9") { "SH" } else if code.starts_with("0") || code.starts_with("3") || code.starts_with("2") { "SZ" } else if code.starts_with("4") || code.starts_with("8") { "BJ" } else { "SH" };
+                let suffix = code_to_exchange_suffix(code);
                 stocks.push(HotStock {
                     id: format!("{}.{}", code, suffix),
                     ticker: item.get("代码").and_then(|v| v.as_str()).unwrap_or("").into(),
@@ -480,7 +577,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         for price in &prices {
             stocks.push(HotStock {
                 id: {
-                    let suffix = if price.ticker.starts_with("920") { "BJ" } else if price.ticker.starts_with("6") || price.ticker.starts_with("9") { "SH" } else if price.ticker.starts_with("0") || price.ticker.starts_with("3") || price.ticker.starts_with("2") { "SZ" } else if price.ticker.starts_with("4") || price.ticker.starts_with("8") { "BJ" } else { "SH" };
+                    let suffix = code_to_exchange_suffix(&price.ticker);
                     format!("{}.{}", price.ticker, suffix)
                 }, ticker: price.ticker.clone(), name: price.name.clone(),
                 price: Decimal::from_f64_retain(price.current_price).unwrap_or_default(),
@@ -498,7 +595,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
     pub async fn get_stock_finance(&self, stock_id: &str) -> Result<Option<StockFinance>, ApiError> {
         let ticker = stock_id.split('.').next().unwrap_or(stock_id);
         let val = self
-            .fetch(&self.inner.finance_cache, "/finance", &[("symbol", ticker)])
+            .fetch(&self.inner.finance_cache, "/finance", &[("symbol", ticker)], MAX_STALE_FINANCE_SECS)
             .await?;
 
         if val.is_null() {
@@ -523,7 +620,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 }));
             }
             // Final fallback: return mock data when both providers are unreachable
-            eprintln!("[get_stock_finance] Both providers failed for {}, returning mock data", stock_id);
+            tracing::warn!("[get_stock_finance] Both providers failed for {}, returning mock data", stock_id);
             return Ok(Some(StockFinance {
                 stock_id: stock_id.into(),
                 pe: Some(25.0), pb: Some(5.0),
@@ -575,7 +672,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
 
         // 1. In-memory cache
         let val = self
-            .fetch(&self.inner.fundflow_cache, "/fund_flow", &[("symbol", ticker)])
+            .fetch(&self.inner.fundflow_cache, "/fund_flow", &[("symbol", ticker)], MAX_STALE_REALTIME_SECS)
             .await?;
 
         if !val.is_null() {
@@ -595,8 +692,14 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     let json_val = serde_json::to_value(&flows).unwrap_or(Value::Null);
                     self.inner.fundflow_cache.insert(
                         format!("/fund_flow|symbol={}", ticker),
-                        json_val,
+                        json_val.clone(),
                     ).await;
+                    // Also populate stale store so it survives moka eviction
+                    let ffcache_key = format!("/fund_flow|symbol={}", ticker);
+                    self.inner.stale_store.write().await.insert(
+                        ffcache_key,
+                        (json_val, Instant::now()),
+                    );
                     return Ok(flows);
                 }
             }
@@ -671,8 +774,13 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let json_val = serde_json::to_value(&flows).unwrap_or(Value::Null);
         self.inner.fundflow_cache.insert(
             format!("/fund_flow|symbol={}", ticker),
-            json_val,
+            json_val.clone(),
         ).await;
+        // Update stale store so network-fetched data survives moka eviction
+        self.inner.stale_store.write().await.insert(
+            format!("/fund_flow|symbol={}", ticker),
+            (json_val, Instant::now()),
+        );
 
         Ok(flows)
     }
@@ -714,7 +822,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let provider = market_data::select_provider(stock_id);
         if let Some(data) = provider.fetch_realtime_price(stock_id).await {
             if let Ok(json) = serde_json::to_value(&data) {
-                self.inner.realtime_http_cache.insert(stock_id.to_string(), json).await;
+                self.inner.realtime_http_cache.insert(stock_id.to_string(), json.clone()).await;
             }
             return Ok(data);
         }
@@ -737,6 +845,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 &self.inner.history_cache,
                 "/history",
                 &[("symbol", ticker), ("days", &days.to_string()), ("period", period)],
+                MAX_STALE_HISTORICAL_SECS,
             )
             .await?;
 
@@ -832,10 +941,48 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
 
         // ── Tier 1: In-memory cache ──
         if let Some(cached) = self.inner.intraday_cache.get(&cache_key).await {
+            // Clone before moving into from_value so we can also update stale store
+            let cached_for_stale = cached.clone();
             if let Ok(quotes) = serde_json::from_value::<Vec<Quote>>(cached) {
                 if !quotes.is_empty() {
                     tracing::debug!("[intraday] Cache hit: {} bars for {}", quotes.len(), stock_id);
+                    // Refresh stale store so stale intraday is available after eviction
+                    self.inner.stale_store.write().await.insert(
+                        cache_key.clone(),
+                        (cached_for_stale, Instant::now()),
+                    );
                     return Ok(quotes);
+                }
+            }
+        }
+
+        // ── Tier 1b: Stale-while-revalidate — serve stale intraday if available ──
+        {
+            let stale = self.inner.stale_store.read().await;
+            if let Some((value, cached_at)) = stale.get(&cache_key) {
+                let age = cached_at.elapsed();
+                if age <= Duration::from_secs(MAX_STALE_INTRADAY_SECS) {
+                    tracing::debug!(
+                        "[STALE] Serving stale intraday for {} (age={:?})",
+                        stock_id, age
+                    );
+                    let stale_val = value.clone();
+                    let inner = self.inner.clone();
+                    let ck = cache_key.clone();
+                    tokio::spawn(async move {
+                        inner.stale_store.write().await.remove(&ck);
+                        tracing::debug!("[STALE] Evicted stale intraday entry");
+                    });
+                    if let Ok(quotes) = serde_json::from_value::<Vec<Quote>>(stale_val) {
+                        return Ok(quotes);
+                    }
+                } else {
+                    tracing::debug!(
+                        "[STALE] Stale intraday too old for {} (age={:?}), discarding",
+                        stock_id, age
+                    );
+                    drop(stale);
+                    self.inner.stale_store.write().await.remove(&cache_key);
                 }
             }
         }
@@ -857,7 +1004,12 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             }).collect();
             tracing::info!("[intraday] Provider-routed fetch returned {} bars for {}", quotes.len(), stock_id);
             let value = serde_json::to_value(&quotes).unwrap_or_default();
-            self.inner.intraday_cache.insert(cache_key.clone(), value).await;
+            self.inner.intraday_cache.insert(cache_key.clone(), value.clone()).await;
+            // Update stale store so intraday data survives moka eviction
+            self.inner.stale_store.write().await.insert(
+                cache_key.clone(),
+                (value, Instant::now()),
+            );
             return Ok(quotes);
         }
         tracing::warn!("[intraday] Provider-routed fetch returned no data for {}", stock_id);
@@ -869,7 +1021,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
 
     pub async fn get_market_overview(&self) -> Result<MarketOverview, ApiError> {
         let val = self
-            .fetch(&self.inner.overview_cache, "/overview", &[])
+            .fetch(&self.inner.overview_cache, "/overview", &[], MAX_STALE_REALTIME_SECS)
             .await?;
 
         if !val.is_null() {
@@ -890,7 +1042,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 up_count: obj.get("up").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                 down_count: obj.get("down").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
                 flat_count: obj.get("flat").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                total_volume: obj.get("turnover").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
+                total_volume: obj.get("volume").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
                 total_amount: obj.get("turnover").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
                 northbound_inflow: obj.get("northbound_inflow").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
                 sentiment_index: Some(0.5),
@@ -1072,6 +1224,26 @@ fn exchange_to_secid(exchange: &str, code: &str) -> String {
         _ => "0",  // SZ, BJ, or any unknown exchange
     };
     format!("{}.{}", mkt, code)
+}
+
+/// Determine the exchange suffix ("SH", "SZ", "BJ") from a numeric stock code.
+///
+/// Note: This duplicates the exchange-detection logic in
+/// `storage::exchange_for_symbol()` which should be the canonical source of truth.
+/// The two differ slightly: this defaults to "SH" for unrecognized codes, while
+/// `exchange_for_symbol` returns an empty string for unknown codes.
+fn code_to_exchange_suffix(code: &str) -> &'static str {
+    if code.starts_with("920") {
+        "BJ"
+    } else if code.starts_with("6") || code.starts_with("9") {
+        "SH"
+    } else if code.starts_with("0") || code.starts_with("3") || code.starts_with("2") {
+        "SZ"
+    } else if code.starts_with("4") || code.starts_with("8") {
+        "BJ"
+    } else {
+        "SH"
+    }
 }
 
 /// Parse a cached JSON Value (array of fund-flow objects) into Vec<FundFlow>.

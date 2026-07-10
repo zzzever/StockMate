@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { listen } from '@tauri-apps/api/event';
@@ -6,17 +6,20 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import Layout from '@/components/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ConsolePanel } from '@/components/ConsolePanel';
-import SearchPage from '@/pages/SearchPage';
-import SectorStockRankPage from '@/pages/SectorStockRankPage';
-import StockDetailPage from '@/pages/StockDetailPage';
-import WatchlistPage from '@/pages/WatchlistPage';
 import MiniPage from '@/pages/MiniPage';
+import { PageSkeleton } from '@/components/PageLoader';
 
-import BacktestPage from '@/pages/BacktestPage';
-import PredictPage from '@/pages/PredictPage';
-import RulesPage from '@/pages/RulesPage';
-import IndicatorLabPage from '@/pages/IndicatorLabPage';
-import SettingsPage from '@/pages/SettingsPage';
+// Lazy-loaded page chunks — each produces a separate JS bundle
+// Large pages get their own chunk; smaller commonly-used pages are grouped.
+const SearchPage = lazy(() => import('@/pages/SearchPage'));
+const WatchlistPage = lazy(() => import('@/pages/WatchlistPage'));
+const StockDetailPage = lazy(() => import('@/pages/StockDetailPage'));
+const SectorStockRankPage = lazy(() => import('@/pages/SectorStockRankPage'));
+const BacktestPage = lazy(() => import('@/pages/BacktestPage'));
+const PredictPage = lazy(() => import('@/pages/PredictPage'));
+const RulesPage = lazy(() => import('@/pages/RulesPage'));
+const IndicatorLabPage = lazy(() => import('@/pages/IndicatorLabPage'));
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +47,31 @@ function CrossWindowNav() {
   return null;
 }
 
+function AppRoutes() {
+  return (
+    <Layout>
+      <ErrorBoundary>
+        <Suspense fallback={<PageSkeleton />}>
+          <Routes>
+            {/* Watchlist as default landing page */}
+            <Route path="/" element={<Navigate to="/watchlist" />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
+            <Route path="/quote" element={<StockDetailPage />} />
+            <Route path="/sector" element={<SectorStockRankPage />} />
+            <Route path="/stock" element={<StockDetailPage />} />
+            <Route path="/backtest" element={<BacktestPage />} />
+            <Route path="/predict" element={<PredictPage />} />
+            <Route path="/rules" element={<RulesPage />} />
+            <Route path="/indicator-lab" element={<IndicatorLabPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    </Layout>
+  );
+}
+
 function App() {
   // The mini always-on-top window is loaded at #/mini — render only the compact
   // watchlist, without the sidebar / console / disclaimer chrome.
@@ -57,29 +85,14 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <DisclaimerModal />
-        <CrossWindowNav />
-        <Layout>
-          <ErrorBoundary>
-            <Routes>
-              {/* 自選股作为首页默认 — 所有路径最终导向个股分析 */}
-              <Route path="/" element={<Navigate to="/watchlist" />} />
-              <Route path="/search" element={<SearchPage />} />
-              <Route path="/watchlist" element={<WatchlistPage />} />
-              <Route path="/quote" element={<StockDetailPage />} />
-              <Route path="/sector" element={<SectorStockRankPage />} />
-              <Route path="/stock" element={<StockDetailPage />} />
-              <Route path="/backtest" element={<BacktestPage />} />
-              <Route path="/predict" element={<PredictPage />} />
-              <Route path="/rules" element={<RulesPage />} />
-              <Route path="/indicator-lab" element={<IndicatorLabPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
-          </ErrorBoundary>
-        </Layout>
-        <ConsolePanel />
-      </HashRouter>
+      <ErrorBoundary>
+        <HashRouter>
+          <DisclaimerModal />
+          <CrossWindowNav />
+          <AppRoutes />
+          <ConsolePanel />
+        </HashRouter>
+      </ErrorBoundary>
     </QueryClientProvider>
   );
 }

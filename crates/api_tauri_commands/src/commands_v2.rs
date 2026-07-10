@@ -67,7 +67,7 @@ fn validate_strategy_type(strategy_type: &str) -> Result<(), domain::ApiError> {
 
 #[tauri::command]
 pub async fn get_hot_sectors(state: State<'_, AppState>) -> Result<Vec<domain::HotSector>, domain::ApiError> {
-    eprintln!("[CMD] get_hot_sectors: fetching hot sectors");
+    tracing::info!("[CMD] get_hot_sectors: fetching hot sectors");
     state.data_service.get_hot_sectors().await
 }
 
@@ -79,7 +79,7 @@ pub async fn get_hot_stocks(state: State<'_, AppState>) -> Result<Vec<domain::Ho
 #[tauri::command]
 pub async fn get_sector_stocks(sector: String, state: State<'_, AppState>) -> Result<Vec<domain::HotStock>, domain::ApiError> {
     validate_sector(&sector)?;
-    eprintln!("[CMD] get_sector_stocks: sector={}", sector);
+    tracing::info!("[CMD] get_sector_stocks: sector={}", sector);
     state.data_service.get_sector_stocks(&sector).await
 }
 
@@ -100,14 +100,14 @@ pub async fn get_stock_history(stock_id: String, days: u32, period: String, stat
     validate_stock_id(&stock_id)?;
     validate_days(days)?;
     validate_period(&period)?;
-    eprintln!("[CMD] get_stock_history: stock_id={} days={} period={}", stock_id, days, period);
+    tracing::info!("[CMD] get_stock_history: stock_id={} days={} period={}", stock_id, days, period);
     state.data_service.get_stock_history(&stock_id, days, &period).await
 }
 
 #[tauri::command]
 pub async fn get_intraday(stock_id: String, state: State<'_, AppState>) -> Result<Vec<domain::Quote>, domain::ApiError> {
     validate_stock_id(&stock_id)?;
-    eprintln!("[CMD] get_intraday: stock_id={}", stock_id);
+    tracing::info!("[CMD] get_intraday: stock_id={}", stock_id);
     // Full multi-tier fallback (cache → provider → daily bar → synthetic)
     // is handled inside DataService::get_intraday — see data_fetcher/src/lib.rs.
     state.data_service.get_intraday(&stock_id).await
@@ -116,7 +116,7 @@ pub async fn get_intraday(stock_id: String, state: State<'_, AppState>) -> Resul
 #[tauri::command]
 pub async fn get_realtime_quote(stock_id: String, state: State<'_, AppState>) -> Result<data_fetcher::market_data::PriceData, domain::ApiError> {
     validate_stock_id(&stock_id)?;
-    eprintln!("[CMD] get_realtime_quote: stock_id={}", stock_id);
+    tracing::info!("[CMD] get_realtime_quote: stock_id={}", stock_id);
     state.data_service.get_realtime_quote(&stock_id).await
 }
 
@@ -193,24 +193,29 @@ pub async fn calculate_support_resistance(stock_id: String, state: State<'_, App
 }
 
 #[tauri::command]
-pub async fn generate_strategy(stock_id: String, strategy_type: String, _state: State<'_, AppState>) -> Result<domain::StrategySignal, domain::ApiError> {
+pub async fn generate_strategy(stock_id: String, strategy_type: String, state: State<'_, AppState>) -> Result<domain::StrategySignal, domain::ApiError> {
     validate_stock_id(&stock_id)?;
     validate_strategy_type(&strategy_type)?;
-    Ok(data_fetcher::mock_strategy_signal(&stock_id, &strategy_type))
+    // Fetch historical quotes for MA + support/resistance calculation
+    let history = state.data_service.get_stock_history(&stock_id, 60, "day").await?;
+    let mas = screener::ma::calculate_ma(&history);
+    let sr = screener::support_resistance::calculate_sr(&history, &stock_id, 30);
+    Ok(screener::strategy::generate_strategy(&stock_id, &strategy_type, &history, &mas, &sr))
 }
 
 #[tauri::command]
-pub async fn predict_trend(stock_id: String, strategy_type: String, _state: State<'_, AppState>) -> Result<domain::Prediction, domain::ApiError> {
+pub async fn predict_trend(stock_id: String, strategy_type: String, state: State<'_, AppState>) -> Result<domain::Prediction, domain::ApiError> {
     validate_stock_id(&stock_id)?;
     validate_strategy_type(&strategy_type)?;
-    Ok(data_fetcher::mock_prediction(&stock_id, &strategy_type))
+    let history = state.data_service.get_stock_history(&stock_id, 60, "day").await?;
+    Ok(screener::prediction::predict_trend(&stock_id, &strategy_type, &history))
 }
 
 /// Diagnose all data sources and return structured results.
 /// Tests each provider's connectivity, measures response time, and reports status.
 #[tauri::command]
 pub async fn diagnose_data_sources() -> Result<Vec<data_fetcher::market_data::DataSourceResult>, domain::ApiError> {
-    eprintln!("[CMD] diagnose_data_sources: testing all data sources");
+    tracing::info!("[CMD] diagnose_data_sources: testing all data sources");
     Ok(data_fetcher::market_data::diagnose_all_sources().await)
 }
 
@@ -308,9 +313,69 @@ async fn test_tencent_price(code: &str) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn generate_card_data(stock_id: String, _state: State<'_, AppState>) -> Result<domain::CardData, domain::ApiError> {
+pub async fn generate_card_data(stock_id: String, state: State<'_, AppState>) -> Result<domain::CardData, domain::ApiError> {
     validate_stock_id(&stock_id)?;
-    Ok(data_fetcher::mock_card_data(&stock_id))
+    // Fetch history + real-time price for accurate card data
+    let history = state.data_service.get_stock_history(&stock_id, 30, "day").await?;
+    let price = state.data_service.get_realtime_quote(&stock_id).await?;
+
+    // Run local detection algorithms
+    let late_rush = screener::late_rush::detect_late_rush(&history);
+    let mas = screener::ma::calculate_ma(&history);
+    let sr = screener::support_resistance::calculate_sr(&history, &stock_id, 30);
+    let strategy = screener::strategy::generate_strategy(&stock_id, "trend", &history, &mas, &sr);
+
+    // Build semantic tags
+    let mut tags: Vec<String> = Vec::new();
+    if late_rush.detected {
+        tags.push("尾盘抢筹".to_string());
+    }
+    for sig in &strategy.ma_signals {
+        tags.push(sig.clone());
+    }
+    if strategy.action == domain::SignalAction::Buy {
+        tags.push("主力流入".to_string());
+    }
+
+    // Build human-readable recommendation
+    let recommendation = if late_rush.detected && strategy.action == domain::SignalAction::Buy {
+        "尾盘抢筹信号，主力资金净流入".to_string()
+    } else if strategy.action == domain::SignalAction::Buy {
+        strategy.reason.clone()
+    } else if late_rush.detected {
+        late_rush.reason.clone()
+    } else {
+        "暂无明确信号".to_string()
+    };
+
+    // Compute change_percent from history, fall back to real-time quote
+    let change_percent = if history.len() >= 2 {
+        let today = history.last().unwrap();
+        let yesterday = &history[history.len() - 2];
+        if yesterday.close != rust_decimal::Decimal::ZERO {
+            ((today.close - yesterday.close) / yesterday.close
+                * rust_decimal::Decimal::from(100u64))
+            .to_f64()
+            .unwrap_or(price.change_percent)
+        } else {
+            price.change_percent
+        }
+    } else {
+        price.change_percent
+    };
+
+    Ok(domain::CardData {
+        stock_id: stock_id.clone(),
+        ticker: price.ticker.clone(),
+        name: price.name.clone(),
+        price: rust_decimal::Decimal::from_f64_retain(price.current_price).unwrap_or_default(),
+        change_percent,
+        recommendation,
+        buy_signal: strategy.action == domain::SignalAction::Buy,
+        late_rush: late_rush.detected,
+        tags,
+        generated_at: chrono::Local::now().naive_local(),
+    })
 }
 
 
@@ -339,7 +404,7 @@ pub struct WatchlistQuoteItem {
 
 #[tauri::command]
 pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQuoteItem>, domain::ApiError> {
-    eprintln!("[CMD] watchlist_list: fetching watchlist");
+    tracing::info!("[CMD] watchlist_list: fetching watchlist");
     let items = state.watchlist_repo.get_all().await.map_err(|e| domain::ApiError {
         code: 500, message: format!("Failed to fetch watchlist: {}", e), details: None,
     })?;
@@ -392,7 +457,7 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
 #[tauri::command]
 pub async fn watchlist_add(symbol: String, state: State<'_, AppState>) -> Result<(), domain::ApiError> {
     let ticker = symbol.split('.').next().unwrap_or(&symbol).to_string();
-    eprintln!("[CMD] watchlist_add: symbol={}", ticker);
+    tracing::info!("[CMD] watchlist_add: symbol={}", ticker);
     state.watchlist_repo.add(&ticker, None, None, None).await.map_err(|e| domain::ApiError {
         code: 500, message: format!("Failed to add to watchlist: {}", e), details: None,
     })?;
@@ -402,7 +467,7 @@ pub async fn watchlist_add(symbol: String, state: State<'_, AppState>) -> Result
 #[tauri::command]
 pub async fn watchlist_remove(symbol: String, state: State<'_, AppState>) -> Result<(), domain::ApiError> {
     let ticker = symbol.split('.').next().unwrap_or(&symbol).to_string();
-    eprintln!("[CMD] watchlist_remove: symbol={}", ticker);
+    tracing::info!("[CMD] watchlist_remove: symbol={}", ticker);
     state.watchlist_repo.remove(&ticker).await.map_err(|e| domain::ApiError {
         code: 500, message: format!("Failed to remove from watchlist: {}", e), details: None,
     })?;
@@ -417,9 +482,91 @@ pub async fn watchlist_check(symbol: String, state: State<'_, AppState>) -> Resu
     })
 }
 
+// ============================================================
+// SSLang Commands — evaluate/validate/parse strategy DSL
+// ============================================================
+
+/// Evaluate SSLang strategy code against bar data.
+/// Returns SSLangEvalResult with signal hits and total bar count.
+#[tauri::command]
+pub async fn evaluate_sslang(code: String, bars: Vec<domain::Quote>) -> Result<domain::SSLangEvalResult, String> {
+    if code.trim().is_empty() {
+        return Err("代码为空".into());
+    }
+    screener::sslang::evaluate_strategy(&code, &bars).map_err(|e| e.to_string())
+}
+
+/// Validate SSLang strategy code (syntax + whitelist).
+#[tauri::command]
+pub async fn validate_sslang(code: String) -> domain::StrategyValidation {
+    screener::sslang::validate_strategy(&code)
+}
+
+/// Parse SSLang text (RULE/SIGNAL/WHEN/NOTE blocks) into structured rules.
+#[tauri::command]
+pub async fn parse_sslang_rules(text: String) -> Vec<domain::ParsedSSRule> {
+    screener::sslang::parse_sslang_rules(&text)
+}
+
+// ============================================================
+// Backtest Commands — run backtests with SSLang strategies
+// ============================================================
+
+/// Run a backtest using an SSLang strategy against historical data.
+/// Fetches stock history, evaluates the SSLang rule, and returns backtest results.
+#[tauri::command]
+pub async fn backtest_strategy(
+    stock_id: String,
+    strategy_code: String,
+    days: u32,
+    period: String,
+    state: State<'_, AppState>,
+) -> Result<backtest::BacktestResult, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
+    validate_days(days)?;
+    validate_period(&period)?;
+
+    if strategy_code.trim().is_empty() {
+        return Err(domain::ApiError {
+            code: 400,
+            message: "策略代码为空".into(),
+            details: None,
+        });
+    }
+
+    if strategy_code.len() > 100_000 {
+        return Err(domain::ApiError {
+            code: 400,
+            message: "strategy_code too large".into(),
+            details: None,
+        });
+    }
+
+    tracing::info!(
+        "[CMD] backtest_strategy: stock_id={} days={} period={}",
+        stock_id, days, period
+    );
+
+    let history = state.data_service.get_stock_history(&stock_id, days, &period).await?;
+
+    if history.is_empty() {
+        return Err(domain::ApiError {
+            code: 404,
+            message: format!("未找到股票 {} 的历史数据", stock_id),
+            details: None,
+        });
+    }
+
+    let config = backtest::BacktestConfig::default();
+    backtest::run_sslang_backtest(&history, &strategy_code, &config).map_err(|e| domain::ApiError {
+        code: 500,
+        message: e,
+        details: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
     use domain::MovingAverage;
     use domain::SupportResistance;
     use domain::SignalAction;

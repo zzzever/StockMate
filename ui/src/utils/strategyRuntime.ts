@@ -140,6 +140,7 @@ const FN_ARITY: Record<string, number> = {
   gap_up: 1, gap_down: 1,
   three_soldiers: 1, three_crows: 1,
   count_true: 3, consecutive: 3, highest_of: 3, lowest_of: 3,
+  green_fat: 2, red_fat: 2,
   is_high_n: 2, is_low_n: 2, pct_change: 2,
   is_limit_up: 1, is_limit_down: 1, tf: 2,
 };
@@ -345,6 +346,37 @@ function callHelper(name: string, argNodes: Node[], ctx: Ctx): Val {
     case 'stddev': { const n = toInt(args[0]); if (n < 1) return null; (cache.stddev[n] ??= stddevArr(bars, n)); return cache.stddev[n][toInt(args[1])] ?? null; }
     case 'bias': { const n = toInt(args[0]); const idx = toInt(args[1]); if (n < 1 || idx < 0 || idx >= bars.length) return null; (cache.sma[n] ??= smaArr(bars, n)); const ma = cache.sma[n][idx]; if (ma == null || ma === 0) return null; return ((bars[idx].close - ma) / ma) * 100; }
     case 'ad': { (cache.ad ??= adArr(bars)); return cache.ad[toInt(args[0])] ?? null; }
+    // ── Volume-price correlation (中国股市：红=涨/阳线, 绿=跌/阴线) ──
+    // green_fat(n,k): 近 n 根 bar 中符合”绿肥红瘦”的次数
+    //   绿(跌/阴线)放量 ∨ 红(涨/阳线)缩量 → 看跌信号
+    // red_fat(n,k):   近 n 根 bar 中符合”绿瘦红肥”的次数
+    //   绿(跌/阴线)缩量 ∨ 红(涨/阳线)放量 → 看涨信号
+    case 'green_fat': {
+      const n = toInt(args[0]); const idx = toInt(args[1]);
+      if (n < 1 || idx - n + 1 < 0 || idx >= bars.length) return 0;
+      let count = 0;
+      for (let j = idx - n + 1; j <= idx; j++) {
+        if (j < 1) continue;
+        const b = bars[j]; const p = bars[j - 1];
+        if (b.open <= 0 || p.volume <= 0) continue;
+        // 绿(跌/阴线)放量 ∨ 红(涨/阳线)缩量 → 绿肥红瘦 (bearish)
+        if ((b.close < b.open && b.volume > p.volume) || (b.close > b.open && b.volume < p.volume)) count++;
+      }
+      return count;
+    }
+    case 'red_fat': {
+      const n = toInt(args[0]); const idx = toInt(args[1]);
+      if (n < 1 || idx - n + 1 < 0 || idx >= bars.length) return 0;
+      let count = 0;
+      for (let j = idx - n + 1; j <= idx; j++) {
+        if (j < 1) continue;
+        const b = bars[j]; const p = bars[j - 1];
+        if (b.open <= 0 || p.volume <= 0) continue;
+        // 红(涨/阳线)放量 ∨ 绿(跌/阴线)缩量 → 绿瘦红肥 (bullish)
+        if ((b.close > b.open && b.volume > p.volume) || (b.close < b.open && b.volume < p.volume)) count++;
+      }
+      return count;
+    }
     // ── Candlestick patterns (return boolean) ──
     case 'hammer': { const idx = toInt(args[0]); if (idx < 0 || idx >= bars.length) return false; const o = bars[idx].open, c = bars[idx].close, h = bars[idx].high, l = bars[idx].low; const body = Math.abs(c - o); if (body === 0) return false; const lower = Math.min(o, c) - l; const upper = h - Math.max(o, c); return lower >= body * 2 && upper <= body * 0.3 && Math.min(o, c) > (h + l) / 2; }
     case 'inv_hammer': { const idx = toInt(args[0]); if (idx < 0 || idx >= bars.length) return false; const o = bars[idx].open, c = bars[idx].close, h = bars[idx].high, l = bars[idx].low; const body = Math.abs(c - o); if (body === 0) return false; const lower = Math.min(o, c) - l; const upper = h - Math.max(o, c); return upper >= body * 2 && lower <= body * 0.3 && Math.max(o, c) < (h + l) / 2; }
@@ -477,7 +509,7 @@ export function parseSSLang(text: string): ParsedSSRule[] {
   return rules;
 }
 
-// ── Public API ──
+// ── Public API (Synchronous local implementations) ──
 
 /**
  * Strip the human-readable decoration from stored rule code so only the runnable
@@ -518,6 +550,9 @@ function newCache(): Cache { return { sma: {}, ema: {}, rsi: {}, bollStddev: {},
  * Run strategy code against a bar series. Returns the indices where the per-bar
  * boolean expression holds true. Throws StrategyCodeError on parse/security errors.
  * An external `cache` may be shared across rules to avoid recomputing indicators.
+ *
+ * NOTE: This is the synchronous local implementation. For Tauri-backed evaluation
+ * that delegates to the Rust backend, use `runStrategyCodeAsync` instead.
  */
 export function runStrategyCode(code: string, bars: KlineItem[], cache: Cache = newCache()): { index: number }[] {
   const ast = new Parser(tokenize(stripToExpression(code))).parse();
@@ -531,13 +566,44 @@ export function runStrategyCode(code: string, bars: KlineItem[], cache: Cache = 
 }
 
 /**
- * Run a full SSLang text (multi-rule blocks) against a bar series.
+ * Run strategy code against a bar series via Rust backend (Tauri).
+ * Falls back to local implementation if Tauri is unavailable.
+ */
+export async function runStrategyCodeAsync(code: string, bars: KlineItem[]): Promise<{ index: number }[]> {
+  // Try Rust backend first
+  if (typeof window !== 'undefined' && 'TAURI_INTERNALS' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const quotes = bars.map((b) => ({
+        stock_id: '',
+        date: b.date,
+        time: '',
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume,
+        adjusted_close: b.close,
+      }));
+      const result = await invoke<{ signals: { rule_name: string; signal: string; reason: string; index: number }[]; total_bars: number }>('evaluate_sslang', { code, bars: quotes });
+      if (result) return result.signals.map((s) => ({ index: s.index }));
+    } catch (e) { console.warn('[SSLang] Rust evaluate_sslang failed, falling back to local:', e); }
+  }
+  // Local fallback
+  return runStrategyCode(code, bars);
+}
+
+/**
+ * Run a full SSLang text (multi-rule blocks) against a bar series (synchronous).
  * Returns { ruleName, signal, reason, index } hits, ready to convert to RuleSignal[].
+ *
+ * This is the local-only implementation. For Tauri-backed evaluation that delegates
+ * to the Rust backend, use `runSSLangAsync` instead.
  */
 export function runSSLang(text: string, bars: KlineItem[]): { ruleName: string; signal: 'buy' | 'sell' | 'alert'; reason: string; index: number }[] {
   const rules = parseSSLang(text);
   const all: { ruleName: string; signal: 'buy' | 'sell' | 'alert'; reason: string; index: number }[] = [];
-  const cache = newCache(); // shared across all rules — indicators computed once
+  const cache = newCache();
   for (const r of rules) {
     try {
       for (const hit of runStrategyCode(r.expression, bars, cache)) {
@@ -546,4 +612,39 @@ export function runSSLang(text: string, bars: KlineItem[]): { ruleName: string; 
     } catch (e) { console.warn(`[SSLang] Rule "${r.name}" eval failed:`, e); }
   }
   return all;
+}
+
+/**
+ * Run a full SSLang text (multi-rule blocks) against a bar series via Rust backend (Tauri).
+ * Falls back to local implementation if Tauri is unavailable.
+ */
+export async function runSSLangAsync(text: string, bars: KlineItem[]): Promise<{ ruleName: string; signal: 'buy' | 'sell' | 'alert'; reason: string; index: number }[]> {
+  // Try Rust backend first
+  if (typeof window !== 'undefined' && 'TAURI_INTERNALS' in window) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const quotes = bars.map((b) => ({
+        stock_id: '',
+        date: b.date,
+        time: '',
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close,
+        volume: b.volume,
+        adjusted_close: b.close,
+      }));
+      const result = await invoke<{ signals: { rule_name: string; signal: string; reason: string; index: number }[]; total_bars: number }>('evaluate_sslang', { code: text, bars: quotes });
+      if (result) {
+        return result.signals.map((s) => ({
+          ruleName: s.rule_name,
+          signal: s.signal as 'buy' | 'sell' | 'alert',
+          reason: s.reason,
+          index: s.index,
+        }));
+      }
+    } catch (e) { console.warn('[SSLang] Rust evaluate_sslang failed, falling back to local:', e); }
+  }
+  // Local fallback
+  return runSSLang(text, bars);
 }

@@ -3,6 +3,10 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { createChart, type IChartApi, type ISeriesApi, LineStyle } from 'lightweight-charts';
+import {
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
+} from 'recharts';
 
 function safeToFixed(v: unknown, digits: number): string {
   const n = Number(v);
@@ -11,7 +15,7 @@ function safeToFixed(v: unknown, digits: number): string {
 import {
   ArrowLeft, TrendingUp, Activity, Gauge, CircleDashed, GitBranch,
   Play, ChevronDown, ChevronRight, Save, BarChart3, Target,
-  Shield, Hash, Zap, RotateCcw, RefreshCw, X
+  Shield, Hash, Zap, RotateCcw, RefreshCw, X, Layers
 } from 'lucide-react';
 import { useStockList, useStockHistory } from '@/hooks/useTauriQuery';
 import type { Quote } from '@/types';
@@ -300,7 +304,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
   const monthlyMap = new Map<string, { start: number; end: number }>();
   for (let i = 0; i < equityCurve.length; i++) {
     const date = equityCurve[i].date;
-    const key = date.slice(0, 7); // YYYY-MM
+    const key = date.slice(0, 7);
     if (!monthlyMap.has(key)) monthlyMap.set(key, { start: equityCurve[i].value, end: equityCurve[i].value });
     const entry = monthlyMap.get(key)!;
     entry.end = equityCurve[i].value;
@@ -408,6 +412,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
   const strategySeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const benchmarkSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const isMounted = useRef(true);
+  const [selectedTrade, setSelectedTrade] = useState<TradeRecord | null>(null);
 
   // EFFECT 1: Create chart ONCE on mount, NEVER recreate
   useEffect(() => {
@@ -429,7 +434,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // EFFECT 2: Update data when result changes — NO chart destroy
+  // EFFECT 2: Update data when result changes
   useEffect(() => {
     if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
     if (!result?.equity_curve?.length) { strategySeriesRef.current.setData([]); benchmarkSeriesRef.current.setData([]); return; }
@@ -447,18 +452,98 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
     }
     strategySeriesRef.current.setData(sd);
     benchmarkSeriesRef.current.setData(bd);
+
+    // Add trade markers to the strategy series
+    if (result.trades?.length) {
+      const markers = result.trades.map(t => ({
+        time: t.date as any,
+        position: t.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
+        shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
+        color: t.type === 'buy' ? '#22c55e' : '#ef4444',
+        text: t.type === 'buy' ? 'B' : 'S',
+        size: 1,
+      }));
+      strategySeriesRef.current.setMarkers(markers);
+    } else {
+      strategySeriesRef.current.setMarkers([]);
+    }
+
     chartRef.current.timeScale().fitContent();
   }, [result, initialCapital]);
 
+  // Subscribe to click events for trade details
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const chart = chartRef.current;
+    const handler = (param: any) => {
+      if (param.point && result?.trades) {
+        const time = param.time;
+        const trade = result.trades.find(t => t.date === time);
+        if (trade) setSelectedTrade(trade);
+      }
+    };
+    try {
+      chart.subscribeClick(handler);
+    } catch (_) {}
+    return () => { try { chart.unsubscribeClick(handler); } catch (_) {} };
+  }, [result]);
+
   return (
-    <div className="glass-card p-3 h-80">
-      <div className="flex items-center gap-2 mb-2">
-        <BarChart3 size={14} className="text-violet-400" />
-        <span className="text-sm font-bold text-white">收益曲线</span>
-        <span className="flex items-center gap-1 text-xs ml-auto"><span className="w-3 h-0.5 bg-emerald-400 rounded-full" /><span className="text-zinc-400">策略净值</span></span>
-        <span className="flex items-center gap-1 text-xs"><span className="w-3 h-0.5 bg-zinc-500 rounded-full" /><span className="text-zinc-400">基准</span></span>
+    <div className="space-y-2">
+      <div className="glass-card p-3 h-80">
+        <div className="flex items-center gap-2 mb-2">
+          <BarChart3 size={14} className="text-violet-400" />
+          <span className="text-sm font-bold text-white">收益曲线</span>
+          <span className="flex items-center gap-1 text-xs ml-auto">
+            <span className="w-3 h-0.5 bg-emerald-400 rounded-full" />
+            <span className="text-zinc-400">策略净值</span>
+          </span>
+          <span className="flex items-center gap-1 text-xs">
+            <span className="w-3 h-0.5 bg-zinc-500 rounded-full" />
+            <span className="text-zinc-400">基准</span>
+          </span>
+          <span className="flex items-center gap-1 text-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-zinc-500">买入</span>
+          </span>
+          <span className="flex items-center gap-1 text-xs">
+            <span className="w-2 h-2 rounded-full bg-rose-500" />
+            <span className="text-zinc-500">卖出</span>
+          </span>
+        </div>
+        <div ref={containerRef} className="h-64 w-full" />
       </div>
-      <div ref={containerRef} className="h-64 w-full" />
+
+      {/* Selected trade detail */}
+      <AnimatePresence>
+        {selectedTrade && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="glass-card p-3 text-xs"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
+                {selectedTrade.type === 'buy' ? '买入' : '卖出'} 交易 #{selectedTrade.index}
+              </span>
+              <button onClick={() => setSelectedTrade(null)} className="hover:opacity-70" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                <X size={12} />
+              </button>
+            </div>
+            <div className="flex gap-4 mt-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
+              <span>日期: {selectedTrade.date}</span>
+              <span>价格: ¥{safeToFixed(selectedTrade.price, 2)}</span>
+              <span>数量: {selectedTrade.shares}</span>
+              {selectedTrade.type === 'sell' && (
+                <span className={selectedTrade.profit > 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                  盈亏: {selectedTrade.profit > 0 ? '+' : ''}{safeToFixed(selectedTrade.profit, 2)}
+                </span>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -476,6 +561,12 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
     return 'rgba(255, 255, 255, 0.05)';
   };
 
+  const getTextColor = (ret: number) => {
+    if (ret > 0) return '#6ee7b7';
+    if (ret < 0) return '#fda4af';
+    return '#71717a';
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -486,27 +577,30 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
       <div className="flex items-center gap-2 mb-3">
         <Target size={14} className="text-cyan-400" />
         <span className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">月度收益热力图</span>
+        <span className="text-[10px] ml-auto" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          {data.length} 个月数据
+        </span>
       </div>
       <div className="overflow-x-auto">
         <div className="inline-block min-w-full">
           <div className="grid gap-1" style={{ gridTemplateColumns: `40px repeat(12, 1fr)` }}>
             <div />
             {months.map(m => (
-              <div key={m} className="text-center text-xs text-slate-500 dark:text-slate-500 dark:text-zinc-500">{m}月</div>
+              <div key={m} className="text-center text-[10px] font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>{m}月</div>
             ))}
             {years.map(year => (
               <Fragment key={`row-${year}`}>
-                <div className="text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400 flex items-center justify-center font-mono-nums">{year}</div>
+                <div className="text-xs font-mono-nums flex items-center justify-center" style={{ color: 'hsl(var(--text-secondary))' }}>{year}</div>
                 {months.map(m => {
                   const cell = data.find(d => d.year === year && d.month === m);
                   return (
                     <div
                       key={`${year}-${m}`}
-                      className="h-8 rounded-md flex items-center justify-center text-xs font-mono-nums"
+                      className="h-8 rounded-md flex items-center justify-center text-[10px] font-mono-nums cursor-default transition-transform hover:scale-105"
                       style={{ backgroundColor: getColor(cell?.return_pct ?? 0) }}
-                      title={cell ? `${year}-${String(m).padStart(2, '0')}: ${safeToFixed(cell?.return_pct, 2)}%` : ''}
+                      title={cell ? `${year}-${String(m).padStart(2, '0')}: ${cell.return_pct > 0 ? '+' : ''}${safeToFixed(cell.return_pct, 2)}%` : ''}
                     >
-                      <span className={cell && cell.return_pct > 0 ? 'text-emerald-300' : cell && cell.return_pct < 0 ? 'text-rose-300' : 'text-slate-400 dark:text-slate-400 dark:text-zinc-600'}>
+                      <span style={{ color: getTextColor(cell?.return_pct ?? 0) }}>
                         {cell ? `${cell.return_pct > 0 ? '+' : ''}${safeToFixed(cell.return_pct, 1)}` : '—'}
                       </span>
                     </div>
@@ -516,6 +610,18 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
             ))}
           </div>
         </div>
+      </div>
+      {/* Legend */}
+      <div className="flex items-center gap-3 mt-2 text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
+        <span className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded" style={{ background: 'rgba(16,185,129,0.55)' }} />
+          盈利
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded" style={{ background: 'rgba(244,63,94,0.55)' }} />
+          亏损
+        </span>
+        <span className="ml-auto">颜色越深 | 幅度越大</span>
       </div>
     </motion.div>
   );
@@ -594,6 +700,207 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
   );
 }
 
+// ── Radar Comparison Chart ──
+interface RadarDataItem {
+  metric: string;
+  [key: string]: string | number;
+}
+
+function StrategyRadarChart({ results, names }: { results: SavedResult[]; names: string[] }) {
+  const radarData: RadarDataItem[] = useMemo(() => {
+    const metrics = [
+      { key: 'total_return', label: '总收益', normalize: (v: number, max: number) => max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0 },
+      { key: 'sharpe_ratio', label: '夏普比率', normalize: (v: number, max: number) => max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0 },
+      { key: 'win_rate', label: '胜率', normalize: (v: number, _: number) => Math.min(100, v) },
+      { key: 'max_drawdown', label: '风险控制', normalize: (v: number, max: number) => max > 0 ? Math.max(0, 100 - (v / max) * 100) : 100 },
+      { key: 'trade_count', label: '交易频率', normalize: (v: number, max: number) => max > 0 ? Math.min(100, (v / max) * 100) : 0 },
+    ];
+
+    const maxValues: Record<string, number> = {};
+    for (const metric of metrics) {
+      maxValues[metric.key] = Math.max(...results.map(r => Math.abs(r.result[metric.key as keyof BacktestResult] as number)), 0.01);
+    }
+
+    return metrics.map(metric => {
+      const item: RadarDataItem = { metric: metric.label };
+      results.forEach((r, i) => {
+        const raw = r.result[metric.key as keyof BacktestResult] as number;
+        item[names[i]] = metric.normalize(raw, maxValues[metric.key]);
+      });
+      return item;
+    });
+  }, [results, names]);
+
+  const colors = ['#10b981', '#6366f1', '#f59e0b', '#ec4899'];
+
+  return (
+    <div className="w-full h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadarChart data={radarData}>
+          <PolarGrid stroke="rgba(255,255,255,0.1)" />
+          <PolarAngleAxis dataKey="metric" tick={{ fill: '#a1a1aa', fontSize: 10 }} />
+          <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#71717a', fontSize: 9 }} />
+          {results.map((_, i) => (
+            <Radar
+              key={i}
+              name={names[i]}
+              dataKey={names[i]}
+              stroke={colors[i % colors.length]}
+              fill={colors[i % colors.length]}
+              fillOpacity={0.1}
+              strokeWidth={2}
+            />
+          ))}
+          <RechartsTooltip
+            contentStyle={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', fontSize: '12px' }}
+            labelStyle={{ color: '#ccc' }}
+          />
+          <Legend
+            wrapperStyle={{ fontSize: '11px', color: '#a1a1aa' }}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+// ── Strategy Comparison Panel ──
+function StrategyComparison({ savedResults, onRemove }: {
+  savedResults: SavedResult[];
+  onRemove: (id: string) => void;
+}) {
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+  const [showRadar, setShowRadar] = useState(false);
+
+  const toggleCompare = (id: string) => {
+    setSelectedForCompare(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 4) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const compareResults = savedResults.filter(s => selectedForCompare.includes(s.id));
+  const compareNames = compareResults.map(s => s.name);
+
+  const formatPct = (v: number) => `${v > 0 ? '+' : ''}${safeToFixed(v, 2)}%`;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-card p-4"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Layers size={14} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
+          <span className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">策略对比</span>
+          <span className="text-xs text-slate-500 dark:text-slate-500 dark:text-zinc-500">({savedResults.length} 条已保存)</span>
+        </div>
+        {compareResults.length >= 2 && (
+          <button
+            onClick={() => setShowRadar(!showRadar)}
+            className="text-xs px-2 py-1 rounded border transition-colors"
+            style={{ borderColor: 'hsl(var(--border-subtle))', color: 'hsl(var(--text-secondary))' }}
+          >
+            {showRadar ? '表格视图' : '雷达图对比'}
+          </button>
+        )}
+      </div>
+
+      {/* Strategy selection */}
+      <div className="flex flex-wrap gap-1 mb-3">
+        {savedResults.map(s => (
+          <button
+            key={s.id}
+            onClick={() => toggleCompare(s.id)}
+            className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+              selectedForCompare.includes(s.id) ? 'bg-violet-500/20 border-violet-500/40' : 'hover:bg-white/5'
+            }`}
+            style={{ borderColor: selectedForCompare.includes(s.id) ? 'rgba(139,92,246,0.4)' : 'hsl(var(--border-subtle))', color: 'hsl(var(--text-secondary))' }}
+          >
+            {s.name} ({s.strategyName})
+          </button>
+        ))}
+      </div>
+
+      {/* Comparison table */}
+      {compareResults.length >= 2 && !showRadar && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
+                <th className="text-left py-2 px-2 font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>指标</th>
+                {compareResults.map((s, i) => (
+                  <th key={s.id} className="text-right py-2 px-2 font-medium" style={{ color: ['#10b981', '#6366f1', '#f59e0b', '#ec4899'][i] }}>
+                    {s.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { label: '总收益率', key: 'total_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? '#22c55e' : '#ef4444' },
+                { label: '年化收益率', key: 'annual_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? '#22c55e' : '#ef4444' },
+                { label: '最大回撤', key: 'max_drawdown', fmt: (v: number) => formatPct(v), color: () => '#ef4444' },
+                { label: '夏普比率', key: 'sharpe_ratio', fmt: (v: number) => safeToFixed(v, 2), color: (v: number) => v >= 1 ? '#22c55e' : '#a1a1aa' },
+                { label: '胜率', key: 'win_rate', fmt: (v: number) => `${safeToFixed(v, 1)}%`, color: () => '#a78bfa' },
+                { label: '交易次数', key: 'trade_count', fmt: (v: number) => String(v), color: () => '#a1a1aa' },
+              ].map(row => (
+                <tr key={row.key} className="border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
+                  <td className="py-2 px-2" style={{ color: 'hsl(var(--text-secondary))' }}>{row.label}</td>
+                  {compareResults.map(s => {
+                    const val = s.result[row.key as keyof BacktestResult] as number;
+                    return (
+                      <td key={s.id} className="py-2 px-2 text-right font-mono-nums font-medium" style={{ color: row.color(val) }}>
+                        {row.fmt(val)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Radar chart */}
+      {compareResults.length >= 2 && showRadar && (
+        <StrategyRadarChart results={compareResults} names={compareNames} />
+      )}
+
+      {/* Saved results list */}
+      <div className="mt-3 space-y-1">
+        <div className="text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-tertiary))' }}>已保存回测结果</div>
+        <div className="max-h-48 overflow-y-auto space-y-1">
+          {savedResults.map((s, i) => (
+            <div key={s.id} className="flex items-center justify-between px-2 py-1.5 rounded text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid hsl(var(--border-subtle))' }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ background: ['#10b981', '#6366f1', '#f59e0b', '#ec4899'][i % 4] }}>
+                  {i + 1}
+                </span>
+                <span className="truncate font-medium" style={{ color: 'hsl(var(--text-primary))' }}>{s.name}</span>
+                <span className="text-[10px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{s.strategyName}</span>
+                <span className={`text-[10px] font-mono-nums shrink-0 ${s.result.total_return >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {formatPct(s.result.total_return)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <label className="flex items-center gap-1 cursor-pointer" onClick={() => toggleCompare(s.id)}>
+                  <input type="checkbox" checked={selectedForCompare.includes(s.id)} onChange={() => {}} className="w-3 h-3" />
+                </label>
+                <button onClick={() => onRemove(s.id)} className="hover:opacity-70" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ───────────────────────────────────────────────
 // 主组件
 // ───────────────────────────────────────────────
@@ -622,7 +929,6 @@ export default function BacktestPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [savedResults, setSavedResults] = useState<SavedResult[]>([]);
-  const [showCompare, setShowCompare] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
   const runTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1019,7 +1325,7 @@ export default function BacktestPage() {
               />
             </div>
 
-            {/* 收益曲线图 */}
+            {/* 收益曲线图 (with benchmark comparison & trade markers) */}
             <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
 
             {/* 月度热力图 + 交易记录 */}
@@ -1033,67 +1339,7 @@ export default function BacktestPage() {
 
       {/* 策略对比区 */}
       {savedResults.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card p-5"
-        >
-          <button onClick={() => setShowCompare(!showCompare)} className="flex items-center gap-2 w-full mb-2">
-            {showCompare ? <ChevronDown size={16} className="text-slate-600 dark:text-slate-600 dark:text-zinc-400" /> : <ChevronRight size={16} className="text-slate-600 dark:text-slate-600 dark:text-zinc-400" />}
-            <BarChart3 size={14} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
-            <span className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">策略对比</span>
-            <span className="text-xs text-slate-500 dark:text-slate-500 dark:text-zinc-500 ml-1">({savedResults.length} 条已保存)</span>
-          </button>
-          <AnimatePresence>
-            {showCompare && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="max-h-96 overflow-auto mt-3">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-xs text-slate-500 dark:text-slate-500 dark:text-zinc-500 border-b border-slate-100 dark:border-slate-100 dark:border-white/5">
-                        <th className="text-left py-2 px-2">策略名称</th>
-                        <th className="text-left py-2 px-2">策略类型</th>
-                        <th className="text-right py-2 px-2">总收益</th>
-                        <th className="text-right py-2 px-2">年化收益</th>
-                        <th className="text-right py-2 px-2">最大回撤</th>
-                        <th className="text-right py-2 px-2">夏普</th>
-                        <th className="text-right py-2 px-2">胜率</th>
-                        <th className="text-center py-2 px-2">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {savedResults.map((s, i) => (
-                        <tr key={s.id} className={i % 2 === 0 ? 'bg-white/[0.02]' : ''}>
-                          <td className="py-2 px-2 text-slate-700 dark:text-slate-700 dark:text-zinc-300 font-medium">{s.name}</td>
-                          <td className="py-2 px-2 text-slate-600 dark:text-slate-600 dark:text-zinc-400 text-xs">{s.strategyName}</td>
-                          <td className={`py-2 px-2 text-right font-mono-nums ${s.result.total_return >= 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}`}>
-                            {formatPct(s.result.total_return)}
-                          </td>
-                          <td className={`py-2 px-2 text-right font-mono-nums ${s.result.annual_return >= 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}`}>
-                            {formatPct(s.result.annual_return)}
-                          </td>
-                          <td className="py-2 px-2 text-right font-mono-nums text-rose-600 dark:text-rose-600 dark:text-rose-400">{formatPct(s.result.max_drawdown)}</td>
-                          <td className="py-2 px-2 text-right font-mono-nums text-cyan-400">{safeToFixed(s.result.sharpe_ratio, 2)}</td>
-                          <td className="py-2 px-2 text-right font-mono-nums text-violet-600 dark:text-violet-600 dark:text-violet-400">{safeToFixed(s.result.win_rate, 1)}%</td>
-                          <td className="py-2 px-2 text-center">
-                            <button onClick={() => removeSaved(s.id)} className="text-slate-400 dark:text-slate-400 dark:text-zinc-600 hover:text-rose-600 dark:text-rose-600 dark:text-rose-400 transition-colors">
-                              <X size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
+        <StrategyComparison savedResults={savedResults} onRemove={removeSaved} />
       )}
     </div>
   );

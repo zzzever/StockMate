@@ -20,6 +20,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0003_add_ai_cache.sql"),
         include_str!("../migrations/0004_add_stock_type.sql"),
         include_str!("../migrations/0005_add_kline.sql"),
+        include_str!("../migrations/0006_add_unique_constraints.sql"),
     ];
     for mig in migrations {
         // Wrap each migration file in a transaction for atomicity
@@ -30,7 +31,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
                 if let Err(e) = sqlx::query(stmt).execute(&mut *tx).await {
                     let msg = e.to_string();
                     if msg.contains("duplicate column") || msg.contains("already exists") {
-                        eprintln!("Migration skip (idempotent): {}", msg);
+                        tracing::info!("Migration skip (idempotent): {}", msg);
                     } else {
                         let _ = tx.rollback().await;
                         return Err(e);
@@ -41,6 +42,16 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         tx.commit().await?;
     }
     Ok(())
+}
+
+/// Escape SQL `LIKE` wildcards (`%`, `_`) and the escape character itself so
+/// user input is matched literally. Must be paired with `ESCAPE '\'` in the
+/// `LIKE` clause. Without this, a query of `%` matches every row.
+fn escape_like(input: &str) -> String {
+    input
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
 }
 
 pub fn row_to_stock(row: &sqlx::sqlite::SqliteRow) -> Stock {
@@ -92,14 +103,38 @@ impl StockRepository for SqliteStockRepository {
     }
 
     async fn search(&self, query: &str) -> Result<Vec<Stock>> {
-        let pattern = format!("%{}%", query);
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Escape LIKE wildcards so `%`/`_` in user input match literally.
+        let escaped = escape_like(trimmed);
+        let contains = format!("%{}%", escaped);
+        let prefix = format!("{}%", escaped);
+        // Relevance ranking:
+        //   0 name exact  → 1 ticker exact  → 2 ticker prefix  → 3 name prefix  → 4 loose match
+        // Within a tier, rows with a known market_cap rank first (largest first),
+        // NULL/blank market_cap sinks to the bottom, then ticker as a stable tiebreak.
         let rows = sqlx::query(
-            "SELECT id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type FROM stocks WHERE ticker LIKE ?1 OR name LIKE ?1 ORDER BY CASE WHEN ticker = ?2 THEN 0 WHEN ticker LIKE ?3 THEN 1 ELSE 2 END, ticker LIMIT 30"
+            "SELECT id, ticker, exchange, name, sector, industry, market_cap, currency, stock_type \
+             FROM stocks \
+             WHERE ticker LIKE ?1 ESCAPE '\\' OR name LIKE ?1 ESCAPE '\\' \
+             ORDER BY \
+               CASE \
+                 WHEN name = ?2 THEN 0 \
+                 WHEN ticker = ?2 THEN 1 \
+                 WHEN ticker LIKE ?3 ESCAPE '\\' THEN 2 \
+                 WHEN name LIKE ?3 ESCAPE '\\' THEN 3 \
+                 ELSE 4 \
+               END, \
+               CASE WHEN market_cap IS NULL OR market_cap = '' THEN 1 ELSE 0 END, \
+               CAST(market_cap AS REAL) DESC, \
+               ticker \
+             LIMIT 30"
         )
-        .bind(&pattern)
-        .bind(query)
-        .bind(format!("{}%", query))
-        .bind(&pattern)
+        .bind(&contains)
+        .bind(trimmed)
+        .bind(&prefix)
         .fetch_all(&self.pool)
         .await?;
         let stocks = rows.iter().map(|row| row_to_stock(row)).collect();
@@ -159,13 +194,13 @@ fn row_to_quote(row: &sqlx::sqlite::SqliteRow) -> Quote {
     use rust_decimal::Decimal;
     let parse_or_warn = |s: &str, field: &str| -> Decimal {
         s.parse().unwrap_or_else(|_| {
-            eprintln!("[storage] WARN: Failed to parse {} as Decimal, using ZERO. Value: {:?}", field, s);
+            tracing::warn!("[storage] Failed to parse {} as Decimal, using ZERO. Value: {:?}", field, s);
             Decimal::ZERO
         })
     };
     let vol: i64 = row.get("volume");
     if vol < 0 {
-        eprintln!("[storage] WARN: Negative volume {} in row, clamping to 0", vol);
+        tracing::warn!("[storage] Negative volume {} in row, clamping to 0", vol);
     }
     Quote {
         stock_id: row.get("stock_id"),
@@ -294,31 +329,22 @@ impl SettingsRepository {
     }
 
     pub async fn get(&self, key: &str) -> Result<Option<String>> {
-        let row = sqlx::query("SELECT value FROM settings WHERE key = ?1")
-            .bind(key)
-            .fetch_optional(&self.pool)
-            .await?;
-        Ok(row.map(|r| r.get("value")))
+        kv_get(&self.pool, "settings", key).await
     }
 
     pub async fn set(&self, key: &str, value: &str) -> Result<()> {
-        sqlx::query("INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)")
-            .bind(key)
-            .bind(value)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
+        kv_set(&self.pool, "settings", key, value).await
     }
 
     pub async fn get_model(&self) -> String {
         match self.get("deepseek_model").await {
             Ok(Some(model)) => model,
             Ok(None) => {
-                eprintln!("[storage] WARN: deepseek_model not set in DB, using default 'deepseek-chat'");
+                tracing::warn!("[storage] deepseek_model not set in DB, using default 'deepseek-chat'");
                 "deepseek-chat".to_string()
             }
             Err(e) => {
-                eprintln!("[storage] WARN: Failed to read deepseek_model from DB: {}, using default 'deepseek-chat'", e);
+                tracing::warn!("[storage] Failed to read deepseek_model from DB: {}, using default 'deepseek-chat'", e);
                 "deepseek-chat".to_string()
             }
         }
@@ -332,15 +358,15 @@ impl SettingsRepository {
         let key = format!("cache_ttl_{}", cache_type);
         match self.get(&key).await {
             Ok(Some(v)) => v.parse().unwrap_or_else(|e| {
-                eprintln!("[storage] WARN: Failed to parse cache_ttl '{}' for {}: {}, using default 3600", key, cache_type, e);
+                tracing::warn!("[storage] Failed to parse cache_ttl '{}' for {}: {}, using default 3600", key, cache_type, e);
                 3600
             }),
             Ok(None) => {
-                eprintln!("[storage] WARN: cache_ttl for {} not set in DB, using default 3600", cache_type);
+                tracing::warn!("[storage] cache_ttl for {} not set in DB, using default 3600", cache_type);
                 3600
             }
             Err(e) => {
-                eprintln!("[storage] WARN: Failed to read cache_ttl for {} from DB: {}, using default 3600", cache_type, e);
+                tracing::warn!("[storage] Failed to read cache_ttl for {} from DB: {}, using default 3600", cache_type, e);
                 3600
             }
         }
@@ -632,10 +658,12 @@ impl FundFlowRepository {
     }
 
     pub async fn insert(&self, item: &FundFlow) -> Result<()> {
+        // stock_id may contain exchange suffix (e.g. "600519.SH"); strip it for the DB symbol column
+        let symbol = item.stock_id.split('.').next().unwrap_or(&item.stock_id);
         sqlx::query(
             "INSERT OR REPLACE INTO fund_flow (symbol, date, main_inflow, retail_inflow, large_order_inflow, medium_order_inflow, small_order_inflow) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
         )
-        .bind(&item.stock_id)
+        .bind(symbol)
         .bind(&item.date)
         .bind(item.main_inflow.map(|v| v.to_f64()))
         .bind(item.retail_inflow.map(|v| v.to_f64()))
@@ -701,6 +729,198 @@ impl MarketOverviewRepository {
     }
 }
 
+// ============================================
+// User Screener Filters Repository
+// ============================================
+
+/// Repository for per-user screener filter configurations.
+pub struct UserScreenerFiltersRepository {
+    pool: DbPool,
+}
+
+impl UserScreenerFiltersRepository {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// Save or replace a screener filter configuration.
+    pub async fn save(&self, name: &str, filter_json: &str) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM user_screener_filters WHERE name = ?1")
+            .bind(name)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "INSERT INTO user_screener_filters (name, filter_json) VALUES (?1, ?2)"
+        )
+        .bind(name)
+        .bind(filter_json)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// List all saved screener filter configurations.
+    pub async fn list(&self) -> Result<Vec<(String, String)>> {
+        #[derive(Debug, sqlx::FromRow)]
+        struct FilterRow {
+            name: String,
+            filter_json: String,
+        }
+        let rows = sqlx::query_as::<_, FilterRow>(
+            "SELECT name, filter_json FROM user_screener_filters ORDER BY name"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|r| (r.name, r.filter_json)).collect())
+    }
+
+    /// Delete a screener filter configuration by name.
+    pub async fn delete(&self, name: &str) -> Result<()> {
+        sqlx::query("DELETE FROM user_screener_filters WHERE name = ?1")
+            .bind(name)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
+// ============================================
+// App Metadata Repository
+// ============================================
+
+/// Repository for key-value application metadata storage.
+pub struct AppMetadataRepository {
+    pool: DbPool,
+}
+
+impl AppMetadataRepository {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// Get metadata value by key.
+    pub async fn get(&self, key: &str) -> Result<Option<String>> {
+        kv_get(&self.pool, "app_metadata", key).await
+    }
+
+    /// Set or update metadata value for a key.
+    pub async fn set(&self, key: &str, value: &str) -> Result<()> {
+        kv_set(&self.pool, "app_metadata", key, value).await
+    }
+}
+
+// ============================================
+// User Logs Repository
+// ============================================
+
+/// Repository for user action audit logs.
+pub struct UserLogsRepository {
+    pool: DbPool,
+}
+
+impl UserLogsRepository {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    /// Log a user action.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn log(
+        &self,
+        action: &str,
+        symbol: Option<&str>,
+        duration_ms: Option<i64>,
+        api_called: bool,
+        api_tokens_used: Option<i64>,
+        error_msg: Option<&str>,
+    ) -> Result<()> {
+        sqlx::query(
+            "INSERT INTO user_logs (action, symbol, duration_ms, api_called, api_tokens_used, error_msg) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        )
+        .bind(action)
+        .bind(symbol)
+        .bind(duration_ms)
+        .bind(api_called as i64)
+        .bind(api_tokens_used)
+        .bind(error_msg)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Get the most recent log entries.
+    pub async fn get_recent(&self, limit: i64) -> Result<Vec<UserLogEntry>> {
+        let rows = sqlx::query_as::<_, UserLogRow>(
+            "SELECT id, action, symbol, duration_ms, api_called, api_tokens_used, error_msg, created_at FROM user_logs ORDER BY created_at DESC LIMIT ?1"
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|r| UserLogEntry {
+            id: r.id,
+            action: r.action,
+            symbol: r.symbol,
+            duration_ms: r.duration_ms,
+            api_called: matches!(r.api_called, Some(1)),
+            api_tokens_used: r.api_tokens_used,
+            error_msg: r.error_msg,
+            created_at: r.created_at,
+        }).collect())
+    }
+}
+
+/// A single user log entry.
+#[derive(Debug, Clone)]
+pub struct UserLogEntry {
+    pub id: i64,
+    pub action: String,
+    pub symbol: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub api_called: bool,
+    pub api_tokens_used: Option<i64>,
+    pub error_msg: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct UserLogRow {
+    id: i64,
+    action: String,
+    symbol: Option<String>,
+    duration_ms: Option<i64>,
+    api_called: Option<i64>,
+    api_tokens_used: Option<i64>,
+    error_msg: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+// ============================================================
+// Shared key-value helpers (DRY for SettingsRepository / AppMetadataRepository)
+// ============================================================
+
+/// Get a value by key from a key-value table. `table` must be a compile-time constant.
+async fn kv_get(pool: &DbPool, table: &str, key: &str) -> Result<Option<String>> {
+    let sql = format!("SELECT value FROM {} WHERE key = ?1", table);
+    let row = sqlx::query(&sql)
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+    Ok(row.map(|r| r.get("value")))
+}
+
+/// Insert or replace a key-value pair in a key-value table. `table` must be a compile-time constant.
+async fn kv_set(pool: &DbPool, table: &str, key: &str, value: &str) -> Result<()> {
+    let sql = format!("INSERT OR REPLACE INTO {} (key, value) VALUES (?1, ?2)", table);
+    sqlx::query(&sql)
+        .bind(key)
+        .bind(value)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 // ============================================================
 // Tests
 // ============================================================
@@ -708,7 +928,7 @@ impl MarketOverviewRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{NaiveDate, NaiveDateTime};
+    use chrono::NaiveDate;
     use rust_decimal::Decimal;
 
     async fn setup_db() -> DbPool {
@@ -780,6 +1000,114 @@ mod tests {
 
         let search = repo.search("XYZ").await.unwrap();
         assert_eq!(search.len(), 0);
+    }
+
+    // ============================
+    // StockRepository::search — ranking, escaping, limits
+    // ============================
+    fn mk_stock(id: &str, ticker: &str, name: &str, cap: Option<i64>) -> Stock {
+        Stock {
+            id: id.into(),
+            ticker: ticker.into(),
+            exchange: "SH".into(),
+            name: name.into(),
+            sector: None,
+            industry: None,
+            market_cap: cap.map(|c| Decimal::new(c, 0)),
+            currency: "CNY".into(),
+            stock_type: "stock".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_name_exact_ranks_first() {
+        let pool = setup_db().await;
+        let repo = SqliteStockRepository::new(pool);
+        // A loose-match row inserted first so ordering can't rely on insertion order.
+        repo.insert(&mk_stock("600809.SH", "600809", "贵州茅台镇酒业", Some(100_000))).await.unwrap();
+        repo.insert(&mk_stock("600519.SH", "600519", "贵州茅台", Some(200_000))).await.unwrap();
+
+        let r = repo.search("贵州茅台").await.unwrap();
+        assert_eq!(r.len(), 2);
+        // Exact name match must win over the longer loose match.
+        assert_eq!(r[0].ticker, "600519");
+        assert_eq!(r[1].ticker, "600809");
+    }
+
+    #[tokio::test]
+    async fn test_search_ticker_exact_and_prefix_order() {
+        let pool = setup_db().await;
+        let repo = SqliteStockRepository::new(pool);
+        repo.insert(&mk_stock("600519.SH", "600519", "贵州茅台", Some(200_000))).await.unwrap();
+        repo.insert(&mk_stock("600036.SH", "600036", "招商银行", Some(900_000))).await.unwrap();
+
+        // Exact ticker beats prefix even though the other has a larger market cap.
+        let r = repo.search("600519").await.unwrap();
+        assert_eq!(r[0].ticker, "600519");
+
+        // Both are ticker-prefix matches for "600"; larger market cap ranks first.
+        let r = repo.search("600").await.unwrap();
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].ticker, "600036"); // cap 900k > 200k
+        assert_eq!(r[1].ticker, "600519");
+    }
+
+    #[tokio::test]
+    async fn test_search_market_cap_tiebreak_nulls_last() {
+        let pool = setup_db().await;
+        let repo = SqliteStockRepository::new(pool);
+        repo.insert(&mk_stock("600001.SH", "600001", "甲测试", None)).await.unwrap();
+        repo.insert(&mk_stock("600002.SH", "600002", "乙测试", Some(500_000))).await.unwrap();
+
+        // Same match tier (ticker prefix). Known market cap ranks above NULL.
+        let r = repo.search("600").await.unwrap();
+        assert_eq!(r[0].ticker, "600002");
+        assert_eq!(r[1].ticker, "600001");
+    }
+
+    #[tokio::test]
+    async fn test_search_escapes_like_wildcards() {
+        let pool = setup_db().await;
+        let repo = SqliteStockRepository::new(pool);
+        repo.insert(&mk_stock("600519.SH", "600519", "贵州茅台", None)).await.unwrap();
+        repo.insert(&mk_stock("000001.SZ", "000001", "平安银行", None)).await.unwrap();
+
+        // '%' and '_' must be matched literally — not as SQL wildcards that
+        // would otherwise return every row.
+        assert_eq!(repo.search("%").await.unwrap().len(), 0);
+        assert_eq!(repo.search("_").await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_empty_and_whitespace_returns_empty() {
+        let pool = setup_db().await;
+        let repo = SqliteStockRepository::new(pool);
+        repo.insert(&mk_stock("600519.SH", "600519", "贵州茅台", None)).await.unwrap();
+
+        assert_eq!(repo.search("").await.unwrap().len(), 0);
+        assert_eq!(repo.search("   ").await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_search_limit_capped_at_30() {
+        let pool = setup_db().await;
+        let repo = SqliteStockRepository::new(pool);
+        for i in 0..40 {
+            let ticker = format!("6{:05}", i);
+            repo.insert(&mk_stock(&format!("{}.SH", ticker), &ticker, &format!("测试{}", i), Some(i as i64)))
+                .await
+                .unwrap();
+        }
+        // All 40 tickers start with '6'; result must be capped at 30.
+        assert_eq!(repo.search("6").await.unwrap().len(), 30);
+    }
+
+    #[test]
+    fn test_escape_like_helper() {
+        assert_eq!(escape_like("50%"), "50\\%");
+        assert_eq!(escape_like("a_b"), "a\\_b");
+        assert_eq!(escape_like("a\\b"), "a\\\\b");
+        assert_eq!(escape_like("茅台"), "茅台");
     }
 
     // ============================
@@ -902,7 +1230,7 @@ mod tests {
         let pool = setup_db().await;
         let repo = WatchlistRepository::new(pool);
 
-        repo.add("600519", Some("贵州茅台"), Some(1500.0), Some("test"))
+        repo.add("600519", Some("default"), Some(1500.0), Some("test"))
             .await
             .unwrap();
 

@@ -126,6 +126,53 @@ pub struct ApiError {
 }
 
 // ============================================================
+// Typed domain error — for use across all crates
+// ============================================================
+
+#[derive(Debug, Clone, Error)]
+pub enum DomainError {
+    #[error("Stock not found: {0}")]
+    StockNotFound(String),
+    #[error("Data source unavailable: {0}")]
+    DataUnavailable(String),
+    #[error("Network error: {0}")]
+    NetworkError(String),
+    #[error("Parse error: {0}")]
+    ParseError(String),
+    #[error("Database error: {0}")]
+    Database(String),
+    #[error("Validation error: {0}")]
+    Validation(String),
+    #[error("AI service error: {0}")]
+    AiService(String),
+    #[error("Rate limited: {0}")]
+    RateLimited(String),
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+impl From<DomainError> for ApiError {
+    fn from(e: DomainError) -> Self {
+        let code = match &e {
+            DomainError::StockNotFound(_) => 404,
+            DomainError::DataUnavailable(_) => 503,
+            DomainError::NetworkError(_) => 502,
+            DomainError::ParseError(_) => 400,
+            DomainError::Database(_) => 500,
+            DomainError::Validation(_) => 400,
+            DomainError::AiService(_) => 503,
+            DomainError::RateLimited(_) => 429,
+            DomainError::Internal(_) => 500,
+        };
+        ApiError {
+            code,
+            message: e.to_string(),
+            details: None,
+        }
+    }
+}
+
+// ============================================================
 // New v0.2.0 types
 // ============================================================
 
@@ -429,6 +476,77 @@ impl Default for WatchlistItem {
     }
 }
 
+// ============================================================
+// SSLang types (Phase 2: SSLang interpreter migration)
+// ============================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct TradingRule {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub code: String,
+    pub signal: RuleSignal,
+    pub conditions: Vec<RuleCondition>,
+    pub explanation: String,
+    pub marker_index: u32,
+    pub color: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RuleSignal {
+    #[default]
+    Buy,
+    Sell,
+    Alert,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct RuleCondition {
+    pub field: String,
+    pub operator: String,
+    pub value: f64,
+}
+
+/// Parsed SSLang rule block.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ParsedSSRule {
+    pub name: String,
+    pub signal: String,
+    pub expression: String,
+    pub explanation: String,
+}
+
+/// A single SSLang signal firing.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct SSLangSignal {
+    pub rule_name: String,
+    pub signal: String,
+    pub reason: String,
+    pub index: usize,
+}
+
+/// SSLang strategy code validation result.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct StrategyValidation {
+    pub valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Full SSLang evaluation result across all bars.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct SSLangEvalResult {
+    pub signals: Vec<SSLangSignal>,
+    pub total_bars: usize,
+}
+
+// ============================================================
+// Tests
+// ============================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,6 +583,7 @@ mod tests {
             industry: Some("Consumer Electronics".into()),
             market_cap: Some(sample_decimal("3000000000000.00")),
             currency: "USD".into(),
+            stock_type: "stock".into(),
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: Stock = serde_json::from_str(&json).unwrap();
@@ -484,6 +603,7 @@ mod tests {
             industry: None,
             market_cap: None,
             currency: "CNY".into(),
+            stock_type: "stock".into(),
         };
         let _dbg = format!("{:?}", s);
         let _cloned = s.clone();
@@ -497,6 +617,7 @@ mod tests {
         let original = Quote {
             stock_id: "stock_001".into(),
             date: sample_date(),
+            time: String::new(),
             open: sample_decimal("150.00"),
             high: sample_decimal("155.00"),
             low: sample_decimal("148.50"),
@@ -517,6 +638,7 @@ mod tests {
         let q = Quote {
             stock_id: "1".into(),
             date: sample_date(),
+            time: String::new(),
             open: Decimal::ONE,
             high: Decimal::ONE,
             low: Decimal::ONE,
@@ -658,6 +780,8 @@ mod tests {
             volume: 50_000_000,
             leading_stock: "NVDA".into(),
             leading_change: Decimal::new(512, 2),
+            fund_flow: None,
+            stock_count: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: HotSector = serde_json::from_str(&json).unwrap();
@@ -674,6 +798,8 @@ mod tests {
             volume: 1,
             leading_stock: "Y".into(),
             leading_change: Decimal::new(2, 0),
+            fund_flow: None,
+            stock_count: None,
         };
         let _dbg = format!("{:?}", h);
         let _cloned = h.clone();
@@ -693,6 +819,9 @@ mod tests {
             change_percent: 0.85,
             volume: 2_000_000,
             turnover: Some(sample_decimal("3601000000")),
+            five_day_change: None,
+            main_fund_flow: None,
+            turnover_rate: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: HotStock = serde_json::from_str(&json).unwrap();
@@ -712,6 +841,9 @@ mod tests {
             change_percent: 0.0,
             volume: 0,
             turnover: None,
+            five_day_change: None,
+            main_fund_flow: None,
+            turnover_rate: None,
         };
         let _dbg = format!("{:?}", h);
         let _cloned = h.clone();
@@ -732,6 +864,9 @@ mod tests {
             debt_ratio: Some(0.40),
             eps: Some(sample_decimal("5.50")),
             report_date: Some(sample_date()),
+            pe: None,
+            pb: None,
+            total_market_cap: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: StockFinance = serde_json::from_str(&json).unwrap();
@@ -753,6 +888,9 @@ mod tests {
             debt_ratio: None,
             eps: None,
             report_date: None,
+            pe: None,
+            pb: None,
+            total_market_cap: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: StockFinance = serde_json::from_str(&json).unwrap();
@@ -772,6 +910,9 @@ mod tests {
             debt_ratio: None,
             eps: None,
             report_date: None,
+            pe: None,
+            pb: None,
+            total_market_cap: None,
         };
         let _dbg = format!("{:?}", f);
         let _cloned = f.clone();
@@ -1341,5 +1482,145 @@ mod tests {
         let w = WatchlistItem::default();
         assert_eq!(w.stock_id, "");
         assert_eq!(w.sort_order, 0);
+    }
+
+    // ============================
+    // SSLang types
+    // ============================
+    #[test]
+    fn trading_rule_roundtrip() {
+        let original = TradingRule {
+            id: "rule_1".into(),
+            name: "黄金交叉".into(),
+            enabled: true,
+            code: "cross(close(5), close(10))".into(),
+            signal: RuleSignal::Buy,
+            conditions: vec![RuleCondition {
+                field: "ma5".into(),
+                operator: ">".into(),
+                value: 10.0,
+            }],
+            explanation: "5日均线上穿10日均线".into(),
+            marker_index: 1,
+            color: "#ff0000".into(),
+            created_at: "2024-01-01".into(),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: TradingRule = serde_json::from_str(&json).unwrap();
+        assert_eq!(original.id, restored.id);
+        assert_eq!(original.name, restored.name);
+        assert_eq!(original.signal, restored.signal);
+        assert_eq!(original.color, restored.color);
+    }
+
+    #[test]
+    fn trading_rule_default() {
+        let r = TradingRule::default();
+        assert_eq!(r.id, "");
+        assert_eq!(r.signal, RuleSignal::Buy);
+    }
+
+    #[test]
+    fn rule_signal_serde() {
+        for v in [RuleSignal::Buy, RuleSignal::Sell, RuleSignal::Alert] {
+            let json = serde_json::to_string(&v).unwrap();
+            let restored: RuleSignal = serde_json::from_str(&json).unwrap();
+            assert_eq!(v, restored);
+        }
+    }
+
+    #[test]
+    fn parsed_ss_rule_roundtrip() {
+        let original = ParsedSSRule {
+            name: "测试规则".into(),
+            signal: "buy".into(),
+            expression: "close > open".into(),
+            explanation: "收盘价高于开盘价".into(),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: ParsedSSRule = serde_json::from_str(&json).unwrap();
+        assert_eq!(original.name, restored.name);
+        assert_eq!(original.signal, restored.signal);
+    }
+
+    #[test]
+    fn ss_lang_signal_roundtrip() {
+        let original = SSLangSignal {
+            rule_name: "规则1".into(),
+            signal: "buy".into(),
+            reason: "金叉信号".into(),
+            index: 42,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: SSLangSignal = serde_json::from_str(&json).unwrap();
+        assert_eq!(original.rule_name, restored.rule_name);
+        assert_eq!(original.index, restored.index);
+    }
+
+    #[test]
+    fn strategy_validation_roundtrip() {
+        let valid = StrategyValidation { valid: true, error: None };
+        let json = serde_json::to_string(&valid).unwrap();
+        let restored: StrategyValidation = serde_json::from_str(&json).unwrap();
+        assert!(restored.valid);
+        assert!(restored.error.is_none());
+
+        let invalid = StrategyValidation { valid: false, error: Some("语法错误".into()) };
+        let json = serde_json::to_string(&invalid).unwrap();
+        let restored: StrategyValidation = serde_json::from_str(&json).unwrap();
+        assert!(!restored.valid);
+        assert_eq!(restored.error.unwrap(), "语法错误");
+    }
+
+    #[test]
+    fn ss_lang_eval_result_roundtrip() {
+        let original = SSLangEvalResult {
+            signals: vec![SSLangSignal {
+                rule_name: "R1".into(),
+                signal: "buy".into(),
+                reason: "信号".into(),
+                index: 10,
+            }],
+            total_bars: 100,
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: SSLangEvalResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.signals.len(), 1);
+        assert_eq!(restored.total_bars, 100);
+    }
+
+    #[test]
+    fn ss_lang_types_trait_bounds() {
+        fn _assert_debug<T: std::fmt::Debug>() {}
+        fn _assert_clone<T: Clone>() {}
+        fn _assert_serde<T: Serialize + for<'de> Deserialize<'de>>() {}
+
+        _assert_debug::<TradingRule>();
+        _assert_clone::<TradingRule>();
+        _assert_serde::<TradingRule>();
+
+        _assert_debug::<RuleSignal>();
+        _assert_clone::<RuleSignal>();
+        _assert_serde::<RuleSignal>();
+
+        _assert_debug::<RuleCondition>();
+        _assert_clone::<RuleCondition>();
+        _assert_serde::<RuleCondition>();
+
+        _assert_debug::<ParsedSSRule>();
+        _assert_clone::<ParsedSSRule>();
+        _assert_serde::<ParsedSSRule>();
+
+        _assert_debug::<SSLangSignal>();
+        _assert_clone::<SSLangSignal>();
+        _assert_serde::<SSLangSignal>();
+
+        _assert_debug::<StrategyValidation>();
+        _assert_clone::<StrategyValidation>();
+        _assert_serde::<StrategyValidation>();
+
+        _assert_debug::<SSLangEvalResult>();
+        _assert_clone::<SSLangEvalResult>();
+        _assert_serde::<SSLangEvalResult>();
     }
 }

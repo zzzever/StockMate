@@ -97,17 +97,17 @@ pub fn start_ws_client(tickers: &[String]) -> WsPriceCache {
 /// event-driven consumption (e.g. for Tauri event emission).
 pub fn start_ws_client_with_rx(
     tickers: &[String],
-) -> (WsPriceCache, broadcast::Receiver<PriceData>) {
+) -> (WsPriceCache, broadcast::Receiver<PriceData>, tokio::task::JoinHandle<()>) {
     let (tx, rx) = broadcast::channel(256);
     let cache = WsPriceCache::new();
     let cache_clone = cache.clone();
     let tickers = tickers.to_vec();
 
-    tokio::spawn(async move {
+    let handle = tokio::spawn(async move {
         run_ws_loop_with_tx(cache_clone, tickers, tx).await;
     });
 
-    (cache, rx)
+    (cache, rx, handle)
 }
 
 // ---------------------------------------------------------------------------

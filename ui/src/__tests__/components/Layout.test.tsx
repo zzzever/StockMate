@@ -47,7 +47,8 @@ describe('Layout', () => {
     );
     expect(screen.getAllByText(/StockMate/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('child')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('輸入代碼… (Ctrl+K)')).toBeInTheDocument();
+    // TopBar renders (its theme toggle is present); the inline search box was removed.
+    expect(screen.getByTitle('夜')).toBeInTheDocument();
   });
 
   it('sets page based on route in useEffect', () => {

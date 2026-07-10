@@ -201,6 +201,15 @@ h1, h2, h3 {
    ═══════════════════════════════════════════════════════ */
 
 .btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
+
+/* Row hover surfaces — token-driven so light/dark stay consistent.
+   --bg-input is a hex token, so reference it directly (no hsl() wrapper);
+   --risk-danger is an HSL triplet, so it is wrapped in hsl(). */
+.hover-surface { transition: background-color 0.15s ease; }
+.hover-surface:hover { background: var(--bg-input); }
+.hover-danger { transition: color 0.15s ease, background-color 0.15s ease; }
+.hover-danger:hover { color: hsl(var(--risk-danger)); background: hsl(var(--risk-danger) / 0.1); }
+
 .progress-bar-track { height: 4px; background: var(--border-subtle); overflow: hidden; border-radius: 0; }
 .progress-bar-fill { height: 100%; transition: width 0.6s ease-out; }
 

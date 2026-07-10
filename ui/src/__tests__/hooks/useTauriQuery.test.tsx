@@ -8,6 +8,7 @@ import {
   useStockHistory,
   useDeepSeekConfig,
   useWsRealtimeQuote,
+  useSearchStocks,
 } from '@/hooks/useTauriQuery';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -109,5 +110,31 @@ describe('useTauriQuery', () => {
     await waitFor(() => expect(unlisten).toHaveBeenCalledTimes(1));
 
     listenMock.mockReset();
+  });
+
+  it('useSearchStocks passes the query to invoke and returns results', async () => {
+    const mockResults = [
+      { id: '600519.SH', ticker: '600519', name: '贵州茅台', exchange: 'SSE', currency: 'CNY', stock_type: 'stock' },
+    ];
+    invokeMock.mockResolvedValue(mockResults);
+
+    const { result } = renderHook(() => useSearchStocks('茅台'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(mockResults);
+    expect(invokeMock).toHaveBeenCalledWith('search_stocks', { query: '茅台' });
+  });
+
+  it('useSearchStocks is disabled for an empty query (no invoke)', () => {
+    const { result } = renderHook(() => useSearchStocks(''), { wrapper });
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it('useSearchStocks surfaces backend errors', async () => {
+    invokeMock.mockRejectedValue(new Error('search failed'));
+
+    const { result } = renderHook(() => useSearchStocks('zzz'), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('search failed');
   });
 });

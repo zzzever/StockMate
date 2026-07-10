@@ -158,4 +158,116 @@ mod tests {
         let sig = generate_strategy("TEST", "trend", &[], &[], &dummy_sr());
         assert_eq!(sig.action, SignalAction::Hold);
     }
+
+    #[test]
+    fn death_cross_sell() {
+        let quotes = vec![
+            make_quote(1, "100", 1000),
+            make_quote(2, "100", 1000),
+        ];
+        let mas = vec![
+            make_ma(1, Some("105"), Some("100")),  // prev: ma5 > ma10
+            make_ma(2, Some("95"), Some("100")),   // last: ma5 < ma10 -> death cross
+        ];
+        let sr = dummy_sr();
+        let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
+        assert_eq!(sig.action, SignalAction::Sell);
+        assert!((sig.confidence - 0.68).abs() < 1e-6);
+        assert!(sig.reason.contains("死叉"));
+    }
+
+    #[test]
+    fn no_cross_hold() {
+        // Both MAs exist but no cross (ma5 stays below ma10)
+        let quotes = vec![
+            make_quote(1, "100", 1000),
+            make_quote(2, "100", 1000),
+        ];
+        let mas = vec![
+            make_ma(1, Some("90"), Some("100")),
+            make_ma(2, Some("95"), Some("100")),  // ma5 still below ma10
+        ];
+        let sr = dummy_sr();
+        let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
+        assert_eq!(sig.action, SignalAction::Hold);
+        assert!(!sig.reason.contains("金叉") && !sig.reason.contains("死叉"));
+    }
+
+    #[test]
+    fn golden_cross_with_volume() {
+        // Golden cross + volume surge 1.5x -> confidence increases to 0.77
+        let quotes = vec![
+            make_quote(1, "100", 1000),
+            make_quote(2, "105", 2000),  // volume 2000 > 1000 * 1.5 = 1500
+        ];
+        let mas = vec![
+            make_ma(1, Some("95"), Some("100")),
+            make_ma(2, Some("105"), Some("100")),  // golden cross
+        ];
+        let sr = dummy_sr();
+        let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
+        assert_eq!(sig.action, SignalAction::Buy);
+        assert!((sig.confidence - 0.77).abs() < 1e-6);
+        // Should have both MA and volume signals
+        assert!(sig.ma_signals.iter().any(|s| s.contains("MA5")));
+        assert!(sig.ma_signals.iter().any(|s| s.contains("放大")));
+    }
+
+    #[test]
+    fn single_ma_no_cross() {
+        // Only one MA entry, prev = last.clone(), no cross possible -> Hold
+        let quotes = vec![
+            make_quote(1, "100", 1000),
+            make_quote(2, "100", 1000),
+        ];
+        let mas = vec![
+            make_ma(1, Some("100"), Some("100")),
+        ];
+        let sr = dummy_sr();
+        let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
+        assert_eq!(sig.action, SignalAction::Hold);
+        assert_eq!(sig.confidence, 0.5);
+    }
+
+    #[test]
+    fn ma5_none_hold() {
+        // ma5 is None -> outer if-let fails -> Hold, no panic
+        let quotes = vec![
+            make_quote(1, "100", 1000),
+            make_quote(2, "100", 1000),
+        ];
+        let mas = vec![
+            make_ma(1, None, Some("100")),
+            make_ma(2, None, Some("100")),
+        ];
+        let sr = dummy_sr();
+        let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
+        assert_eq!(sig.action, SignalAction::Hold);
+        assert_eq!(sig.confidence, 0.5);
+    }
+
+    #[test]
+    fn stop_loss_calculation() {
+        // On golden cross with nearest_support=90, stop_loss = 90 * 0.98 = 88.2
+        let quotes = vec![
+            make_quote(1, "100", 1000),
+            make_quote(2, "105", 1000),
+        ];
+        let mas = vec![
+            make_ma(1, Some("95"), Some("100")),
+            make_ma(2, Some("105"), Some("100")), // golden cross
+        ];
+        let sr = SupportResistance {
+            stock_id: "TEST".into(),
+            supports: vec![Decimal::from(90u64)],
+            resistances: vec![Decimal::from(110u64)],
+            nearest_support: Some(Decimal::from(90u64)),
+            nearest_resistance: Some(Decimal::from(110u64)),
+        };
+        let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
+        assert_eq!(sig.action, SignalAction::Buy);
+        let expected_stop = Decimal::from(90u64) * Decimal::from(98u64) / Decimal::from(100u64);
+        assert_eq!(sig.stop_loss, Some(expected_stop));
+        assert!(sig.entry_price.is_some());
+    }
 }

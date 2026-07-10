@@ -8,6 +8,8 @@ import { invoke } from '@tauri-apps/api/core';
 vi.mock('@/hooks/useTauriQuery', () => ({
   useDeepSeekConfig: vi.fn(),
   useDiagnoseDataSources: () => ({ data: null, isLoading: false, error: null }),
+  useWatchlist: () => ({ data: [], isLoading: false, error: null }),
+  useStockList: () => ({ data: [], isLoading: false, error: null }),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -18,6 +20,7 @@ vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
   },
+  AnimatePresence: ({ children }: any) => <>{children}</>,
 }));
 
 describe('SettingsPage', () => {

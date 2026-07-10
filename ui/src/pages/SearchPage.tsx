@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2, Star } from 'lucide-react';
-import { useSearchStocks, useWatchlistAdd, useWatchlistCheck } from '@/hooks/useTauriQuery';
+import { useSearchStocks, useWatchlistAdd } from '@/hooks/useTauriQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Stock } from '@/types';
 
@@ -37,11 +37,21 @@ function removeFromHistory(id: string) {
 }
 
 // ─── Helpers ───
+// Semantic type badge — ETF uses the accent (blue) token, stock uses a neutral
+// surface. Colors come from the design-system CSS variables, not hardcoded hues.
 function getTypeBadge(stockType: string) {
   if (stockType === 'etf') {
-    return { label: 'ETF', bg: 'bg-amber-100 dark:bg-amber-500/20', text: 'text-amber-700 dark:text-amber-400', icon: Landmark };
+    return {
+      label: 'ETF',
+      icon: Landmark,
+      style: { background: 'hsl(var(--swiss-accent) / 0.12)', color: 'hsl(var(--swiss-accent))' },
+    };
   }
-  return { label: '股票', bg: 'bg-violet-100 dark:bg-violet-500/20', text: 'text-violet-700 dark:text-violet-400', icon: TrendingUp };
+  return {
+    label: '股票',
+    icon: TrendingUp,
+    style: { background: 'var(--bg-input)', color: 'hsl(var(--text-secondary))' },
+  };
 }
 
 function getExchangeLabel(exchange: string) {
@@ -68,7 +78,7 @@ export default function SearchPage() {
 
   const { data: results, isLoading, error } = useSearchStocks(debouncedQuery);
 
-  // Auto-focus on mount
+  // Auto-focus on mount — mount-only side effect, intentionally runs once.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -120,6 +130,9 @@ export default function SearchPage() {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['watchlist'] });
         },
+        onError: (err) => {
+          console.warn('[SearchPage] 加入自选失败:', stock.ticker, err);
+        },
       });
     },
     [addWatchlistMutation, queryClient],
@@ -149,15 +162,15 @@ export default function SearchPage() {
 
       {/* Search Box */}
       <div className="w-full max-w-xl relative mb-8">
-        <div className="relative rounded-xl" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-default))' }}>
+        <div className="relative" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-default))', borderRadius: 'var(--radius-md)' }}>
           <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: 'hsl(var(--text-tertiary))' }} />
           <input ref={inputRef} type="text" value={query}
             onChange={(e) => setQuery(e.target.value)} onKeyDown={handleKeyDown}
             onFocus={() => setShowResults(true)}
             onBlur={() => setTimeout(() => setShowResults(false), 200)}
             placeholder="輸入代碼或名稱…"
-            className="w-full h-14 pl-12 pr-12 bg-transparent text-lg outline-none font-medium rounded-xl"
-            style={{ color: 'hsl(var(--text-primary))' }}
+            className="w-full h-14 pl-12 pr-12 bg-transparent text-lg outline-none font-medium"
+            style={{ color: 'hsl(var(--text-primary))', borderRadius: 'var(--radius-md)' }}
             aria-label="搜索股票或ETF"
           />
           {query && (
@@ -178,7 +191,13 @@ export default function SearchPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="p-4 text-red-500 border border-red-300 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20"
+              className="p-4"
+              style={{
+                color: 'hsl(var(--risk-danger))',
+                border: '1px solid hsl(var(--risk-danger) / 0.4)',
+                background: 'hsl(var(--risk-danger) / 0.08)',
+                borderRadius: 'var(--radius-lg)',
+              }}
             >
               搜索失败: {error.message}
             </motion.div>
@@ -234,36 +253,42 @@ export default function SearchPage() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.03 }}
                     onClick={() => handleSelect(stock)}
-                    className="w-full flex items-center gap-4 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors text-left group"
+                    className="hover-surface w-full flex items-center gap-4 p-3 text-left group"
+                    style={{ borderRadius: 'var(--radius-lg)' }}
                   >
                     {/* Type icon */}
                     <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${badge.bg}`}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center"
+                      style={{ ...badge.style, borderRadius: 'var(--radius-md)' }}
                     >
-                      <BadgeIcon size={18} className={badge.text} />
+                      <BadgeIcon size={18} />
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-black dark:text-white truncate">
+                        <span className="text-sm font-semibold truncate" style={{ color: 'hsl(var(--text-primary))' }}>
                           {stock.name}
                         </span>
                         <span
-                          className={`text-xs px-1.5 py-0.5 rounded font-medium ${badge.bg} ${badge.text}`}
+                          className="text-xs px-1.5 py-0.5 font-medium"
+                          style={{ ...badge.style, borderRadius: 'var(--radius-xs)' }}
                         >
                           {badge.label}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs font-mono text-gray-700 dark:text-gray-400">
+                        <span className="text-xs font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
                           {stock.ticker}
                         </span>
-                        <span className="text-xs text-gray-600 dark:text-gray-500 bg-gray-100 dark:bg-white/5 px-1 rounded">
+                        <span
+                          className="text-xs px-1"
+                          style={{ color: 'hsl(var(--text-tertiary))', background: 'var(--bg-input)', borderRadius: 'var(--radius-xs)' }}
+                        >
                           {getExchangeLabel(stock.exchange)}
                         </span>
                         {stock.sector && (
-                          <span className="text-xs text-gray-600 dark:text-gray-500 truncate">
+                          <span className="text-xs truncate" style={{ color: 'hsl(var(--text-tertiary))' }}>
                             {stock.sector}
                           </span>
                         )}
@@ -272,17 +297,15 @@ export default function SearchPage() {
 
                     <button
                       onClick={(e) => handleAddToWatchlist(e, stock)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/15 text-amber-500 hover:bg-amber-200 dark:hover:bg-amber-500/25 transition-colors"
+                      className="hover-surface flex h-8 w-8 shrink-0 items-center justify-center"
+                      style={{ color: 'hsl(var(--text-tertiary))', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}
                       title="加入自选"
                       aria-label={`加入自选 ${stock.name}`}
                     >
                       <Star size={14} />
                     </button>
 
-                    <ChevronRight
-                      size={18}
-                      className="text-gray-400 group-hover:text-violet-500 transition-colors shrink-0"
-                    />
+                    <ChevronRight size={18} className="shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} />
                   </motion.button>
                 );
               })}
@@ -300,8 +323,8 @@ export default function SearchPage() {
                 </p>
                 <button
                   onClick={() => { localStorage.removeItem(HISTORY_KEY); setHistory([]); }}
-                  className="text-xs font-medium hover:text-red-700 transition-colors flex items-center gap-1"
-                  style={{ color: 'hsl(var(--text-tertiary))' }}
+                  className="hover-danger text-xs font-medium transition-colors flex items-center gap-1 px-1.5 py-0.5"
+                  style={{ color: 'hsl(var(--text-tertiary))', borderRadius: 'var(--radius-xs)' }}
                 >
                   <Trash2 size={12} /> 清空
                 </button>
@@ -314,21 +337,29 @@ export default function SearchPage() {
                 <div
                   key={item.id}
                   onClick={() => handleHistorySelect(item)}
-                  className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/[0.07] transition-colors cursor-pointer group"
+                  className="hover-surface w-full flex items-center gap-3 p-2.5 cursor-pointer group"
+                  style={{ borderRadius: 'var(--radius-lg)' }}
                 >
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${badge.bg}`}>
-                    <BadgeIcon size={14} className={badge.text} />
+                  <div
+                    className="flex h-8 w-8 shrink-0 items-center justify-center"
+                    style={{ ...badge.style, borderRadius: 'var(--radius-md)' }}
+                  >
+                    <BadgeIcon size={14} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-sm text-black dark:text-white">{item.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 font-mono">{item.ticker}</span>
+                    <span className="text-sm" style={{ color: 'hsl(var(--text-primary))' }}>{item.name}</span>
+                    <span className="text-xs ml-2 font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>{item.ticker}</span>
                   </div>
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${badge.bg} ${badge.text}`}>
+                  <span
+                    className="text-xs px-1.5 py-0.5 font-medium"
+                    style={{ ...badge.style, borderRadius: 'var(--radius-xs)' }}
+                  >
                     {badge.label}
                   </span>
                   <button
                     onClick={(e) => handleRemoveHistory(e, item.id)}
-                    className="p-1 rounded text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
+                    className="hover-danger p-1 transition-colors opacity-0 group-hover:opacity-100"
+                    style={{ color: 'hsl(var(--text-tertiary))', borderRadius: 'var(--radius-xs)' }}
                     aria-label={`删除 ${item.name}`}
                   >
                     <X size={14} />

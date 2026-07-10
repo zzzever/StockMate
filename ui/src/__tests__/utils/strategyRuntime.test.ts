@@ -153,3 +153,66 @@ RULE "坏规则"  SIGNAL BUY  WHEN close(i +  NOTE "parse error"
     expect(hits.some((h) => h.ruleName === '好规则')).toBe(true);
   });
 });
+
+// ── green_fat / red_fat — volume-price correlation ──
+// 中国股市：红=涨(阳线, close>open), 绿=跌(阴线, close<open)
+// green_fat = 绿肥红瘦 = 跌放量 ∨ 涨缩量 → bearish
+// red_fat   = 绿瘦红肥 = 涨放量 ∨ 跌缩量 → bullish
+
+describe('strategyRuntime — green_fat / red_fat', () => {
+  it('green_fat counts down+vol_up and up+vol_down bars (绿肥红瘦, bearish)', () => {
+    const data: KlineItem[] = [
+      bar('d0', 10, 11, 9, 11, 100),   // up(红), j=0 skipped
+      bar('d1', 11, 12, 10, 12, 200),   // up(红)+vol_up → red_fat, NOT green_fat
+      bar('d2', 12, 11, 9, 10, 80),     // down(绿)+vol_down → red_fat, NOT green_fat
+      bar('d3', 10, 11, 9, 11, 60),     // up(红)+vol_down → green_fat ✓
+      bar('d4', 11, 12, 10, 10, 200),   // down(绿)+vol_up → green_fat ✓
+    ];
+    // green_fat(4,3) = j=0..3 → j=1:✗, j=2:✗, j=3:up+vol_down ✓ → 1, <2
+    // green_fat(4,4) = j=1..4 → j=1:✗, j=2:✗, j=3:✓, j=4:down+vol_up ✓ → 2, >=2 ✓
+    const hits = runStrategyCode('green_fat(4, i) >= 2', data);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].index).toBe(4);
+  });
+
+  it('red_fat counts up+vol_up and down+vol_down bars (绿瘦红肥, bullish)', () => {
+    const data: KlineItem[] = [
+      bar('d0', 10, 11, 9, 11, 100),   // j=0 skipped
+      bar('d1', 11, 12, 10, 12, 200),   // up(红)+vol_up → red_fat ✓
+      bar('d2', 12, 11, 9, 10, 80),     // down(绿)+vol_down → red_fat ✓
+      bar('d3', 10, 11, 9, 11, 60),     // up(红)+vol_down → green_fat
+      bar('d4', 11, 12, 10, 10, 200),   // down(绿)+vol_up → green_fat
+    ];
+    // red_fat(4,3) = j=0..3 → j=1:✓, j=2:✓, j=3:✗ → 2, >=2 ✓ at bar 3
+    // red_fat(4,4) = j=1..4 → j=1:✓, j=2:✓, j=3:✗, j=4:✗ → 2, >=2 ✓ at bar 4
+    const hits = runStrategyCode('red_fat(4, i) >= 2', data);
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+    expect(hits.some((h) => h.index === 3)).toBe(true);
+    expect(hits.some((h) => h.index === 4)).toBe(true);
+  });
+
+  it('green_fat returns 0 when n<=0 or out of range', () => {
+    const data: KlineItem[] = [
+      bar('d0', 10, 11, 9, 11, 100),
+      bar('d1', 11, 12, 10, 12, 200),
+    ];
+    expect(runStrategyCode('green_fat(0, i) > 0', data)).toEqual([]);
+    expect(runStrategyCode('green_fat(3, 100)', data)).toEqual([]);
+  });
+
+  it('绿肥红瘦 SSLang rule block with SELL signal', () => {
+    const data: KlineItem[] = [
+      bar('d0', 10, 11, 9, 11, 100),   // up(红), j=0 base
+      bar('d1', 11, 12, 10, 12, 200),   // up(红)+vol_up → red_fat
+      bar('d2', 11, 11, 9, 10, 80),     // down(绿)+vol_down → red_fat
+      bar('d3', 9, 10, 8, 9.5, 60),     // up(红)+vol_down → green_fat ✓
+      bar('d4', 9.5, 10, 8.5, 9, 200),  // down(绿)+vol_up → green_fat ✓
+      bar('d5', 9, 10, 8, 9.5, 50),     // up(红)+vol_down → green_fat ✓
+      bar('d6', 9.5, 10, 8.5, 9, 300),  // down(绿)+vol_up → green_fat ✓
+    ];
+    // green_fat(5,6) = j=2..6 → d2:✗, d3:✓, d4:✓, d5:✓, d6:✓ → 4 >= 3 → hits
+    const src = 'RULE "绿肥红瘦"  SIGNAL SELL  WHEN green_fat(5, i) >= 3  NOTE "量价背离"';
+    const hits = runSSLang(src, data as any);
+    expect(hits.some((h) => h.ruleName === '绿肥红瘦' && h.signal === 'sell')).toBe(true);
+  });
+});

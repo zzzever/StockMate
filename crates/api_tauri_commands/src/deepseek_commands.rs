@@ -452,12 +452,18 @@ pub async fn generate_strategy_with_ai(
 #[tauri::command]
 pub async fn execute_strategy(
     stock_id: String,
-    _params: serde_json::Value,
-    _state: State<'_, AppState>,
+    params: serde_json::Value,
+    state: State<'_, AppState>,
 ) -> Result<domain::StrategySignal, ApiError> {
-    // TODO: 实际策略执行逻辑（解析 params 并运行回测/模拟）
-    // 目前返回 mock 信号
-    Ok(data_fetcher::mock_strategy_signal(&stock_id, "ai_generated"))
+    // Extract strategy type from AI params, default to "trend"
+    let strategy_type = params
+        .get("strategy_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("trend");
+    let history = state.data_service.get_stock_history(&stock_id, 60, "day").await?;
+    let mas = screener::ma::calculate_ma(&history);
+    let sr = screener::support_resistance::calculate_sr(&history, &stock_id, 30);
+    Ok(screener::strategy::generate_strategy(&stock_id, strategy_type, &history, &mas, &sr))
 }
 
 // ============================================================
@@ -851,6 +857,7 @@ mod tests {
         let quote = Quote {
             stock_id: "stock_001".into(),
             date: NaiveDate::from_ymd_opt(2024, 6, 15).unwrap(),
+            time: String::new(),
             open: Decimal::new(15000, 2),
             high: Decimal::new(15500, 2),
             low: Decimal::new(14800, 2),

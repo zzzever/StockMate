@@ -1,14 +1,15 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
 import type { TradingRule } from '@/types';
 import InlineAiParsePanel from '@/components/InlineAiParsePanel';
 import CodeViewerModal from '@/components/CodeViewerModal';
+import SSLangEditor from '@/components/SSLangEditor';
 import { ruleSignalLabel } from '@/lib/signalLabels';
 import { backtestRule, type RuleBacktest } from '@/utils/ruleBacktest';
 import { useAppStore } from '@/store/useAppStore';
 import { useStockHistory } from '@/hooks/useTauriQuery';
-import { validateStrategyCode } from '@/utils/strategyRuntime';
+import { Code, FileCode, Plus, X, Check, Pencil } from 'lucide-react';
 
 const STORAGE_KEY_RULES = 'stockmate_trading_rules_v2';
 
@@ -17,11 +18,10 @@ function loadRules(): TradingRule[] {
 }
 function saveRules(rules: TradingRule[]) { try { localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(rules)); window.dispatchEvent(new Event('stockmate:rules-changed')); } catch (e) { console.warn('Failed to save rules:', e); } }
 
-/** Compact per-rule backtest badge: hit count + win-rate, with a low-sample warning.
- *  If stat is `undefined` it means no bars (no stock selected) — show nothing, not "命中 0". */
+/** Compact per-rule backtest badge: hit count + win-rate, with a low-sample warning. */
 function BacktestBadge({ stat }: { stat: RuleBacktest | undefined }) {
   if (!stat) return null;
-  if (stat.sample === 0 && stat.signals === 0) return null; // no data available — hide
+  if (stat.sample === 0 && stat.signals === 0) return null;
   if (stat.signals === 0) return <span className="text-[10px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>命中 0</span>;
   const low = stat.sample < 20;
   const wr = stat.winRate != null ? `${(stat.winRate * 100).toFixed(0)}%` : '--';
@@ -33,8 +33,125 @@ function BacktestBadge({ stat }: { stat: RuleBacktest | undefined }) {
   );
 }
 
+// ── Inline Code Editor Modal ──
+function CodeRuleEditor({ rule, onSave, onClose }: {
+  rule: { name: string; code: string; signal: string; explanation?: string } | null;
+  onSave: (name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(rule?.name ?? '');
+  const [code, setCode] = useState(rule?.code ?? '');
+  const [signal, setSignal] = useState<'buy' | 'sell' | 'alert'>((rule?.signal as any) ?? 'buy');
+  const [explanation, setExplanation] = useState(rule?.explanation ?? '');
+  const [valid, setValid] = useState(true);
+
+  const handleSave = () => {
+    if (!name.trim() || !code.trim()) return;
+    onSave(name.trim(), code, signal, explanation.trim());
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      className="rounded-lg overflow-hidden border mb-4"
+      style={{ borderColor: 'hsl(var(--border-default))', background: 'hsl(var(--bg-card))' }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
+        <div className="flex items-center gap-2">
+          <FileCode size={14} className="text-violet-400" />
+          <span className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
+            {rule ? '编辑代码规则' : '新建代码规则'}
+          </span>
+        </div>
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/10 transition-colors" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Form */}
+      <div className="p-4 space-y-3">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>规则名称</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="输入规则名称..."
+              className="w-full px-3 py-1.5 text-sm rounded border outline-none"
+              style={{ background: 'hsl(var(--bg-canvas))', borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-primary))' }}
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>信号类型</label>
+            <select
+              value={signal}
+              onChange={(e) => setSignal(e.target.value as any)}
+              className="px-3 py-1.5 text-sm rounded border outline-none"
+              style={{ background: 'hsl(var(--bg-canvas))', borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-primary))' }}
+            >
+              <option value="buy">看多 (BUY)</option>
+              <option value="sell">看空 (SELL)</option>
+              <option value="alert">关注 (ALERT)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>SSLang 代码</label>
+          <SSLangEditor
+            value={code}
+            onChange={setCode}
+            onValidate={setValid}
+            minHeight="180px"
+            maxHeight="350px"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>策略说明（可选）</label>
+          <input
+            type="text"
+            value={explanation}
+            onChange={(e) => setExplanation(e.target.value)}
+            placeholder="用自然语言描述策略逻辑..."
+            className="w-full px-3 py-1.5 text-sm rounded border outline-none"
+            style={{ background: 'hsl(var(--bg-canvas))', borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-primary))' }}
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs rounded border transition-colors"
+            style={{ borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-secondary))' }}
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!name.trim() || !code.trim() || !valid}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded border transition-colors disabled:opacity-40"
+            style={{ borderColor: 'hsl(var(--price-up) / 0.3)', color: 'hsl(var(--price-up))' }}
+          >
+            <Check size={12} />
+            保存规则
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── K线标记规则列表 (with edit/delete/toggle/batch/backtest) ──
-function RuleList({ onViewCode, bars, statStockName }: { onViewCode: (r: TradingRule) => void; bars: any[]; statStockName?: string }) {
+function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
+  onViewCode: (r: TradingRule) => void;
+  onEditRule: (r: TradingRule) => void;
+  bars: any[]; statStockName?: string;
+}) {
   const [rules, setRules] = useState<TradingRule[]>(loadRules);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -72,8 +189,7 @@ function RuleList({ onViewCode, bars, statStockName }: { onViewCode: (r: Trading
       try {
         const parsed = JSON.parse(String(reader.result));
         if (!Array.isArray(parsed)) { alert('文件格式不正确：应为规则数组'); return; }
-        const valid = parsed.filter((r: any) => r && typeof r.name === 'string' && (Array.isArray(r.conditions) || typeof r.code === 'string'))
-          .filter((r: any) => !r.code || typeof r.code !== 'string' || validateStrategyCode(r.code).valid);
+        const valid = parsed.filter((r: any) => r && typeof r.name === 'string' && (Array.isArray(r.conditions) || typeof r.code === 'string'));
         if (!valid.length) { alert('未在文件中找到有效规则'); return; }
         const base = rules.length;
         const imported: TradingRule[] = valid.map((r: any, i: number) => ({ ...r, id: 'imp_' + Date.now().toString(36) + '_' + i, enabled: r.enabled ?? true, markerIndex: base + i + 1, color: ruleColor(base + i + 1), createdAt: r.createdAt || new Date().toISOString() }));
@@ -120,10 +236,19 @@ function RuleList({ onViewCode, bars, statStockName }: { onViewCode: (r: Trading
               )}
               <span className="flex items-center justify-center w-5 h-5 rounded-full shrink-0 text-[10px] font-bold text-white" style={{ backgroundColor: rule.color, opacity: rule.enabled ? 1 : 0.35 }}>{rule.markerIndex}</span>
               <span className="text-[11px] font-bold truncate" style={{ color: rule.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))' }}>{rule.name}</span>
+              {rule.kind === 'code' && (
+                <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'rgba(197, 134, 192, 0.15)', color: '#c586c0' }}>code</span>
+              )}
               <span className="text-[10px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{ruleSignalLabel(rule.signal)}</span>
               <BacktestBadge stat={stats.get(rule.id)} />
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => onEditRule(rule)} disabled={!rule.code}
+                className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:opacity-70"
+                style={{ color: rule.code ? 'hsl(var(--text-tertiary))' : 'hsl(var(--border-subtle))', border: '1px solid hsl(var(--border-subtle))' }}
+                title={rule.code ? '编辑代码' : '此规则无可编辑的代码'}>
+                <Pencil size={10} className="inline mr-0.5" />编辑
+              </button>
               <button onClick={() => onViewCode(rule)} disabled={!rule.code}
                 className="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed hover:enabled:opacity-70"
                 style={{ color: rule.code ? 'hsl(var(--text-tertiary))' : 'hsl(var(--border-subtle))', border: '1px solid hsl(var(--border-subtle))' }}
@@ -143,31 +268,94 @@ function RuleList({ onViewCode, bars, statStockName }: { onViewCode: (r: Trading
   );
 }
 
+// ── Template category groups ──
+const TEMPLATE_GROUPS = [
+  { name: '均线系统', icon: '📈', ids: ['tpl_ma_golden', 'tpl_ma_death', 'tpl_ma_bullish', 'tpl_ma_bearish', 'tpl_ma_squeeze'] },
+  { name: 'MACD', icon: '📊', ids: ['tpl_macd_golden', 'tpl_macd_zero_cross', 'tpl_macd_bull_div', 'tpl_macd_bear_div'] },
+  { name: 'RSI', icon: '🎯', ids: ['tpl_rsi_oversold', 'tpl_rsi_overbought', 'tpl_rsi_divergence'] },
+  { name: '布林带', icon: '📉', ids: ['tpl_bb_rebound', 'tpl_bb_resistance', 'tpl_bb_squeeze'] },
+  { name: 'K线形态', icon: '🕯️', ids: ['tpl_morning_star', 'tpl_evening_star', 'tpl_three_soldiers'] },
+  { name: '量价关系', icon: '💰', ids: ['tpl_breakout', 'tpl_volume_pullback', 'tpl_volume_climax'] },
+  { name: '多周期', icon: '🔄', ids: ['tpl_weekly_macd_daily_vol', 'tpl_monthly_up_daily_dip'] },
+];
+
 // ── Main Page ──
 export default function RulesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [aiParseAutoOpen, setAiParseAutoOpen] = useState(false);
   const [viewingCodeRule, setViewingCodeRule] = useState<TradingRule | null>(null);
+  const [editingRule, setEditingRule] = useState<TradingRule | null>(null);
+  const [showNewCodeRule, setShowNewCodeRule] = useState(false);
+  const [activeGroup, setActiveGroup] = useState<string>('均线系统');
   const selectedStock = useAppStore(s => s.selectedStock);
   const { data: history } = useStockHistory(selectedStock?.code || '', 250, 'day');
   const bars = useMemo(() => history ?? [], [history]);
 
   const handleRulesAdded = useCallback(() => { setRefreshKey(k => k + 1); setAiParseAutoOpen(false); }, []);
 
+  // Save a new or edited code rule
+  const handleSaveCodeRule = useCallback((name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string) => {
+    const existing = loadRules();
+    if (editingRule) {
+      // Update existing
+      const updated = existing.map(r =>
+        r.id === editingRule.id
+          ? { ...r, name, code, signal, explanation, kind: 'code' as const }
+          : r
+      );
+      saveRules(updated);
+    } else {
+      // Create new
+      const maxIdx = existing.reduce((max: number, r: TradingRule) => Math.max(max, r.markerIndex ?? 0), 0);
+      const newRule: TradingRule = {
+        id: 'code_' + Date.now().toString(36),
+        name,
+        code,
+        signal,
+        explanation,
+        kind: 'code',
+        conditions: [],
+        enabled: true,
+        color: ruleColor(maxIdx + 1),
+        markerIndex: maxIdx + 1,
+        createdAt: new Date().toISOString(),
+      };
+      saveRules([...existing, newRule]);
+    }
+    setEditingRule(null);
+    setShowNewCodeRule(false);
+    setRefreshKey(k => k + 1);
+  }, [editingRule]);
+
+  const handleEditRule = useCallback((rule: TradingRule) => {
+    if (rule.code) {
+      setEditingRule(rule);
+      setShowNewCodeRule(true);
+    }
+  }, []);
+
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: 'easeOut' }}
       className="flex flex-col h-full pt-6 px-8">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>交易规则</h1>
-        <button onClick={() => setAiParseAutoOpen(!aiParseAutoOpen)}
-          className="px-3 py-1.5 text-[11px] font-bold rounded border transition-colors"
-          style={{ color: 'hsl(var(--text-primary))', borderColor: 'hsl(var(--border-default))', background: aiParseAutoOpen ? 'hsl(var(--bg-card))' : 'transparent' }}>
-          ✦ AI 提炼
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowNewCodeRule(true); setEditingRule(null); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors"
+            style={{ color: 'hsl(var(--text-primary))', borderColor: 'hsl(var(--border-default))' }}>
+            <Code size={12} />
+            新建代码规则
+          </button>
+          <button onClick={() => setAiParseAutoOpen(!aiParseAutoOpen)}
+            className="px-3 py-1.5 text-[11px] font-bold rounded border transition-colors"
+            style={{ color: 'hsl(var(--text-primary))', borderColor: 'hsl(var(--border-default))', background: aiParseAutoOpen ? 'hsl(var(--bg-card))' : 'transparent' }}>
+            ✦ AI 提炼
+          </button>
+        </div>
       </div>
-      <p className="text-xs mb-3" style={{ color: 'hsl(var(--text-tertiary))' }}>K线标记规则 · 统一管理技术信号</p>
+      <p className="text-xs mb-3" style={{ color: 'hsl(var(--text-tertiary))' }}>K线标记规则 · 统一管理技术信号 · 支持 SSLang 策略代码</p>
 
-      {/* Permanent risk / compliance notice — rules & markers are for research only */}
+      {/* Permanent risk / compliance notice */}
       <div className="mb-4 rounded-lg px-3 py-2 text-[11px] leading-relaxed shrink-0" style={{ background: 'hsl(var(--price-up) / 0.06)', border: '1px solid hsl(var(--price-up) / 0.25)', color: 'hsl(var(--text-secondary))' }}>
         <span className="font-bold" style={{ color: 'hsl(var(--price-up))' }}>风险提示：</span>
         规则与 K 线标记由 AI 根据您的描述生成，仅供学习研究参考，<b>不构成任何投资建议</b>。AI 可能误解您的意图或产生错误，请务必核对规则逻辑；历史命中率基于有限样本，不代表未来收益。投资有风险，决策需谨慎。
@@ -177,36 +365,80 @@ export default function RulesPage() {
         {/* AI Parse Panel (collapsible) */}
         <InlineAiParsePanel stockId={selectedStock?.code || ''} onRulesAdded={handleRulesAdded} autoOpen={aiParseAutoOpen} onVisibilityChange={setAiParseAutoOpen} />
 
+        {/* Inline Code Rule Editor */}
+        <AnimatePresence>
+          {(showNewCodeRule || editingRule) && (
+            <CodeRuleEditor
+              key={editingRule?.id ?? 'new'}
+              rule={editingRule ? { name: editingRule.name, code: editingRule.code ?? '', signal: editingRule.signal, explanation: editingRule.explanation } : null}
+              onSave={handleSaveCodeRule}
+              onClose={() => { setShowNewCodeRule(false); setEditingRule(null); }}
+            />
+          )}
+        </AnimatePresence>
+
         {/* K-line marking rules */}
         <div className="pb-4" style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
           <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'hsl(var(--text-secondary))' }}>K线标记规则</h3>
-          <RuleList key={refreshKey} onViewCode={setViewingCodeRule} bars={bars} statStockName={selectedStock?.name} />
+          <RuleList key={refreshKey} onViewCode={setViewingCodeRule} onEditRule={handleEditRule} bars={bars} statStockName={selectedStock?.name} />
         </div>
 
-        {/* Preset templates */}
+        {/* Preset templates with group tabs */}
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'hsl(var(--text-secondary))' }}>预设模板</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {RULE_TEMPLATES.map((tpl, i) => (
-              <button key={tpl.id} onClick={() => {
-                const existing = loadRules();
-                const maxIdx = existing.reduce((max: number, r: TradingRule) => Math.max(max, r.markerIndex ?? 0), 0);
-                const newRule: TradingRule = { ...tpl, id: 'tpl_' + Date.now() + '_' + i, enabled: true, markerIndex: maxIdx + 1, color: ruleColor(maxIdx + 1), createdAt: new Date().toISOString() };
-                saveRules([...existing, newRule]);
-                setRefreshKey(k => k + 1);
-              }}
-                className="text-left p-3 rounded border transition-colors"
-                style={{ background: 'hsl(var(--bg-card))', borderColor: 'hsl(var(--border-subtle))' }}>
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: tpl.color }} />
-                  <span className="text-[11px] font-bold truncate" style={{ color: 'hsl(var(--text-primary))' }}>{tpl.name}</span>
-                  <span className="text-[10px] ml-auto shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{ruleSignalLabel(tpl.signal)}</span>
-                </div>
-                <div className="text-[10px] mt-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
-                  {tpl.conditions.map(c => `${c.type}(${Object.values(c.params).join(',')})`).join(' + ')}
-                </div>
+
+          {/* Group tabs */}
+          <div className="flex gap-1 mb-3 flex-wrap">
+            {TEMPLATE_GROUPS.map(group => (
+              <button
+                key={group.name}
+                onClick={() => setActiveGroup(group.name)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full transition-colors ${
+                  activeGroup === group.name ? 'bg-white/10' : 'hover:bg-white/5'
+                }`}
+                style={{
+                  color: activeGroup === group.name ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))',
+                  background: activeGroup === group.name ? 'hsl(var(--bg-card))' : 'transparent',
+                  border: '1px solid',
+                  borderColor: activeGroup === group.name ? 'hsl(var(--border-default))' : 'transparent',
+                }}
+              >
+                {group.icon} {group.name}
               </button>
             ))}
+          </div>
+
+          {/* Template cards for active group */}
+          <div className="grid grid-cols-2 gap-2">
+            {TEMPLATE_GROUPS.find(g => g.name === activeGroup)?.ids.map(tplId => {
+              const tpl = RULE_TEMPLATES.find(t => t.id === tplId);
+              if (!tpl) return null;
+              return (
+                <button key={tpl.id} onClick={() => {
+                  const existing = loadRules();
+                  const maxIdx = existing.reduce((max: number, r: TradingRule) => Math.max(max, r.markerIndex ?? 0), 0);
+                  const newRule: TradingRule = { ...tpl, id: 'tpl_' + Date.now() + '_' + tpl.id, enabled: true, markerIndex: maxIdx + 1, color: ruleColor(maxIdx + 1), createdAt: new Date().toISOString() };
+                  saveRules([...existing, newRule]);
+                  setRefreshKey(k => k + 1);
+                }}
+                  className="text-left p-3 rounded border transition-colors hover:brightness-110"
+                  style={{ background: 'hsl(var(--bg-card))', borderColor: 'hsl(var(--border-subtle))' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: tpl.color }} />
+                    <span className="text-[11px] font-bold truncate" style={{ color: 'hsl(var(--text-primary))' }}>{tpl.name}</span>
+                    <span className="text-[10px] ml-auto shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{ruleSignalLabel(tpl.signal)}</span>
+                  </div>
+                  <div className="text-[10px] mt-1 line-clamp-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                    {tpl.kind === 'code' && tpl.code ? tpl.code.replace(/\n/g, ' ').slice(0, 60) + (tpl.code.length > 60 ? '...' : '') : tpl.conditions.map(c => `${c.type}(${Object.values(c.params).join(',')})`).join(' + ')}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Summary: all categories available */}
+          <div className="mt-3 text-[10px] text-center" style={{ color: 'hsl(var(--text-tertiary))' }}>
+            共 {RULE_TEMPLATES.length} 个预设模板 · 点击卡片添加到规则列表
           </div>
         </div>
       </div>

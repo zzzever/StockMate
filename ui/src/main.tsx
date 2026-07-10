@@ -17,6 +17,14 @@ if (darkMode) {
   document.documentElement.style.colorScheme = 'light'
 }
 
+// Global unhandled promise rejection handler
+window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+  console.warn('[unhandledrejection]', { reason: event.reason, message: event.reason instanceof Error ? event.reason.message : String(event.reason) });
+  // Prevent the default browser console error from showing in production
+  // while still capturing the error for debugging.
+  event.preventDefault();
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -295,7 +295,7 @@ mod tests {
         let quotes: Vec<Quote> = (1..=25).map(|d| make_quote(d, &format!("{}", 100 + d))).collect();
         let pred = predict_trend("TEST", "ma", &quotes);
         assert_eq!(pred.direction, TrendDirection::Up);
-        assert!(pred.confidence > 0.0);
+        assert!((pred.confidence - 0.65).abs() < 0.01);
     }
 
     #[test]
@@ -310,5 +310,56 @@ mod tests {
         let quotes = vec![make_quote(1, "100")];
         let pred = predict_trend("TEST", "unknown", &quotes);
         assert_eq!(pred.confidence, 0.0);
+    }
+
+    #[test]
+    fn bollinger_near_upper_band() {
+        // 20 bars: first 10 at 98, next 10 at 102 → sma=100, stddev=2
+        // upper_band = 100 + 2*2 = 104, lower_band = 100 - 2*2 = 96
+        // last = 102 >= 104*0.98 = 101.92 → near upper → Down
+        // near_lower: 102 <= 96*1.02 = 97.92? false → only upper triggered
+        let quotes: Vec<Quote> = (0..20)
+            .map(|i| {
+                let d = (i + 1) as u32;
+                let price = if i < 10 { 98 } else { 102 };
+                make_quote(d, &price.to_string())
+            })
+            .collect();
+        let pred = predict_trend("TEST", "bollinger", &quotes);
+        assert_eq!(pred.direction, TrendDirection::Down);
+        assert!((pred.confidence - 0.40).abs() < 0.01);
+        assert!(pred.suggestion.contains("布林带"));
+    }
+
+    #[test]
+    fn macd_golden_cross() {
+        // 50 bars: flat at 100 for first 30, then rise by 5 each bar to 200
+        // Enough data for EMA(26) + 9-period signal (35 needed), and the sharp rise
+        // after flat period creates a clear MACD golden cross (MACD > signal)
+        let quotes: Vec<Quote> = (0..50)
+            .map(|i| {
+                let d = (i + 1) as u32;
+                let price = if i < 30 { 100 } else { 100 + (i - 29) * 5 };
+                make_quote(d, &price.to_string())
+            })
+            .collect();
+        let pred = predict_trend("TEST", "macd", &quotes);
+        assert_eq!(pred.direction, TrendDirection::Up);
+        assert!((pred.confidence - 0.55).abs() < 0.01);
+    }
+
+    #[test]
+    fn rsi_oversold() {
+        // 20 bars with consecutive drops -> RSI ≈ 0 (< 30) -> Up (oversold bounce)
+        let quotes: Vec<Quote> = (0..20)
+            .map(|i| {
+                let d = (i + 1) as u32;
+                let price = 100 - i * 3; // drops from 100 to 43
+                make_quote(d, &price.to_string())
+            })
+            .collect();
+        let pred = predict_trend("TEST", "rsi", &quotes);
+        assert_eq!(pred.direction, TrendDirection::Up);
+        assert!((pred.confidence - 0.35).abs() < 0.01);
     }
 }

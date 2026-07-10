@@ -205,11 +205,46 @@ export function ruleColor(index: number): string {
   return `hsl(${hue.toFixed(0)}, 80%, 45%)`;
 }
 
-// ── Preset templates ──
+// ── Preset templates (20+) ──
+// New templates use SSLang code (kind: 'code') for richer expressions via the sandboxed runtime.
+// Legacy condition-based templates remain for backward compatibility.
 export const RULE_TEMPLATES: TradingRule[] = [
+  // ── 均线系统 (5) ──
   { id: 'tpl_ma_golden', name: 'MA金叉买入', conditions: [{ type: 'ma_cross', params: { fastPeriod: 5, slowPeriod: 10, direction: 'above' } }], signal: 'buy', enabled: false, color: ruleColor(0), markerIndex: 1, createdAt: '' },
   { id: 'tpl_ma_death', name: 'MA死叉卖出', conditions: [{ type: 'ma_cross', params: { fastPeriod: 5, slowPeriod: 10, direction: 'below' } }], signal: 'sell', enabled: false, color: ruleColor(1), markerIndex: 2, createdAt: '' },
-  { id: 'tpl_rsi_oversold', name: 'RSI超卖买入', conditions: [{ type: 'rsi_threshold', params: { period: 14, threshold: 30, direction: 'below' } }], signal: 'buy', enabled: false, color: ruleColor(2), markerIndex: 3, createdAt: '' },
-  { id: 'tpl_breakout', name: '放量突破前高', conditions: [{ type: 'price_breakout', params: { period: 20, direction: 'above' } }, { type: 'volume_surge', params: { period: 5, multiplier: 1.5 } }], signal: 'buy', enabled: false, color: ruleColor(3), markerIndex: 4, createdAt: '' },
+  { id: 'tpl_ma_bullish', name: 'MA多头排列买入', kind: 'code', code: 'cross(sma(5,i), sma(10,i)) AND sma(5,i) > sma(10,i) AND sma(10,i) > sma(20,i)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(6), markerIndex: 7, createdAt: '', explanation: '短期均线位于中期均线之上，中期均线位于长期均线之上，呈多头排列形态' },
+  { id: 'tpl_ma_bearish', name: 'MA空头排列卖出', kind: 'code', code: 'crossunder(sma(5,i), sma(10,i)) AND sma(5,i) < sma(10,i) AND sma(10,i) < sma(20,i)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(7), markerIndex: 8, createdAt: '', explanation: '短期均线位于中期均线之下，中期均线位于长期均线之下，呈空头排列形态' },
+  { id: 'tpl_ma_squeeze', name: '均线粘合突破', kind: 'code', code: 'sma(5,i) > sma(20,i) AND abs(sma(5,i)-sma(20,i))/sma(20,i)*100 < 3 AND close(i) > highest(20,i-1)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(8), markerIndex: 9, createdAt: '', explanation: '短期与长期均线趋于粘合后向上突破' },
+
+  // ── MACD 系统 (4) ──
   { id: 'tpl_macd_golden', name: 'MACD金叉买入', conditions: [{ type: 'macd_signal', params: { fast: 12, slow: 26, signal: 9, direction: 'above' } }], signal: 'buy', enabled: false, color: ruleColor(4), markerIndex: 5, createdAt: '' },
+  { id: 'tpl_macd_zero_cross', name: 'MACD零轴上方金叉', kind: 'code', code: 'cross(macddiff(i), macddea(i)) AND macddiff(i) > 0 AND macddea(i) > 0', signal: 'buy', conditions: [], enabled: false, color: ruleColor(9), markerIndex: 10, createdAt: '', explanation: 'MACD在零轴上方发生金叉，趋势更强' },
+  { id: 'tpl_macd_bull_div', name: 'MACD底背离买入', kind: 'code', code: 'low(i) < llv(20,i-1) AND macddiff(i) > macddiff(i-1) AND macddiff(i-1) < macddiff(i-2)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(10), markerIndex: 11, createdAt: '', explanation: '价格创新低但MACD未创新低，底背离信号' },
+  { id: 'tpl_macd_bear_div', name: 'MACD顶背离卖出', kind: 'code', code: 'high(i) > hhv(20,i-1) AND macddiff(i) < macddiff(i-1) AND macddiff(i-1) < macddiff(i-2)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(11), markerIndex: 12, createdAt: '', explanation: '价格创新高但MACD未创新高，顶背离信号' },
+
+  // ── RSI 系统 (3) ──
+  { id: 'tpl_rsi_oversold', name: 'RSI超卖买入', conditions: [{ type: 'rsi_threshold', params: { period: 14, threshold: 30, direction: 'below' } }], signal: 'buy', enabled: false, color: ruleColor(2), markerIndex: 3, createdAt: '' },
+  { id: 'tpl_rsi_overbought', name: 'RSI超买回落', kind: 'code', code: 'rsi(14,i) > 70 AND rsi(14,i) < rsi(14,i-1)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(12), markerIndex: 13, createdAt: '', explanation: 'RSI进入超买区后开始回落' },
+  { id: 'tpl_rsi_divergence', name: 'RSI背离', kind: 'code', code: 'close(i) < close(i-1) AND rsi(14,i) > rsi(14,i-1) AND rsi(14,i-1) < 30', signal: 'buy', conditions: [], enabled: false, color: ruleColor(13), markerIndex: 14, createdAt: '', explanation: '价格下跌但RSI走强且处于低位，超卖背离信号' },
+
+  // ── 布林带 (3) ──
+  { id: 'tpl_bb_rebound', name: '布林下轨反弹', kind: 'code', code: 'close(i) <= boll_lower(20,i) AND close(i) > close(i-1)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(14), markerIndex: 15, createdAt: '', explanation: '价格触及布林下轨后反弹' },
+  { id: 'tpl_bb_resistance', name: '布林上轨压力', kind: 'code', code: 'close(i) >= boll_upper(20,i) AND close(i) < close(i-1)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(15), markerIndex: 16, createdAt: '', explanation: '价格触及布林上轨后回落' },
+  { id: 'tpl_bb_squeeze', name: '布林收口突破', kind: 'code', code: 'boll_upper(20,i)-boll_lower(20,i) < boll_upper(20,i-5)-boll_lower(20,i-5) AND close(i) > highest(10,i-1)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(16), markerIndex: 17, createdAt: '', explanation: '布林带收窄后向上突破' },
+
+  // ── K线形态 (3) ──
+  { id: 'tpl_morning_star', name: '晨星反转', kind: 'code', code: 'morning_star(i)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(17), markerIndex: 18, createdAt: '', explanation: '晨星形态（连续下跌后出现十字星，次日大阳线确认）' },
+  { id: 'tpl_evening_star', name: '暮星反转', kind: 'code', code: 'evening_star(i)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(18), markerIndex: 19, createdAt: '', explanation: '暮星形态（连续上涨后出现十字星，次日大阴线确认）' },
+  { id: 'tpl_three_soldiers', name: '红三兵', kind: 'code', code: 'three_soldiers(i)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(19), markerIndex: 20, createdAt: '', explanation: '连续三根大阳线，多头强势攻击信号' },
+
+  // ── 量价关系 (5) ──
+  { id: 'tpl_breakout', name: '放量突破前高', conditions: [{ type: 'price_breakout', params: { period: 20, direction: 'above' } }, { type: 'volume_surge', params: { period: 5, multiplier: 1.5 } }], signal: 'buy', enabled: false, color: ruleColor(3), markerIndex: 4, createdAt: '' },
+  { id: 'tpl_volume_pullback', name: '缩量回调支撑', kind: 'code', code: 'close(i) < close(i-1) AND volume(i) < volume_ma(5,i) AND close(i) > sma(60,i)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(20), markerIndex: 21, createdAt: '', explanation: '缩量回调至长期均线附近获得支撑' },
+  { id: 'tpl_volume_climax', name: '天量天价', kind: 'code', code: 'volume(i) > volume_ma(5,i)*2 AND close(i) > highest(20,i-1) AND volume(i) > volume(i-1)*1.5', signal: 'sell', conditions: [], enabled: false, color: ruleColor(21), markerIndex: 22, createdAt: '', explanation: '成交量创近期天量且价格创新高，可能见顶' },
+  { id: 'tpl_green_fat', name: '绿肥红瘦(量价背离)', kind: 'code', code: 'green_fat(10, i) >= 6', signal: 'sell', conditions: [], enabled: false, color: ruleColor(24), markerIndex: 25, createdAt: '', explanation: '近10日超6日跌放量(绿肥)或涨缩量(红瘦)——量价背离，主力出货迹象' },
+  { id: 'tpl_red_fat', name: '绿瘦红肥(量价配合)', kind: 'code', code: 'red_fat(10, i) >= 6', signal: 'buy', conditions: [], enabled: false, color: ruleColor(25), markerIndex: 26, createdAt: '', explanation: '近10日超6日涨放量(红肥)或跌缩量(绿瘦)——量价配合健康，主力吸筹迹象' },
+
+  // ── 多周期 (2) ──
+  { id: 'tpl_weekly_macd_daily_vol', name: '周线MACD金叉+日线放量', kind: 'code', code: 'tf(cross(macddiff(i), macddea(i)) AND macddiff(i) > macddea(i), "week") AND volume(i) > volume_ma(5,i)*1.3', signal: 'buy', conditions: [], enabled: false, color: ruleColor(22), markerIndex: 23, createdAt: '', explanation: '周线级别MACD金叉，同时日线放量确认' },
+  { id: 'tpl_monthly_up_daily_dip', name: '月线趋势向上+日线回调买入', kind: 'code', code: 'tf(sma(5,i) > sma(20,i), "month") AND close(i) < sma(20,i) AND close(i) > sma(60,i) AND rsi(14,i) < 40', signal: 'buy', conditions: [], enabled: false, color: ruleColor(23), markerIndex: 24, createdAt: '', explanation: '月线级别均线多头，日线回调至均线附近且RSI处于低位' },
 ];

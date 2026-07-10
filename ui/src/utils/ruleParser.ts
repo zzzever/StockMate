@@ -143,6 +143,38 @@ function parseBaseLine(line: string): TradingRule | null {
     return mkRule('跌破前低卖出', [{ type: 'price_breakout', params: { period: 20, direction: 'below' } }], 'sell');
   }
 
+  // 5. 绿肥红瘦 / 绿瘦红肥 — volume-price correlation pattern
+  //    (中国股市：红=涨/阳线, 绿=跌/阴线)
+  //    绿肥红瘦 = 跌放量+涨缩量 → bearish → SELL
+  //    绿瘦红肥 = 跌缩量+涨放量 → bullish → BUY
+  const isGreenFat = /绿肥红瘦|(?:放量下跌|放量跌|阴线放量).*(?:缩量上涨|缩量涨|阳线缩量)|(?:缩量上涨|缩量涨|阳线缩量).*(?:放量下跌|放量跌|阴线放量)/.test(line);
+  const isRedFat = /绿瘦红肥|红肥绿瘦|(?:缩量下跌|缩量跌|阴线缩量).*(?:放量上涨|放量涨|阳线放量)|(?:放量上涨|放量涨|阳线放量).*(?:缩量下跌|缩量跌|阴线缩量)/.test(line);
+  const volPriceCorr = isGreenFat || isRedFat;
+  if (volPriceCorr) {
+    const winSize = numMatch ? parseCount(numMatch[1]) : 10;
+    const threshold = Math.ceil(winSize * 0.6); // 60% of window
+    const fnName = isGreenFat ? 'green_fat' : 'red_fat';
+    const label = isGreenFat ? '绿肥红瘦' : '绿瘦红肥';
+    const desc = isGreenFat
+      ? '跌放量(绿肥)+涨缩量(红瘦)，量价背离，看跌信号'
+      : '涨放量(红肥)+跌缩量(绿瘦)，量价配合健康，看涨信号';
+    const signal: TradingRule['signal'] = isGreenFat ? 'sell' : 'buy';
+    const code = `// ${label}：${desc}\n${fnName}(${winSize}, i) >= ${threshold}`;
+    return {
+      id: `local_${Date.now().toString(36)}_${idCounter++}`,
+      name: `${label}(${winSize}日)`,
+      conditions: [],
+      signal,
+      enabled: true,
+      color: ruleColor(idCounter),
+      markerIndex: idCounter,
+      createdAt: '',
+      kind: 'code',
+      code,
+      explanation: desc,
+    };
+  }
+
   return null;
 }
 
@@ -212,5 +244,5 @@ export function getUnmatchedText(text: string): string {
  * Deliberately excludes parser-handled terms (金叉/死叉/超买/超卖/突破/跌破/连续/缩量/放量/次日).
  */
 export function hasAdvancedConcepts(text: string): boolean {
-  return /趋势|多头|空头|排列|上方|下方|之上|之下|站上|站稳|高于|低于|布林|boll|kdj|cci|atr|obv|量比|乖离|威廉|\bwr\b|锤子|十字|吞没|晨星|暮星|红三兵|乌鸦|跳空|背离|支撑|压力|阻力|回踩|回调|波动率|标准差|能量潮/i.test(text);
+  return /趋势|多头|空头|排列|上方|下方|之上|之下|站上|站稳|高于|低于|布林|boll|kdj|cci|atr|obv|量比|乖离|威廉|\bwr\b|锤子|十字|吞没|晨星|暮星|红三兵|乌鸦|跳空|背离|支撑|压力|阻力|回踩|回调|波动率|标准差|能量潮|绿肥红瘦|绿瘦红肥|红肥绿瘦/i.test(text);
 }

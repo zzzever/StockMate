@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Database, Palette, Trash2, Wifi, Bot, Eye, EyeOff, Save, TestTube, CheckCircle, XCircle, AlertCircle, BarChart3, RefreshCw, Activity } from 'lucide-react';
+import { Database, Palette, Trash2, Wifi, Bot, Eye, EyeOff, Save, TestTube, CheckCircle, XCircle, AlertCircle, BarChart3, RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDeepSeekConfig } from '@/hooks/useTauriQuery';
-import { useDiagnoseDataSources } from '@/hooks/useTauriQuery';
 import { useAppStore } from '@/store/useAppStore';
 import { chartThemes, type ChartStyle } from '@/config/chartThemes';
-import { type DataSourceResult } from '@/types';
+import DataSourceStatus from '@/components/DataSourceStatus';
 
 export default function SettingsPage() {
   const { data: config, isLoading: configLoading, error: configError, refetch } = useDeepSeekConfig();
@@ -199,6 +198,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 mb-4">
             <Wifi size={16} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">数据源配置</h2>
+            <DataSourceStatus compact />
           </div>
           <div className="space-y-2 text-xs font-bold">
             {[
@@ -217,8 +217,9 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
-        {/* Data Source Diagnostic */}
-        <DiagnosticSection />
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-5">
+          <DataSourceStatus />
+        </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -383,153 +384,6 @@ function ChartStyleSelector() {
           )}
         </button>
       ))}
-    </div>
-  );
-}
-
-// ── Data Source Diagnostic Component ──
-function DiagnosticSection() {
-  const {
-    data: results,
-    isLoading,
-    isFetching,
-    error: diagnoseError,
-    refetch,
-    dataUpdatedAt,
-  } = useDiagnoseDataSources();
-
-  // Auto-diagnose on first mount
-  const [hasAutoRun, setHasAutoRun] = useState(false);
-  useEffect(() => {
-    if (!hasAutoRun) {
-      // Run auto-diagnosis with a short delay so UI renders first
-      const timer = setTimeout(() => {
-        refetch();
-        setHasAutoRun(true);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [hasAutoRun, refetch]);
-
-  const lastUpdated = dataUpdatedAt
-    ? new Date(dataUpdatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    : null;
-
-  const okCount = results?.filter((r) => r.status === 'ok').length ?? 0;
-  const totalCount = results?.length ?? 0;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
-      className="glass-card p-5"
-    >
-      <div className="flex items-center gap-2 mb-4">
-        <Activity size={16} className="text-emerald-500" />
-        <h2 className="text-sm font-bold text-slate-900 dark:text-white">数据源诊断</h2>
-        {results && (
-          <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${
-            okCount === totalCount
-              ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-              : okCount > 0
-                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                : 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
-          }`}>
-            {okCount}/{totalCount} 可用
-          </span>
-        )}
-        {lastUpdated && (
-          <span className="text-[10px] text-slate-400 dark:text-zinc-500">上次: {lastUpdated}</span>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        {isLoading || isFetching ? (
-          <div className="flex items-center justify-center py-6">
-            <RefreshCw size={18} className="animate-spin text-slate-400" />
-            <span className="ml-2 text-xs text-slate-400">正在检测各数据源...</span>
-          </div>
-        ) : diagnoseError ? (
-          <div className="flex items-center gap-2 text-xs px-3 py-3 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <XCircle size={14} />
-            诊断失败: {diagnoseError.message}
-          </div>
-        ) : !results ? (
-          <div className="flex items-center justify-between py-2">
-            <span className="text-xs text-slate-400">点击"一键诊断"测试所有数据源</span>
-          </div>
-        ) : (
-          results.map((result, idx) => (
-            <DiagnosticRow key={idx} result={result} />
-          ))
-        )}
-      </div>
-
-      {/* Test all button */}
-      <div className="mt-3 flex gap-3">
-        <button
-          onClick={() => refetch()}
-          disabled={isLoading || isFetching}
-          className="flex items-center gap-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-4 py-2 rounded-lg text-xs text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
-        >
-          <Activity size={12} />
-          {isLoading || isFetching ? '诊断中...' : '一键诊断'}
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-function DiagnosticRow({ result }: { result: DataSourceResult }) {
-  const isOk = result.status === 'ok';
-  const msText = result.response_time_ms < 1000
-    ? `${result.response_time_ms}ms`
-    : `${(result.response_time_ms / 1000).toFixed(1)}s`;
-
-  return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02]">
-      {/* Status dot */}
-      <span className={`relative flex w-2.5 h-2.5 flex-shrink-0 ${isOk ? 'animate-pulse' : ''}`}>
-        <span className={`absolute inline-flex w-full h-full rounded-full opacity-75 ${isOk ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-        <span className={`relative inline-flex w-2.5 h-2.5 rounded-full ${isOk ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-      </span>
-
-      {/* Name */}
-      <span className="text-xs font-medium text-slate-700 dark:text-zinc-300 min-w-[5rem]">
-        {result.name}
-      </span>
-
-      {/* Endpoint */}
-      <span className="text-[10px] text-slate-400 dark:text-zinc-500 flex-1 truncate hidden sm:block" title={result.endpoint}>
-        {result.endpoint}
-      </span>
-
-      {/* Status + Time */}
-      <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-          isOk
-            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-        }`}>
-          {isOk ? 'OK' : 'ERROR'}
-        </span>
-        <span className="text-[10px] tabular-nums text-slate-500 dark:text-zinc-400 min-w-[3rem] text-right">
-          {msText}
-        </span>
-        {isOk ? (
-          <CheckCircle size={12} className="text-emerald-500 flex-shrink-0" />
-        ) : (
-          <XCircle size={12} className="text-rose-500 flex-shrink-0" />
-        )}
-      </div>
-
-      {/* Error detail (expandable) */}
-      {!isOk && result.detail && (
-        <div className="text-[10px] text-rose-400 dark:text-rose-500 mt-1 w-full break-all">
-          {result.detail}
-        </div>
-      )}
     </div>
   );
 }
