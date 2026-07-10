@@ -1,5 +1,6 @@
+node_modules/
+dist/
 target/
-ui/node_modules/
-StockMate.exe
-stockmate.db
-build-release.bat
+*.log
+.DS_Store
+Thumbs.db
