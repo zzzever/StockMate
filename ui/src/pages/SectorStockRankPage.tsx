@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, TrendingUp, TrendingDown, Minus, BarChart3,
-  RefreshCw, Landmark, ArrowUp, ArrowDown, ChevronLeft, ChevronRight,
+  RefreshCw, Landmark, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown,
 } from 'lucide-react';
 import { useSectorStocks } from '@/hooks/useTauriQuery';
 import type { SectorStock } from '@/types';
@@ -12,6 +12,15 @@ type SortField = 'change_percent' | 'volume' | 'turnover_rate' | 'main_fund_flow
 type SortOrder = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
+
+const SECTOR_NAMES = [
+  "半导体","新能源","AI算力","白酒","银行","医药","汽车","保险","证券",
+  "房地产","电力","煤炭","钢铁","石油","化工","通信","计算机","电子",
+  "有色金属","食品饮料","家电","国防军工","锂电池","光伏","5G","云计算",
+  "创新药","医疗器械","农林牧渔","建筑","交通运输","文化传媒","环保",
+  "黄金","风电","新材料","储能","旅游酒店","商贸零售","建材","纺织服装",
+  "机械设备","公用事业","社会服务","CXO","水电","核电",
+];
 
 function formatVolume(value: number): string {
   if (value >= 1e8) return `${(value / 1e8).toFixed(2)}亿`;
@@ -237,7 +246,7 @@ function StockTableRow({
 
 export default function SectorStockRankPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const sector = searchParams.get('sector') || '';
 
   const { data: stocks, isLoading, isError, error } = useSectorStocks(sector);
@@ -344,9 +353,29 @@ export default function SectorStockRankPage() {
             <span>返回板块</span>
           </button>
           <div className="h-6 w-px bg-gray-200 dark:bg-white/10" />
-          <div>
-            <h1 className="text-2xl font-bold text-black dark:text-white">{sector || '板块详情'}</h1>
-            <p className="text-sm text-gray-700 dark:text-gray-500 mt-0.5">板块内股票排名</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-black dark:text-white">{sector || '板块详情'}</h1>
+              <p className="text-sm text-gray-700 dark:text-gray-500 mt-0.5">板块内股票排名</p>
+            </div>
+            {!sector && (
+              <div className="relative">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) navigate(`/sector?sector=${encodeURIComponent(e.target.value)}`);
+                  }}
+                  className="appearance-none pl-3 pr-8 py-2 text-sm rounded-lg border bg-[var(--bg-card)] text-[var(--text-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--swiss-accent))] cursor-pointer"
+                  style={{ backgroundImage: 'none' }}
+                >
+                  <option value="">选择板块...</option>
+                  {SECTOR_NAMES.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
