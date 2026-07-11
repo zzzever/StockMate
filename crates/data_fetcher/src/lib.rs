@@ -469,13 +469,14 @@ impl DataService {
         let mut sectors = self.inner.sector_realtime.read().await.clone().unwrap_or_default();
         sectors.sort_by(|a, b| b.change_percent.partial_cmp(&a.change_percent).unwrap_or(std::cmp::Ordering::Equal));
         sectors.truncate(100);
-        // Fallback: return mock data if cache is empty (offline / fresh start)
+        // Fallback: return all known sectors with basic data (no real-time prices yet)
         if sectors.is_empty() {
-            return Ok(vec![
-                HotSector { name: "半导体".into(), change_percent: 3.45, ..Default::default() },
-                HotSector { name: "新能源".into(), change_percent: 2.80, ..Default::default() },
-                HotSector { name: "人工智能".into(), change_percent: 2.10, ..Default::default() },
-            ]);
+            let all = Self::get_all_sector_stocks();
+            return Ok(all.iter().map(|(name, codes)| HotSector {
+                name: name.to_string(),
+                stock_count: Some(codes.len() as u32),
+                ..Default::default()
+            }).collect());
         }
         Ok(sectors)
     }
