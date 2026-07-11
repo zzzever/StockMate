@@ -1019,7 +1019,7 @@ export default function BacktestPage() {
           <h3 className="text-lg font-bold text-slate-700 dark:text-zinc-300">请先选择股票</h3>
           <p className="text-sm text-slate-500 dark:text-zinc-500">从个股分析页选择股票后进入策略回测</p>
         </div>
-        <button onClick={() => navigate('/sectors')} className="px-5 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/30 text-sm font-medium text-violet-400 hover:bg-violet-500/30 transition-colors">前往选股</button>
+        <button onClick={() => navigate('/sector')} className="px-5 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/30 text-sm font-medium text-violet-400 hover:bg-violet-500/30 transition-colors">前往选股</button>
       </div>
     );
   }
@@ -1051,7 +1051,7 @@ export default function BacktestPage() {
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => navigate(code ? `/stock?code=${code}` : '/sectors')}
+            onClick={() => navigate(code ? `/stock?code=${code}` : '/sector')}
             className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:text-white transition-colors"
           >
             <ArrowLeft size={16} />

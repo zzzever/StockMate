@@ -303,8 +303,8 @@ export default function SectorStockRankPage() {
   }, [sortField, sortOrder]);
 
   const handleBack = useCallback(() => {
-    console.log('[SectorStockRankPage] navigate back to sectors list');
-    navigate('/sectors');
+    console.log('[SectorStockRankPage] navigate back to sector picker');
+    navigate('/sector');
   }, [navigate]);
 
   const handleRowClick = useCallback((stock: SectorStock) => {
