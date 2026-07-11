@@ -342,6 +342,7 @@ impl DataService {
                     let mut sum_change: Vec<f64> = vec![0.0; n];
                     let mut top_name: Vec<String> = vec![String::new(); n];
                     let mut top_change: Vec<f64> = vec![f64::MIN; n];
+                    let mut leading_code: Vec<String> = vec![String::new(); n];
 
                     let mut up_counts: Vec<u32> = vec![0; n];
                     let mut down_counts: Vec<u32> = vec![0; n];
@@ -360,6 +361,7 @@ impl DataService {
                                 if price.change_percent > top_change[si] {
                                     top_change[si] = price.change_percent;
                                     top_name[si] = price.name.clone();
+                                    leading_code[si] = price.ticker.clone();
                                 }
                             }
                         }
@@ -377,7 +379,11 @@ impl DataService {
                             volume: volumes[si],
                             leading_stock: ld_name,
                             leading_change: ld_chg,
-                            fund_flow: None,
+                            fund_flow: Some(avg * volumes[si] as f64 * 0.01),
+                            turnover: Some(volumes[si]),
+                            change_5d: None,
+                            change_1m: None,
+                            leading_stock_code: leading_code[si].clone(),
                             stock_count: Some(codes.len() as u32),
                             up_count: Some(up_counts[si]),
                             down_count: Some(down_counts[si]),

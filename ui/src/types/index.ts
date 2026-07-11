@@ -53,10 +53,14 @@ export interface HotSector {
   volume: number;
   leading_stock: string;
   leading_change: number;
-  fund_flow?: number;
+  fund_flow?: number | null;
   stock_count?: number;
   up_count?: number;
   down_count?: number;
+  turnover?: number | null;         // 成交额
+  change_5d?: number | null;        // 5日涨跌幅
+  change_1m?: number | null;        // 1月涨跌幅
+  leading_stock_code?: string;
 }
 
 export interface SectorStock {
