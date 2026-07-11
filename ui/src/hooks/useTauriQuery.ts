@@ -206,6 +206,9 @@ export function useSectorStocks(sector: string) {
         throw error;
       }
     },
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+    staleTime: 30000,
     enabled: sector.length > 0,
   });
 }

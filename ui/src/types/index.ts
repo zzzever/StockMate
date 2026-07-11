@@ -66,8 +66,8 @@ export interface SectorStock {
   change_percent: number;
   volume: number;
   turnover_rate: number;
-  main_fund_flow: number;
-  five_day_change: number;
+  main_fund_flow: number | null;
+  five_day_change: number | null;
   sector: string;
 }
 

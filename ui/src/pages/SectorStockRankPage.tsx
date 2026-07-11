@@ -197,8 +197,6 @@ function StockTableRow({
   const changePercent = safeNumber(stock.change_percent);
   const volume = safeNumber(stock.volume);
   const turnoverRate = safeNumber(stock.turnover_rate);
-  const mainFundFlow = safeNumber(stock.main_fund_flow);
-  const fiveDayChange = safeNumber(stock.five_day_change);
   const amount = volume * price; // 成交额估算
 
   return (
@@ -223,11 +221,11 @@ function StockTableRow({
       <td className="py-3 px-3 text-right font-mono-nums text-gray-700 dark:text-gray-400">{formatVolume(volume)}</td>
       <td className="py-3 px-3 text-right font-mono-nums text-gray-700 dark:text-gray-400">{formatAmount(amount)}</td>
       <td className="py-3 px-3 text-right font-mono-nums text-gray-700 dark:text-gray-400">{turnoverRate.toFixed(2)}%</td>
-      <td className={`py-3 px-3 text-right font-mono-nums ${getChangeColor(mainFundFlow)}`}>
-        {formatFundFlow(mainFundFlow)}
+      <td className={`py-3 px-3 text-right font-mono-nums ${stock.main_fund_flow != null ? getChangeColor(stock.main_fund_flow) : 'text-gray-400'}`}>
+        {stock.main_fund_flow != null ? formatFundFlow(stock.main_fund_flow) : '--'}
       </td>
-      <td className={`py-3 px-3 text-right font-mono-nums ${getChangeColor(fiveDayChange)}`}>
-        {fiveDayChange > 0 ? '+' : ''}{fiveDayChange.toFixed(2)}%
+      <td className={`py-3 px-3 text-right font-mono-nums ${stock.five_day_change != null ? getChangeColor(stock.five_day_change) : 'text-gray-400'}`}>
+        {stock.five_day_change != null ? `${stock.five_day_change > 0 ? '+' : ''}${stock.five_day_change.toFixed(2)}%` : '--'}
       </td>
     </tr>
   );
