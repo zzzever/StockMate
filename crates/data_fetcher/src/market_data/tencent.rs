@@ -328,7 +328,7 @@ pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
                     let change = current_price - prev_close;
                     let change_percent = if prev_close > 0.0 { (change / prev_close) * 100.0 } else { 0.0 };
                     let turnover_rate = parts.get(38).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
-                    let ratio = parts[40].parse::<f64>().unwrap_or(0.0);
+                    let ratio = parts.get(40).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
                     results.push(PriceData { ticker: ticker_str, name, current_price, prev_close, change, change_percent, volume, amount, ratio, turnover_rate, high, low, open });
                 }
             }
@@ -395,8 +395,8 @@ pub async fn fetch_realtime_price(ticker: &str) -> Option<PriceData> {
     } else {
         0.0
     };
-    let turnover_rate = parts[38].parse::<f64>().unwrap_or(0.0); // 换手率
-    let ratio = parts[40].parse::<f64>().unwrap_or(0.0);       // 量比
+    let turnover_rate = parts.get(38).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0); // 换手率
+    let ratio = parts.get(40).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);       // 量比
 
     Some(PriceData {
         ticker: ticker_str,

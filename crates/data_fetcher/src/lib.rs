@@ -339,6 +339,10 @@ impl DataService {
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
 
+                    if all_prices.is_empty() {
+                        tracing::warn!("[sector_refresh] all data sources returned empty (Tencent + EastMoney)");
+                    }
+
                     // Aggregate per sector
                     let n = all_sectors.len();
                     let mut volumes: Vec<u64> = vec![0; n];
