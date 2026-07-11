@@ -13,9 +13,10 @@ function fmtVolume(v: number): string {
   return v.toLocaleString();
 }
 
-function getChgCls(v: number): string {
-  if (v > 0) return 'text-[hsl(var(--price-up))]';
-  if (v < 0) return 'text-[hsl(var(--price-down))]';
+function getChgCls(v: number | string): string {
+  const n = Number(v);
+  if (n > 0) return 'text-[hsl(var(--price-up))]';
+  if (n < 0) return 'text-[hsl(var(--price-down))]';
   return 'text-[hsl(var(--text-tertiary))]';
 }
 
@@ -27,8 +28,8 @@ export default function SectorStockRankPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
   const stats = useMemo(() => {
-    const up = sectors.filter((s) => s.change_percent > 0).length;
-    const down = sectors.filter((s) => s.change_percent < 0).length;
+    const up = sectors.filter((s) => Number(s.change_percent) > 0).length;
+    const down = sectors.filter((s) => Number(s.change_percent) < 0).length;
     const vol = sectors.reduce((a, s) => a + s.volume, 0);
     return { total: sectors.length, up, down, flat: sectors.length - up - down, volume: vol };
   }, [sectors]);
@@ -44,9 +45,9 @@ export default function SectorStockRankPage() {
     arr.sort((a, b) => {
       let va: number, vb: number;
       switch (sortField) {
-        case 'change_percent': va = a.change_percent; vb = b.change_percent; break;
+        case 'change_percent': va = Number(a.change_percent); vb = Number(b.change_percent); break;
         case 'volume': va = a.volume; vb = b.volume; break;
-        case 'leading_change': va = a.leading_change; vb = b.leading_change; break;
+        case 'leading_change': va = Number(a.leading_change); vb = Number(b.leading_change); break;
         default: return sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
       }
       return sortOrder === 'asc' ? va - vb : vb - va;
@@ -179,7 +180,7 @@ function SectorRow({ sector, rank, onClick }: { sector: HotSector; rank: number;
       <td className="py-2.5 px-3 text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-tertiary))' }}>{rank}</td>
       <td className="py-2.5 px-3 text-data-sm font-medium" style={{ color: 'var(--text-primary)' }}>{sector.name}</td>
       <td className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums ${getChgCls(sector.change_percent)}`}>
-        {sector.change_percent > 0 ? '+' : ''}{sector.change_percent.toFixed(2)}%
+        {Number(sector.change_percent) > 0 ? '+' : ''}{Number(sector.change_percent).toFixed(2)}%
       </td>
       <td className="py-2.5 px-3 text-right text-data-sm font-mono-nums">
         {sector.up_count != null ? (
@@ -197,7 +198,7 @@ function SectorRow({ sector, rank, onClick }: { sector: HotSector; rank: number;
         {sector.leading_stock || '--'}
       </td>
       <td className={`py-2.5 px-3 text-right text-data-sm font-mono-nums ${getChgCls(sector.leading_change)}`}>
-        {sector.leading_change > 0 ? '+' : ''}{sector.leading_change.toFixed(2)}%
+        {Number(sector.leading_change) > 0 ? '+' : ''}{Number(sector.leading_change).toFixed(2)}%
       </td>
       <td className="py-2.5 px-3 text-right text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
         {sector.stock_count ?? '--'}
