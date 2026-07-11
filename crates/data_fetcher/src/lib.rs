@@ -573,6 +573,11 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             }
         };
         let prices = market_data::fetch_realtime_batch(&codes).await;
+        // Fallback: try EastMoney if Tencent returns nothing
+        let prices = if prices.is_empty() {
+            let em = market_data::eastmoney::fetch_realtime_batch(&codes).await;
+            if !em.is_empty() { em } else { prices }
+        } else { prices };
         let mut stocks = Vec::new();
         for price in &prices {
             stocks.push(HotStock {

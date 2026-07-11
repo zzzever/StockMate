@@ -39,7 +39,6 @@ fn build_client() -> Option<Client> {
         .timeout(std::time::Duration::from_secs(10))
         .user_agent("StockMate/1.0")
         .pool_max_idle_per_host(5)
-        .no_proxy()
         .build()
         .ok()
 }
@@ -316,19 +315,19 @@ pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
             if let Some(end) = text[start..].find('"') {
                 let inner = &text[start..start + end];
                 let parts: Vec<&str> = inner.split('~').collect();
-                if parts.len() >= 45 {
+                if parts.len() >= 6 {
                     let name = parts[1].to_string();
                     let ticker_str = parts[2].to_string();
-                    let current_price = parts[3].parse::<f64>().unwrap_or(0.0);
-                    let prev_close = parts[4].parse::<f64>().unwrap_or(0.0);
-                    let open = parts[5].parse::<f64>().unwrap_or(0.0);
-                    let high = parts[33].parse::<f64>().unwrap_or(0.0);
-                    let low = parts[34].parse::<f64>().unwrap_or(0.0);
-                    let volume = parts[6].parse::<u64>().unwrap_or(0) * 100;
-                    let amount = parts[37].parse::<f64>().unwrap_or(0.0) * 10000.0;
+                    let current_price = parts.get(3).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+                    let prev_close = parts.get(4).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+                    let open = parts.get(5).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+                    let high = parts.get(33).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+                    let low = parts.get(34).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+                    let volume = parts.get(6).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0) * 100;
+                    let amount = parts.get(37).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0) * 10000.0;
                     let change = current_price - prev_close;
                     let change_percent = if prev_close > 0.0 { (change / prev_close) * 100.0 } else { 0.0 };
-                    let turnover_rate = parts[38].parse::<f64>().unwrap_or(0.0);
+                    let turnover_rate = parts.get(38).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
                     let ratio = parts[40].parse::<f64>().unwrap_or(0.0);
                     results.push(PriceData { ticker: ticker_str, name, current_price, prev_close, change, change_percent, volume, amount, ratio, turnover_rate, high, low, open });
                 }
