@@ -179,11 +179,11 @@ impl From<DomainError> for ApiError {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct HotSector {
     pub name: String,
-    pub change_percent: Decimal,
+    pub change_percent: f64,
     pub volume: u64,
     pub leading_stock: String,
-    pub leading_change: Decimal,
-    pub fund_flow: Option<Decimal>,
+    pub leading_change: f64,
+    pub fund_flow: Option<f64>,
     pub stock_count: Option<u32>,
     pub up_count: Option<u32>,
     pub down_count: Option<u32>,
@@ -778,10 +778,10 @@ mod tests {
     fn hot_sector_roundtrip() {
         let original = HotSector {
             name: "AI / Semiconductor".into(),
-            change_percent: Decimal::new(345, 2),
+            change_percent: 3.45,
             volume: 50_000_000,
             leading_stock: "NVDA".into(),
-            leading_change: Decimal::new(512, 2),
+            leading_change: 5.12,
             fund_flow: None,
             stock_count: None,
         };
@@ -796,10 +796,10 @@ mod tests {
     fn hot_sector_debug_clone() {
         let h = HotSector {
             name: "X".into(),
-            change_percent: Decimal::new(1, 0),
+            change_percent: 1.0,
             volume: 1,
             leading_stock: "Y".into(),
-            leading_change: Decimal::new(2, 0),
+            leading_change: 2.0,
             fund_flow: None,
             stock_count: None,
         };
@@ -1413,7 +1413,7 @@ mod tests {
     fn hot_sector_default() {
         let h = HotSector::default();
         assert_eq!(h.name, "");
-        assert_eq!(h.change_percent, Decimal::ZERO);
+        assert_eq!(h.change_percent, 0.0);
     }
 
     #[test]

@@ -373,10 +373,10 @@ impl DataService {
                         let ld_chg = if top_change[si] > f64::MIN { top_change[si] } else { 0.0 };
                         HotSector {
                             name: name.to_string(),
-                            change_percent: Decimal::from_f64_retain(avg).unwrap_or_default(),
+                            change_percent: avg,
                             volume: volumes[si],
                             leading_stock: ld_name,
-                            leading_change: Decimal::from_f64_retain(ld_chg).unwrap_or_default(),
+                            leading_change: ld_chg,
                             fund_flow: None,
                             stock_count: Some(codes.len() as u32),
                             up_count: Some(up_counts[si]),
@@ -466,9 +466,9 @@ impl DataService {
         // Fallback: return mock data if cache is empty (offline / fresh start)
         if sectors.is_empty() {
             return Ok(vec![
-                HotSector { name: "半导体".into(), change_percent: rust_decimal::Decimal::new(345, 2), ..Default::default() },
-                HotSector { name: "新能源".into(), change_percent: rust_decimal::Decimal::new(280, 2), ..Default::default() },
-                HotSector { name: "人工智能".into(), change_percent: rust_decimal::Decimal::new(210, 2), ..Default::default() },
+                HotSector { name: "半导体".into(), change_percent: 3.45, ..Default::default() },
+                HotSector { name: "新能源".into(), change_percent: 2.80, ..Default::default() },
+                HotSector { name: "人工智能".into(), change_percent: 2.10, ..Default::default() },
             ]);
         }
         Ok(sectors)
