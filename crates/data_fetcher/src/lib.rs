@@ -330,7 +330,11 @@ impl DataService {
                     // Fetch all stock prices in chunks
                     let mut all_prices: Vec<market_data::PriceData> = Vec::new();
                     for chunk in unique_codes.chunks(20) {
-                        let batch = market_data::fetch_realtime_batch(&chunk.to_vec()).await;
+                        let mut batch = market_data::fetch_realtime_batch(&chunk.to_vec()).await;
+                        if batch.is_empty() {
+                            // Fallback: try EastMoney
+                            batch = market_data::eastmoney::fetch_realtime_batch(&chunk.to_vec()).await;
+                        }
                         all_prices.extend(batch);
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }

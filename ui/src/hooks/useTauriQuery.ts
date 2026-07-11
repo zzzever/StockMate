@@ -228,6 +228,7 @@ export function useHotSectors() {
         throw error;
       }
     },
+    refetchInterval: 5000,
   });
 }
 
