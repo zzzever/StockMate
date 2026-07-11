@@ -185,6 +185,8 @@ pub struct HotSector {
     pub leading_change: Decimal,
     pub fund_flow: Option<Decimal>,
     pub stock_count: Option<u32>,
+    pub up_count: Option<u32>,
+    pub down_count: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

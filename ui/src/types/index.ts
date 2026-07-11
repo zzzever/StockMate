@@ -55,6 +55,8 @@ export interface HotSector {
   leading_change: number;
   fund_flow?: number;
   stock_count?: number;
+  up_count?: number;
+  down_count?: number;
 }
 
 export interface SectorStock {

@@ -1,532 +1,207 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import {
-  ArrowLeft, TrendingUp, TrendingDown, Minus, BarChart3,
-  RefreshCw, Landmark, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, ChevronDown,
-} from 'lucide-react';
-import { useSectorStocks } from '@/hooks/useTauriQuery';
-import type { SectorStock } from '@/types';
+import { useNavigate } from 'react-router-dom';
+import { useHotSectors } from '@/hooks/useTauriQuery';
+import { Search, TrendingUp, TrendingDown, Minus, BarChart3, ArrowUp, ArrowDown } from 'lucide-react';
+import type { HotSector } from '@/types';
 
-type SortField = 'change_percent' | 'volume' | 'turnover_rate' | 'main_fund_flow' | 'five_day_change';
+type SortField = 'change_percent' | 'volume' | 'leading_change' | 'name';
 type SortOrder = 'asc' | 'desc';
 
-const PAGE_SIZE = 20;
-
-const SECTOR_NAMES = [
-  "半导体","新能源","AI算力","白酒","银行","医药","汽车","保险","证券",
-  "房地产","电力","煤炭","钢铁","石油","化工","通信","计算机","电子",
-  "有色金属","食品饮料","家电","国防军工","锂电池","光伏","5G","云计算",
-  "创新药","医疗器械","农林牧渔","建筑","交通运输","文化传媒","环保",
-  "黄金","风电","新材料","储能","旅游酒店","商贸零售","建材","纺织服装",
-  "机械设备","公用事业","社会服务","CXO","水电","核电",
-];
-
-function formatVolume(value: number): string {
-  if (value >= 1e8) return `${(value / 1e8).toFixed(2)}亿`;
-  if (value >= 1e4) return `${(value / 1e4).toFixed(2)}万`;
-  return value.toLocaleString();
+function fmtVolume(v: number): string {
+  if (v >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+  if (v >= 1e4) return (v / 1e4).toFixed(2) + '万';
+  return v.toLocaleString();
 }
 
-function formatFundFlow(value: number): string {
-  const absVal = Math.abs(value);
-  if (absVal >= 1e8) return `${value >= 0 ? '+' : '-'}${(absVal / 1e8).toFixed(2)}亿`;
-  if (absVal >= 1e4) return `${value >= 0 ? '+' : '-'}${(absVal / 1e4).toFixed(2)}万`;
-  return `${value >= 0 ? '+' : '-'}${absVal.toLocaleString()}`;
+function getChgCls(v: number): string {
+  if (v > 0) return 'text-[hsl(var(--price-up))]';
+  if (v < 0) return 'text-[hsl(var(--price-down))]';
+  return 'text-[hsl(var(--text-tertiary))]';
 }
-
-function formatAmount(value: number): string {
-  if (value >= 1e8) return `${(value / 1e8).toFixed(2)}亿`;
-  if (value >= 1e4) return `${(value / 1e4).toFixed(2)}万`;
-  return value.toLocaleString();
-}
-
-function getChangeColor(value: number): string {
-  if (value > 0) return 'text-emerald-600 dark:text-emerald-400';
-  if (value < 0) return 'text-rose-600 dark:text-rose-400';
-  return 'text-gray-700 dark:text-gray-400';
-}
-
-function safeNumber(value: unknown): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function getSortValue(stock: SectorStock, field: SortField): number {
-  switch (field) {
-    case 'change_percent': return safeNumber(stock.change_percent);
-    case 'volume': return safeNumber(stock.volume);
-    case 'turnover_rate': return safeNumber(stock.turnover_rate);
-    case 'main_fund_flow': return safeNumber(stock.main_fund_flow);
-    case 'five_day_change': return safeNumber(stock.five_day_change);
-    default: return 0;
-  }
-}
-
-/* ======================================== */
-/*  Sub-components                           */
-/* ======================================== */
-
-function StatCard({
-  label, value, icon: Icon, variant,
-}: {
-  label: string;
-  value: number;
-  icon: React.ElementType;
-  variant: 'up' | 'down' | 'flat';
-}) {
-  const variants = {
-    up: { bg: 'bg-emerald-50/80 dark:bg-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-500/20 dark:bg-emerald-500/20' },
-    down: { bg: 'bg-rose-50/80 dark:bg-rose-500/20', text: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-500/20 dark:bg-rose-500/20' },
-    flat: { bg: 'bg-slate-50/80 dark:bg-slate-500/20', text: 'text-slate-600 dark:text-zinc-400', iconBg: 'bg-slate-500/20 dark:bg-slate-500/20' },
-  };
-  const v = variants[variant];
-
-  return (
-    <div className={`glass-card p-4 flex items-center gap-4 ${v.bg}`}>
-      <div className={`w-10 h-10 rounded-lg ${v.iconBg} flex items-center justify-center`}>
-        <Icon size={20} className={v.text} />
-      </div>
-      <div>
-        <div className={`text-2xl font-bold font-mono-nums text-black dark:text-white`}>{value}</div>
-        <div className="text-sm text-gray-700 dark:text-gray-400">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function SortButton({
-  label, icon: Icon, active, ascending, onClick,
-}: {
-  label: string;
-  icon: React.ElementType;
-  active: boolean;
-  ascending: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all ${
-        active
-          ? 'text-violet-700 dark:text-white bg-violet-100 dark:bg-violet-500/20 border border-violet-200 dark:border-violet-500/30'
-          : 'text-gray-700 dark:text-gray-400 bg-slate-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 hover:bg-gray-300 dark:hover:bg-white/[0.07] hover:text-black dark:hover:text-white'
-      }`}
-      aria-pressed={active}
-      aria-label={`按${label}排序${active ? (ascending ? '，当前升序' : '，当前降序') : ''}`}
-    >
-      <Icon size={14} className={active ? 'text-violet-600 dark:text-violet-400' : ''} />
-      {label}
-      {active && (
-        <span className="text-violet-600 dark:text-violet-400 ml-0.5">
-          {ascending ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
-        </span>
-      )}
-    </button>
-  );
-}
-
-function Pagination({
-  currentPage, totalPages, onPageChange,
-}: {
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}) {
-  if (totalPages <= 1) return null;
-
-  const getVisiblePages = () => {
-    const pages: (number | string)[] = [];
-    const maxVisible = 7;
-    if (totalPages <= maxVisible) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (currentPage > 3) pages.push('...');
-      const start = Math.max(2, currentPage - 1);
-      const end = Math.min(totalPages - 1, currentPage + 1);
-      for (let i = start; i <= end; i++) pages.push(i);
-      if (currentPage < totalPages - 2) pages.push('...');
-      pages.push(totalPages);
-    }
-    return pages;
-  };
-
-  return (
-    <div className="flex items-center justify-center gap-2 mt-4 pt-4 pb-3 px-4 border-t border-gray-300 dark:border-white/10">
-      <button
-        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-        disabled={currentPage === 1}
-        className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-white/[0.07] hover:text-black dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-        aria-label="上一页"
-      >
-        <ChevronLeft size={14} />
-      </button>
-
-      {getVisiblePages().map((page, idx) => (
-        page === '...' ? (
-          <span key={`ellipsis-${idx}`} className="text-xs text-gray-700 dark:text-gray-500 px-1">…</span>
-        ) : (
-          <button
-            key={page}
-            onClick={() => onPageChange(page as number)}
-            className={`w-8 h-8 rounded-lg text-xs flex items-center justify-center transition-all ${
-              currentPage === page
-                ? 'text-violet-700 dark:text-white bg-violet-100 dark:bg-violet-500/20 border border-violet-200 dark:border-violet-500/30'
-                : 'text-gray-700 dark:text-gray-400 bg-slate-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 hover:bg-gray-300 dark:hover:bg-white/[0.07] hover:text-black dark:hover:text-white'
-            }`}
-            aria-label={`第${page}页`}
-            aria-current={currentPage === page ? 'page' : undefined}
-          >
-            {page}
-          </button>
-        )
-      ))}
-
-      <button
-        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-        disabled={currentPage === totalPages}
-        className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-white/[0.07] hover:text-black dark:hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-        aria-label="下一页"
-      >
-        <ChevronRight size={14} />
-      </button>
-    </div>
-  );
-}
-
-function StockTableRow({
-  stock, rank, onClick,
-}: {
-  stock: SectorStock;
-  rank: number;
-  onClick: (stock: SectorStock) => void;
-}) {
-  const price = typeof stock.price === 'number' ? stock.price : Number(stock.price || 0);
-  const changePercent = safeNumber(stock.change_percent);
-  const volume = safeNumber(stock.volume);
-  const turnoverRate = safeNumber(stock.turnover_rate);
-  const amount = volume * price; // 成交额估算
-
-  return (
-    <tr
-      onClick={() => onClick(stock)}
-      className="border-b border-gray-300 dark:border-white/10 hover:bg-gray-300 dark:hover:bg-white/[0.07] transition-colors cursor-pointer group"
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onClick(stock); }}
-      aria-label={`${stock.name} ${stock.ticker}，价格${price.toFixed(2)}，涨跌幅${changePercent.toFixed(2)}%`}
-    >
-      <td className="py-3 px-3 text-gray-700 dark:text-gray-400 font-mono-nums">{rank}</td>
-      <td className="py-3 px-3 font-mono-nums text-black dark:text-white">{stock.ticker}</td>
-      <td className="py-3 px-3 text-black dark:text-white">{stock.name}</td>
-      <td className="py-3 px-3 text-right font-mono-nums text-black dark:text-white">¥{price.toFixed(2)}</td>
-      <td className={`py-3 px-3 text-right font-mono-nums font-bold ${getChangeColor(changePercent)}`}>
-        <span className="inline-flex items-center gap-1">
-          {changePercent > 0 ? <TrendingUp size={12} aria-hidden="true" /> : changePercent < 0 ? <TrendingDown size={12} aria-hidden="true" /> : <Minus size={12} aria-hidden="true" />}
-          {changePercent > 0 ? '+' : ''}{changePercent.toFixed(2)}%
-        </span>
-      </td>
-      <td className="py-3 px-3 text-right font-mono-nums text-gray-700 dark:text-gray-400">{formatVolume(volume)}</td>
-      <td className="py-3 px-3 text-right font-mono-nums text-gray-700 dark:text-gray-400">{formatAmount(amount)}</td>
-      <td className="py-3 px-3 text-right font-mono-nums text-gray-700 dark:text-gray-400">{turnoverRate.toFixed(2)}%</td>
-      <td className={`py-3 px-3 text-right font-mono-nums ${stock.main_fund_flow != null ? getChangeColor(stock.main_fund_flow) : 'text-gray-400'}`}>
-        {stock.main_fund_flow != null ? formatFundFlow(stock.main_fund_flow) : '--'}
-      </td>
-      <td className={`py-3 px-3 text-right font-mono-nums ${stock.five_day_change != null ? getChangeColor(stock.five_day_change) : 'text-gray-400'}`}>
-        {stock.five_day_change != null ? `${stock.five_day_change > 0 ? '+' : ''}${stock.five_day_change.toFixed(2)}%` : '--'}
-      </td>
-    </tr>
-  );
-}
-
-/* ======================================== */
-/*  Main Page                                */
-/* ======================================== */
 
 export default function SectorStockRankPage() {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const sector = searchParams.get('sector') || '';
-
-  const { data: stocks, isLoading, isError, error } = useSectorStocks(sector);
-
-  console.log('[SectorStockRankPage] stock loading:', isLoading, 'sector:', sector, 'stocks count:', stocks?.length ?? 0, 'isError:', isError);
-
+  const { data: sectors = [], isLoading, isError, error } = useHotSectors();
+  const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('change_percent');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [currentPage, setCurrentPage] = useState(1);
 
-  // 统计计算（修复 NaN bug + undefined 安全处理）
   const stats = useMemo(() => {
-    if (!stocks || stocks.length === 0) {
-      return { up: 0, down: 0, flat: 0, totalChange: 0, totalVolume: 0 };
-    }
-    const up = stocks.filter((s) => safeNumber(s.change_percent) > 0).length;
-    const down = stocks.filter((s) => safeNumber(s.change_percent) < 0).length;
-    const flat = stocks.filter((s) => safeNumber(s.change_percent) === 0).length;
-    const totalChange = stocks.reduce((sum, s) => sum + safeNumber(s.change_percent), 0) / stocks.length;
-    const totalVolume = stocks.reduce((sum, s) => sum + safeNumber(s.volume), 0);
-    return { up, down, flat, totalChange, totalVolume };
-  }, [stocks]);
+    const up = sectors.filter((s) => s.change_percent > 0).length;
+    const down = sectors.filter((s) => s.change_percent < 0).length;
+    const vol = sectors.reduce((a, s) => a + s.volume, 0);
+    return { total: sectors.length, up, down, flat: sectors.length - up - down, volume: vol };
+  }, [sectors]);
 
-  // 排序逻辑（修复类型安全）
-  const sortedStocks = useMemo(() => {
-    if (!stocks) return [];
-    const sorted = [...stocks].sort((a, b) => {
-      const aVal = getSortValue(a, sortField);
-      const bVal = getSortValue(b, sortField);
-      if (Number.isNaN(aVal) || Number.isNaN(bVal)) return 0;
-      return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+  const filtered = useMemo(() => {
+    if (!search) return sectors;
+    const q = search.toLowerCase();
+    return sectors.filter((s) => s.name.toLowerCase().includes(q));
+  }, [sectors, search]);
+
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      let va: number, vb: number;
+      switch (sortField) {
+        case 'change_percent': va = a.change_percent; vb = b.change_percent; break;
+        case 'volume': va = a.volume; vb = b.volume; break;
+        case 'leading_change': va = a.leading_change; vb = b.leading_change; break;
+        default: return sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+      }
+      return sortOrder === 'asc' ? va - vb : vb - va;
     });
-    return sorted;
-  }, [stocks, sortField, sortOrder]);
+    return arr;
+  }, [filtered, sortField, sortOrder]);
 
-  // 分页逻辑
-  const totalPages = Math.ceil(sortedStocks.length / PAGE_SIZE);
-  const paginatedStocks = sortedStocks.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE
-  );
+  const toggleSort = useCallback((f: SortField) => {
+    setSortField((prev) => (prev === f ? f : f));
+    setSortOrder((prev) => (sortField === f ? (prev === 'asc' ? 'desc' : 'asc') : 'desc'));
+  }, [sortField]);
 
-  const handleSort = useCallback((field: SortField) => {
-    if (sortField === field) {
-      const newOrder = sortOrder === 'asc' ? 'desc' : 'asc';
-      console.log('[SectorStockRankPage] sort toggle:', { field, order: newOrder });
-      setSortOrder(newOrder);
-    } else {
-      console.log('[SectorStockRankPage] sort change:', { from: sortField, to: field, order: 'desc' });
-      setSortField(field);
-      setSortOrder('desc');
-    }
-    setCurrentPage(1);
-  }, [sortField, sortOrder]);
-
-  const handleBack = useCallback(() => {
-    console.log('[SectorStockRankPage] navigate back to sector picker');
-    navigate('/sector');
-  }, [navigate]);
-
-  const handleRowClick = useCallback((stock: SectorStock) => {
-    console.log('[SectorStockRankPage] navigate to stock:', { code: stock.id || stock.ticker, name: stock.name });
-    navigate(`/stock?code=${stock.id || stock.ticker}`, { state: { stockName: stock.name } });
-  }, [navigate]);
-
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page);
-  }, []);
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.08 } },
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    return sortOrder === 'asc' ? <ArrowUp size={12} className="inline ml-1" /> : <ArrowDown size={12} className="inline ml-1" />;
   };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 },
-  };
-
-  // 排序配置
-  const SORT_CONFIG = [
-    { field: 'change_percent' as SortField, label: '涨跌幅', icon: TrendingUp },
-    { field: 'volume' as SortField, label: '成交量', icon: BarChart3 },
-    { field: 'turnover_rate' as SortField, label: '换手率', icon: RefreshCw },
-    { field: 'main_fund_flow' as SortField, label: '主力资金', icon: Landmark },
-    { field: 'five_day_change' as SortField, label: '5日涨幅', icon: TrendingUp },
-  ];
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col gap-4">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
-      >
-        <div className="flex items-center gap-4">
-          <button
-            onClick={handleBack}
-            className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-400 hover:text-black dark:hover:text-white transition-colors"
-            aria-label="返回板块列表"
-          >
-            <ArrowLeft size={18} />
-            <span>返回板块</span>
-          </button>
-          <div className="h-6 w-px bg-gray-200 dark:bg-white/10" />
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-black dark:text-white">{sector || '板块详情'}</h1>
-              <p className="text-sm text-gray-700 dark:text-gray-500 mt-0.5">板块内股票排名</p>
-            </div>
-            {!sector && (
-              <div className="relative">
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) navigate(`/sector?sector=${encodeURIComponent(e.target.value)}`);
-                  }}
-                  className="appearance-none pl-3 pr-8 py-2 text-sm rounded-lg border bg-[var(--bg-card)] text-[var(--text-primary)] border-[var(--border-default)] hover:border-[var(--border-strong)] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--swiss-accent))] cursor-pointer"
-                  style={{ backgroundImage: 'none' }}
-                >
-                  <option value="">选择板块...</option>
-                  {SECTOR_NAMES.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
-              </div>
-            )}
+      <div className="flex items-center justify-between shrink-0">
+        <div>
+          <h1 className="text-display">板块总览</h1>
+          <p className="text-data-sm mt-1" style={{ color: 'hsl(var(--text-secondary))' }}>
+            全市场行业板块行情概览
+          </p>
+        </div>
+        {/* Search */}
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'hsl(var(--text-tertiary))' }} />
+          <input
+            type="text"
+            placeholder="搜索板块..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 pr-3 py-2 text-sm rounded-lg border w-56"
+            style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
+          />
+        </div>
+      </div>
+
+      {/* Stats bar */}
+      <div className="flex items-center gap-6 shrink-0">
+        <StatCard label="总板块" value={stats.total} icon={BarChart3} />
+        <StatCard label="上涨" value={stats.up} icon={TrendingUp} cls="text-[hsl(var(--price-up))]" />
+        <StatCard label="下跌" value={stats.down} icon={TrendingDown} cls="text-[hsl(var(--price-down))]" />
+        <StatCard label="平盘" value={stats.flat} icon={Minus} cls="text-[hsl(var(--text-tertiary))]" />
+        <StatCard label="总成交" value={fmtVolume(stats.volume)} icon={BarChart3} />
+      </div>
+
+      {/* Loading / Error / Table */}
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3" style={{ color: 'hsl(var(--text-tertiary))' }}>
+            <BarChart3 size={24} className="animate-pulse" />
+            <span className="text-sm">加载板块数据...</span>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className={`text-lg font-bold font-mono-nums ${stats.totalChange >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-              {stats.totalChange >= 0 ? '+' : ''}{stats.totalChange.toFixed(2)}%
-            </div>
-            <div className="text-xs text-gray-700 dark:text-gray-500">板块整体</div>
-          </div>
-          <div className="text-right">
-            <div className="text-lg font-bold font-mono-nums text-black dark:text-white">{formatVolume(stats.totalVolume)}</div>
-            <div className="text-xs text-gray-700 dark:text-gray-500">板块成交</div>
+      ) : isError ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3" role="alert" style={{ color: 'hsl(var(--risk-danger))' }}>
+            <TrendingDown size={24} />
+            <p className="text-sm">加载失败: {error?.message || '请稍后重试'}</p>
+            <button onClick={() => window.location.reload()} className="btn-secondary">重新加载</button>
           </div>
         </div>
-      </motion.div>
-
-      {/* Stats Cards */}
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="grid grid-cols-3 gap-4"
-      >
-        <motion.div variants={itemVariants}>
-          <StatCard label="家上涨" value={stats.up} icon={TrendingUp} variant="up" />
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <StatCard label="家下跌" value={stats.down} icon={TrendingDown} variant="down" />
-        </motion.div>
-        <motion.div variants={itemVariants}>
-          <StatCard label="家平盘" value={stats.flat} icon={Minus} variant="flat" />
-        </motion.div>
-      </motion.div>
-
-      {/* Sort Bar */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="flex items-center justify-between"
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-700 dark:text-gray-500 mr-2">排序:</span>
-          {SORT_CONFIG.map((option) => (
-            <SortButton
-              key={option.field}
-              label={option.label}
-              icon={option.icon}
-              active={sortField === option.field}
-              ascending={sortOrder === 'asc'}
-              onClick={() => handleSort(option.field)}
-            />
-          ))}
-        </div>
-        <button
-          onClick={() => { setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc')); setCurrentPage(1); }}
-          className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100/50 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-gray-700 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-white/[0.07] hover:text-black dark:hover:text-white transition-all"
-          title={sortOrder === 'asc' ? '升序' : '降序'}
-          aria-label={sortOrder === 'asc' ? '切换为降序' : '切换为升序'}
-        >
-          <motion.div
-            animate={{ rotate: sortOrder === 'asc' ? 0 : 180 }}
-            transition={{ duration: 0.3 }}
-          >
-            <ArrowUp size={14} />
-          </motion.div>
-        </button>
-      </motion.div>
-
-      {/* Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="glass-card overflow-hidden"
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm" role="table" aria-label="板块股票排名">
-            <thead>
-              <tr className="text-gray-700 dark:text-gray-500 border-b border-gray-300 dark:border-white/10">
-                <th scope="col" className="text-left py-3 px-3 font-medium text-xs uppercase tracking-wider w-12">排名</th>
-                <th scope="col" className="text-left py-3 px-3 font-medium text-xs uppercase tracking-wider w-20">代码</th>
-                <th scope="col" className="text-left py-3 px-3 font-medium text-xs uppercase tracking-wider w-28">名称</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-20">价格</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-24">涨跌幅</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-24">成交量</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-24">成交额</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-20">换手率</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-28">主力净流入</th>
-                <th scope="col" className="text-right py-3 px-3 font-medium text-xs uppercase tracking-wider w-20">5日涨幅</th>
+      ) : (
+        <div className="flex-1 overflow-auto rounded-lg border glass-card-flat">
+          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+            <thead className="sticky top-0 z-10" style={{ background: 'var(--bg-card)' }}>
+              <tr className="border-b text-data-xs uppercase tracking-wider" style={{ borderColor: 'var(--border-default)', color: 'hsl(var(--text-tertiary))' }}>
+                <th className="py-3 px-3 text-left w-12">#</th>
+                <th className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none" onClick={() => toggleSort('name')}>
+                  板块名称 <SortIcon field="name" />
+                </th>
+                <th className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-24" onClick={() => toggleSort('change_percent')}>
+                  涨跌幅 <SortIcon field="change_percent" />
+                </th>
+                <th className="py-3 px-3 text-right w-20">涨/跌</th>
+                <th className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28" onClick={() => toggleSort('volume')}>
+                  成交量 <SortIcon field="volume" />
+                </th>
+                <th className="py-3 px-3 text-left w-24">领涨股</th>
+                <th className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20" onClick={() => toggleSort('leading_change')}>
+                  领涨涨幅 <SortIcon field="leading_change" />
+                </th>
+                <th className="py-3 px-3 text-right w-16">成分股</th>
               </tr>
             </thead>
             <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan={10} className="py-12 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3 text-gray-700 dark:text-gray-500" role="status" aria-live="polite">
-                      <RefreshCw size={20} className="animate-spin" />
-                      <span>正在加载板块数据...</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-
-              {isError && (
-                <tr>
-                  <td colSpan={10} className="py-12 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3 text-rose-600 dark:text-rose-400" role="alert">
-                      <TrendingDown size={24} />
-                      <p>加载失败: {error?.message || '请稍后重试'}</p>
-                      <button
-                        onClick={() => window.location.reload()}
-                        className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-sm text-gray-700 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-white/[0.07] hover:text-black dark:hover:text-white transition-all"
-                      >
-                        重新加载
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-
-              {!isLoading && !isError && paginatedStocks.length === 0 && (
-                <tr>
-                  <td colSpan={10} className="py-12 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3 text-gray-700 dark:text-gray-500" role="status">
-                      <BarChart3 size={32} className="opacity-50" />
-                      <p className="text-lg font-medium">暂无板块数据</p>
-                      <p className="text-sm text-gray-700 dark:text-gray-500">该板块暂时没有符合条件的股票</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-
-              {!isLoading && !isError && paginatedStocks.map((stock, index) => (
-                <StockTableRow
-                  key={stock.id}
-                  stock={stock}
-                  rank={(currentPage - 1) * PAGE_SIZE + index + 1}
-                  onClick={handleRowClick}
-                />
+              {sorted.map((s, i) => (
+                <SectorRow key={s.name} sector={s} rank={i + 1} onClick={() => navigate(`/sector?sector=${encodeURIComponent(s.name)}`)} />
               ))}
+              {sorted.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                    {search ? '未找到匹配板块' : '暂无板块数据'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-        />
-      </motion.div>
+      )}
     </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, cls }: { label: string; value: string | number; icon: React.ComponentType<any>; cls?: string }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-subtle)' }}>
+      <Icon size={16} className={cls || ''} style={{ color: cls ? undefined : 'hsl(var(--text-tertiary))' }} />
+      <div>
+        <div className="text-data-xs uppercase tracking-wider" style={{ color: 'hsl(var(--text-tertiary))' }}>{label}</div>
+        <div className={`text-data-sm font-semibold ${cls || ''}`} style={{ color: cls ? undefined : 'var(--text-primary)' }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function SectorRow({ sector, rank, onClick }: { sector: HotSector; rank: number; onClick: () => void }) {
+  return (
+    <tr
+      className="border-b hover-surface cursor-pointer transition-colors"
+      style={{ borderColor: 'var(--border-subtle)' }}
+      onClick={onClick}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
+    >
+      <td className="py-2.5 px-3 text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-tertiary))' }}>{rank}</td>
+      <td className="py-2.5 px-3 text-data-sm font-medium" style={{ color: 'var(--text-primary)' }}>{sector.name}</td>
+      <td className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums ${getChgCls(sector.change_percent)}`}>
+        {sector.change_percent > 0 ? '+' : ''}{sector.change_percent.toFixed(2)}%
+      </td>
+      <td className="py-2.5 px-3 text-right text-data-sm font-mono-nums">
+        {sector.up_count != null ? (
+          <span>
+            <span className="text-[hsl(var(--price-up))]">{sector.up_count}</span>
+            <span className="mx-1" style={{ color: 'hsl(var(--text-tertiary))' }}>/</span>
+            <span className="text-[hsl(var(--price-down))]">{sector.down_count}</span>
+          </span>
+        ) : '--'}
+      </td>
+      <td className="py-2.5 px-3 text-right text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
+        {fmtVolume(sector.volume)}
+      </td>
+      <td className="py-2.5 px-3 text-data-sm truncate max-w-[120px]" style={{ color: 'var(--text-primary)' }}>
+        {sector.leading_stock || '--'}
+      </td>
+      <td className={`py-2.5 px-3 text-right text-data-sm font-mono-nums ${getChgCls(sector.leading_change)}`}>
+        {sector.leading_change > 0 ? '+' : ''}{sector.leading_change.toFixed(2)}%
+      </td>
+      <td className="py-2.5 px-3 text-right text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
+        {sector.stock_count ?? '--'}
+      </td>
+    </tr>
   );
 }
