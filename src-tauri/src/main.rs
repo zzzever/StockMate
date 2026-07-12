@@ -307,6 +307,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::get_hot_sectors,
             api_tauri_commands::commands_v2::get_hot_stocks,
             api_tauri_commands::commands_v2::get_sector_stocks,
+            api_tauri_commands::commands_v2::get_sector_top_stocks,
             api_tauri_commands::commands_v2::get_stock_finance,
             api_tauri_commands::commands_v2::get_stock_fund_flow,
             api_tauri_commands::commands_v2::get_stock_history,

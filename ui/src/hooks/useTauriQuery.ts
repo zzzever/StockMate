@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { type Stock, type HotSector, type SectorStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse, type WatchlistQuoteItem } from '@/types';
+import { type Stock, type HotSector, type SectorStock, type SectorTopStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse, type WatchlistQuoteItem } from '@/types';
 
 // ============================================================
 // WebSocket real-time price store
@@ -209,6 +209,17 @@ export function useSectorStocks(sector: string) {
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     staleTime: 30000,
+    enabled: sector.length > 0,
+  });
+}
+
+export function useSectorTopStocks(sector: string) {
+  return useQuery<SectorTopStock[], Error>({
+    queryKey: ['sector', 'top_stocks', sector],
+    queryFn: async () => {
+      const data = await invoke<SectorTopStock[]>('get_sector_top_stocks', { sector });
+      return data;
+    },
     enabled: sector.length > 0,
   });
 }

@@ -71,6 +71,8 @@ struct DataServiceInner {
     /// WebSocket-backed live price cache (updated on each WS push).
     ws_cache: Arc<RwLock<HashMap<String, market_data::PriceData>>>,
     sector_realtime: RwLock<Option<Vec<HotSector>>>,
+    /// Daily sector snapshots for computing 5d/1m change (last ~30 days).
+    sector_snapshots: RwLock<Vec<Vec<HotSector>>>,
     refresh_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
     /// Handle for the inner WS reconnect task (spawned by start_ws_client_with_rx),
     /// stored so shutdown can abort the perpetual reconnect loop.
@@ -118,6 +120,7 @@ impl DataService {
             realtime_http_cache: build_cache::<String, Value>(3, 10_000),
             ws_cache: Arc::new(RwLock::new(HashMap::new())),
             sector_realtime: RwLock::new(None),
+            sector_snapshots: RwLock::new(Vec::new()),
             refresh_handle: RwLock::new(None),
             ws_inner_handle: RwLock::new(None),
             ws_handle: RwLock::new(None),
@@ -397,6 +400,35 @@ impl DataService {
                             down_count: Some(down_counts[si]),
                         }
                     }).collect();
+
+                    // Compute change_5d / change_1m from snapshots
+                    {
+                        let mut snapshots = inner_for_task.sector_snapshots.write().await;
+                        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+                        // Store snapshot once per day (or if none exist)
+                        if snapshots.is_empty() || snapshots.last().map(|last: &Vec<HotSector>| {
+                            // Check if this is a new day by comparing sector names (same 47 sectors)
+                            last.first().map(|s| s.name.clone()).unwrap_or_default() != today
+                        }).unwrap_or(true) {
+                            snapshots.push(sectors.clone());
+                            if snapshots.len() > 30 {
+                                snapshots.remove(0);
+                            }
+                        }
+                        // Compute 5d and 1m changes
+                        for sector in &mut sectors {
+                            if let Some(snap_5d) = snapshots.iter().rev().nth(1) {
+                                if let Some(old) = snap_5d.iter().find(|s| s.name == sector.name) {
+                                    sector.change_5d = Some(sector.change_percent - old.change_percent);
+                                }
+                            }
+                            if let Some(snap_1m) = snapshots.first() {
+                                if let Some(old) = snap_1m.iter().find(|s| s.name == sector.name) {
+                                    sector.change_1m = Some(sector.change_percent - old.change_percent);
+                                }
+                            }
+                        }
+                    }
 
                     sectors.sort_by(|a, b| b.change_percent.partial_cmp(&a.change_percent).unwrap_or(std::cmp::Ordering::Equal));
                     let len = sectors.len();

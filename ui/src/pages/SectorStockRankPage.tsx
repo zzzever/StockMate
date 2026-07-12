@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useHotSectors } from '@/hooks/useTauriQuery';
+import { useHotSectors, useSectorTopStocks } from '@/hooks/useTauriQuery';
 import {
   Search,
   TrendingUp,
@@ -10,9 +10,13 @@ import {
   ArrowUp,
   ArrowDown,
   DollarSign,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { HotSector } from '@/types';
+import type { HotSector, SectorTopStock } from '@/types';
 
 // ── Constants ──
 
@@ -28,6 +32,8 @@ type SortField =
 
 type SortOrder = 'asc' | 'desc';
 
+type QuickFilter = 'all' | 'leading' | 'declining' | 'fund_in' | 'fund_out';
+
 interface SortOption {
   label: string;
   field: SortField;
@@ -35,8 +41,18 @@ interface SortOption {
 
 const SORT_OPTIONS: SortOption[] = [
   { label: '涨跌幅', field: 'change_percent' },
-  { label: '资金流入', field: 'fund_flow' },
+  { label: '资金流', field: 'fund_flow' },
   { label: '成交量', field: 'volume' },
+  { label: '5日涨幅', field: 'change_5d' },
+  { label: '1月涨幅', field: 'change_1m' },
+];
+
+const QUICK_FILTERS: { key: QuickFilter; label: string }[] = [
+  { key: 'all', label: '全部' },
+  { key: 'leading', label: '领涨' },
+  { key: 'declining', label: '领跌' },
+  { key: 'fund_in', label: '资金流入' },
+  { key: 'fund_out', label: '资金流出' },
 ];
 
 // ── Format helpers ──
@@ -68,19 +84,40 @@ function fmtChange(v: number | null | undefined): string {
   return prefix + v.toFixed(2) + '%';
 }
 
+function fmtPrice(v: number): string {
+  return v.toFixed(2);
+}
+
 // ── Color helpers ──
 
-function chgColor(v: number | null | undefined): string {
+/** Returns CSS class name for change percent color intensity */
+function chgColorDeep(v: number | null | undefined): string {
   if (v == null) return '';
-  if (v > 0) return 'price-up';
-  if (v < 0) return 'price-down';
-  return '';
+  if (v > 3) return 'price-up';       // deep red (strong up)
+  if (v > 0) return 'price-up';       // light red
+  if (v >= -3) return 'price-down';   // light green
+  return 'price-down';                 // deep green (strong down)
 }
 
 function chgStyle(v: number | null | undefined): React.CSSProperties {
   if (v == null) return {};
   if (v > 0) return { color: 'hsl(var(--price-up))' };
   if (v < 0) return { color: 'hsl(var(--price-down))' };
+  return { color: 'hsl(var(--text-tertiary))' };
+}
+
+function chgBgStyle(v: number | null | undefined): React.CSSProperties {
+  if (v == null) return {};
+  if (v > 0) return { background: 'hsl(var(--price-up-bg))' };
+  if (v < 0) return { background: 'hsl(var(--price-down-bg))' };
+  return {};
+}
+
+/** For fund flow: positive = red bg, negative = green bg */
+function fundFlowBg(v: number | null | undefined): React.CSSProperties {
+  if (v == null) return {};
+  if (v > 0) return { background: 'hsl(var(--price-up-bg))', color: 'hsl(var(--price-up))' };
+  if (v < 0) return { background: 'hsl(var(--price-down-bg))', color: 'hsl(var(--price-down))' };
   return { color: 'hsl(var(--text-tertiary))' };
 }
 
@@ -123,21 +160,56 @@ function StatCard({
   );
 }
 
+// ── Sentiment card (large number for overview) ──
+
+function SentimentCard({
+  label,
+  value,
+  sub,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  color?: string;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-1 px-4 py-3 rounded-lg border min-w-[100px]"
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border-subtle)' }}
+    >
+      <div className="text-data-xs uppercase tracking-wider" style={{ color: 'hsl(var(--text-tertiary))' }}>
+        {label}
+      </div>
+      <div className="text-display font-mono-nums" style={{ color: color || 'var(--text-primary)' }}>
+        {value}
+      </div>
+      {sub && (
+        <div className="text-data-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Sector row ──
 
 function SectorRow({
   sector,
   rank,
+  isExpanded,
   onClick,
 }: {
   sector: HotSector;
   rank: number;
+  isExpanded: boolean;
   onClick: () => void;
 }) {
   return (
     <tr
       className="border-b hover-surface cursor-pointer transition-colors"
-      style={{ borderColor: 'var(--border-subtle)' }}
+      style={{ borderColor: 'var(--border-subtle)', background: isExpanded ? 'var(--bg-hover)' : undefined }}
       onClick={onClick}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -154,16 +226,19 @@ function SectorRow({
 
       {/* 板块名称 */}
       <td
-        className="py-2.5 px-3 text-data-sm font-medium truncate max-w-[160px]"
+        className="py-2.5 px-3 text-data-sm font-medium truncate max-w-[140px]"
         style={{ color: 'var(--text-primary)' }}
       >
-        {sector.name}
+        <span className="flex items-center gap-1">
+          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          <span className="truncate">{sector.name}</span>
+        </span>
       </td>
 
-      {/* 涨跌幅 */}
+      {/* 涨跌幅 — with deep color coding */}
       <td
-        className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums ${chgColor(sector.change_percent)}`}
-        style={chgStyle(sector.change_percent)}
+        className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums ${chgColorDeep(sector.change_percent)}`}
+        style={{ ...chgStyle(sector.change_percent), fontWeight: Math.abs(sector.change_percent) > 3 ? 700 : 500 }}
       >
         {fmtChange(sector.change_percent)}
       </td>
@@ -183,33 +258,17 @@ function SectorRow({
         )}
       </td>
 
-      {/* 成交量 */}
+      {/* 资金流 — with bg color */}
       <td
-        className="py-2.5 px-3 text-right text-data-sm font-mono-nums hidden md:table-cell"
-        style={{ color: 'hsl(var(--text-secondary))' }}
-      >
-        {fmtVolume(sector.volume)}
-      </td>
-
-      {/* 成交额 */}
-      <td
-        className="py-2.5 px-3 text-right text-data-sm font-mono-nums hidden lg:table-cell"
-        style={{ color: 'hsl(var(--text-secondary))' }}
-      >
-        {fmtTurnover(sector.turnover)}
-      </td>
-
-      {/* 主力净流入 */}
-      <td
-        className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums hidden lg:table-cell ${chgColor(sector.fund_flow ?? null)}`}
-        style={chgStyle(sector.fund_flow ?? null)}
+        className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums hidden lg:table-cell rounded`}
+        style={fundFlowBg(sector.fund_flow ?? null)}
       >
         {fmtFundFlow(sector.fund_flow ?? null)}
       </td>
 
       {/* 5日涨幅 */}
       <td
-        className={`py-2.5 px-3 text-right text-data-sm font-mono-nums hidden xl:table-cell ${chgColor(sector.change_5d ?? null)}`}
+        className={`py-2.5 px-3 text-right text-data-sm font-mono-nums hidden xl:table-cell ${chgColorDeep(sector.change_5d ?? null)}`}
         style={chgStyle(sector.change_5d ?? null)}
       >
         {fmtChange(sector.change_5d ?? null)}
@@ -217,7 +276,7 @@ function SectorRow({
 
       {/* 1月涨幅 */}
       <td
-        className={`py-2.5 px-3 text-right text-data-sm font-mono-nums hidden xl:table-cell ${chgColor(sector.change_1m ?? null)}`}
+        className={`py-2.5 px-3 text-right text-data-sm font-mono-nums hidden xl:table-cell ${chgColorDeep(sector.change_1m ?? null)}`}
         style={chgStyle(sector.change_1m ?? null)}
       >
         {fmtChange(sector.change_1m ?? null)}
@@ -232,7 +291,7 @@ function SectorRow({
           <span className="truncate">{sector.leading_stock || '--'}</span>
           {sector.leading_change != null && (
             <span
-              className={`font-mono-nums shrink-0 ${chgColor(sector.leading_change)}`}
+              className={`font-mono-nums shrink-0 ${chgColorDeep(sector.leading_change)}`}
               style={chgStyle(sector.leading_change)}
             >
               {fmtChange(sector.leading_change)}
@@ -240,7 +299,129 @@ function SectorRow({
           )}
         </span>
       </td>
+
+      {/* 操作 */}
+      <td className="py-2.5 px-3 text-right">
+        <button
+          className="btn-ghost text-data-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          title="查看成分股"
+        >
+          <ExternalLink size={12} className="mr-0.5" />
+          成分股
+        </button>
+      </td>
     </tr>
+  );
+}
+
+// ── Expanded sector stock list panel ──
+
+function SectorStockPanel({
+  sector,
+  onClose,
+}: {
+  sector: string;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const { data: stocks = [], isLoading, isError } = useSectorTopStocks(sector);
+
+  return (
+    <div
+      className="rounded-lg border overflow-hidden"
+      style={{
+        background: 'var(--bg-card)',
+        borderColor: 'var(--border-default)',
+      }}
+    >
+      {/* Panel header */}
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
+        <span className="text-heading-sm">
+          {sector} — 成分股
+        </span>
+        <button className="btn-ghost text-data-xs" onClick={onClose}>
+          收起
+        </button>
+      </div>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <RefreshCw size={18} className="animate-spin" style={{ color: 'hsl(var(--text-tertiary))' }} />
+          <span className="ml-2 text-data-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
+            加载成分股...
+          </span>
+        </div>
+      ) : isError ? (
+        <div className="py-8 text-center text-data-sm" style={{ color: 'hsl(var(--risk-danger))' }}>
+          加载失败，请稍后重试
+        </div>
+      ) : stocks.length === 0 ? (
+        <div className="py-8 text-center text-data-sm" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          暂无成分股数据
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr
+                className="border-b text-data-xs uppercase tracking-wider"
+                style={{
+                  borderColor: 'var(--border-subtle)',
+                  color: 'hsl(var(--text-tertiary))',
+                }}
+              >
+                <th className="py-2.5 px-3 text-left">代码</th>
+                <th className="py-2.5 px-3 text-left">名称</th>
+                <th className="py-2.5 px-3 text-right">价格</th>
+                <th className="py-2.5 px-3 text-right">涨跌幅</th>
+                <th className="py-2.5 px-3 text-right">换手率</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stocks.map((stock: SectorTopStock) => (
+                <tr
+                  key={stock.id}
+                  className="border-b hover-surface cursor-pointer transition-colors"
+                  style={{ borderColor: 'var(--border-subtle)' }}
+                  onClick={() => navigate(`/stock?code=${encodeURIComponent(stock.ticker)}`)}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') navigate(`/stock?code=${encodeURIComponent(stock.ticker)}`);
+                  }}
+                >
+                  <td className="py-2 px-3 text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
+                    {stock.ticker}
+                  </td>
+                  <td className="py-2 px-3 text-data-sm font-medium truncate max-w-[120px]" style={{ color: 'var(--text-primary)' }}>
+                    {stock.name}
+                  </td>
+                  <td className="py-2 px-3 text-right text-data-sm font-mono-nums" style={{ color: 'var(--text-primary)' }}>
+                    {fmtPrice(stock.price)}
+                  </td>
+                  <td
+                    className={`py-2 px-3 text-right text-data-sm font-semibold font-mono-nums ${chgColorDeep(stock.change_percent)}`}
+                    style={chgStyle(stock.change_percent)}
+                  >
+                    {fmtChange(stock.change_percent)}
+                  </td>
+                  <td className="py-2 px-3 text-right text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
+                    {stock.turnover_rate.toFixed(2)}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -252,6 +433,8 @@ export default function SectorStockRankPage() {
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('change_percent');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [expandedSector, setExpandedSector] = useState<string | null>(null);
 
   // ── Stats ──
   const stats = useMemo(() => {
@@ -260,16 +443,51 @@ export default function SectorStockRankPage() {
     const flat = sectors.length - up - down;
     const totalFundFlow = sectors.reduce((a, s) => a + (s.fund_flow ?? 0), 0);
     const totalTurnover = sectors.reduce((a, s) => a + (s.turnover ?? 0), 0);
-    return { total: sectors.length, up, down, flat, totalFundFlow, totalTurnover };
+    const positiveFlow = sectors.filter((s) => (s.fund_flow ?? 0) > 0).length;
+    const negativeFlow = sectors.filter((s) => (s.fund_flow ?? 0) < 0).length;
+    return { total: sectors.length, up, down, flat, totalFundFlow, totalTurnover, positiveFlow, negativeFlow };
   }, [sectors]);
 
-  // ── Filter & sort ──
-  const filtered = useMemo(() => {
-    if (!search) return sectors;
-    const q = search.toLowerCase();
-    return sectors.filter((s) => s.name.toLowerCase().includes(q));
-  }, [sectors, search]);
+  // ── Strongest/weakest sectors ──
+  const extremes = useMemo(() => {
+    if (sectors.length === 0) return { strongest: null, weakest: null };
+    const sorted = [...sectors].sort((a, b) => Number(b.change_percent) - Number(a.change_percent));
+    return {
+      strongest: sorted[0],
+      weakest: sorted[sorted.length - 1],
+    };
+  }, [sectors]);
 
+  // ── Filter ──
+  const filtered = useMemo(() => {
+    let result = sectors;
+
+    // Quick filter
+    switch (quickFilter) {
+      case 'leading':
+        result = result.filter((s) => Number(s.change_percent) > 2);
+        break;
+      case 'declining':
+        result = result.filter((s) => Number(s.change_percent) < -2);
+        break;
+      case 'fund_in':
+        result = result.filter((s) => (s.fund_flow ?? 0) > 0);
+        break;
+      case 'fund_out':
+        result = result.filter((s) => (s.fund_flow ?? 0) < 0);
+        break;
+    }
+
+    // Search
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter((s) => s.name.toLowerCase().includes(q));
+    }
+
+    return result;
+  }, [sectors, search, quickFilter]);
+
+  // ── Sort ──
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
@@ -317,7 +535,7 @@ export default function SectorStockRankPage() {
     });
   }, []);
 
-  // ── Sort indicator helper ──
+  // ── Sort indicator ──
   const sortIndicator = (field: SortField) => {
     if (sortField !== field) return null;
     return sortOrder === 'desc' ? (
@@ -326,6 +544,11 @@ export default function SectorStockRankPage() {
       <ArrowUp size={10} className="inline ml-1" />
     );
   };
+
+  // ── Row click handler ──
+  const handleRowClick = useCallback((sectorName: string) => {
+    setExpandedSector((prev) => (prev === sectorName ? null : sectorName));
+  }, []);
 
   // ── Update time ──
   const updateTime = useMemo(() => {
@@ -338,64 +561,55 @@ export default function SectorStockRankPage() {
 
   return (
     <div className="h-full flex flex-col gap-4">
-      {/* ═══ Header ═══ */}
+      {/* ═══ Header & Sentiment Overview ═══ */}
       <div className="flex items-center justify-between shrink-0 flex-wrap gap-3">
         <div>
-          <h1 className="text-display">板块总览</h1>
+          <h1 className="text-display">板块分析</h1>
           <p className="text-data-sm mt-1" style={{ color: 'hsl(var(--text-secondary))' }}>
-            {updateTime ? `数据更新: ${updateTime}` : '全市场行业板块行情概览'}
+            {updateTime ? `数据更新: ${updateTime}` : '全市场行业板块投资分析'}
           </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Search */}
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: 'hsl(var(--text-tertiary))' }}
-            />
-            <input
-              type="text"
-              placeholder="搜索板块..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-3 py-2 text-sm rounded-lg border w-48"
-              style={{
-                background: 'var(--bg-input)',
-                borderColor: 'var(--border-default)',
-                color: 'var(--text-primary)',
-              }}
-            />
-          </div>
-
-          {/* Sort selector */}
-          <select
-            value={sortField}
-            onChange={(e) => {
-              const field = e.target.value as SortField;
-              setSortField(field);
-              setSortOrder('desc');
-            }}
-            className="text-sm rounded-lg border px-3 py-2"
-            style={{
-              background: 'var(--bg-input)',
-              borderColor: 'var(--border-default)',
-              color: 'var(--text-primary)',
-            }}
-          >
-            {SORT_OPTIONS.map((opt) => (
-              <option key={opt.field} value={opt.field}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
-      {/* ═══ Stat cards ═══ */}
+      {/* ═══ Market Sentiment Overview ═══ */}
+      <div className="flex items-stretch gap-3 shrink-0 flex-wrap">
+        <SentimentCard
+          label="总板块"
+          value={stats.total}
+          sub={`${stats.up}涨 / ${stats.down}跌`}
+        />
+        <SentimentCard
+          label="涨跌比"
+          value={stats.down > 0 ? (stats.up / stats.down).toFixed(2) : '∞'}
+          sub={`上涨 ${stats.up} / 下跌 ${stats.down}`}
+          color={stats.up > stats.down ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'}
+        />
+        <SentimentCard
+          label="资金流向"
+          value={`${stats.positiveFlow} / ${stats.negativeFlow}`}
+          sub="正流入 / 负流入板块"
+          color={stats.positiveFlow > stats.negativeFlow ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'}
+        />
+        {extremes.strongest && (
+          <SentimentCard
+            label="最强板块"
+            value={extremes.strongest.name}
+            sub={fmtChange(extremes.strongest.change_percent)}
+            color="hsl(var(--price-up))"
+          />
+        )}
+        {extremes.weakest && (
+          <SentimentCard
+            label="最弱板块"
+            value={extremes.weakest.name}
+            sub={fmtChange(extremes.weakest.change_percent)}
+            color="hsl(var(--price-down))"
+          />
+        )}
+      </div>
+
+      {/* ═══ Stat cards (original compact) ═══ */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <StatCard label="总板块" value={stats.total} icon={BarChart3} />
         <StatCard label="上涨" value={stats.up} icon={TrendingUp} valueCls="price-up" iconCls="text-up" />
         <StatCard label="下跌" value={stats.down} icon={TrendingDown} valueCls="price-down" iconCls="text-down" />
         <StatCard label="平盘" value={stats.flat} icon={Minus} />
@@ -419,6 +633,76 @@ export default function SectorStockRankPage() {
           value={stats.totalTurnover > 0 ? fmtTurnover(stats.totalTurnover) : '--'}
           icon={BarChart3}
         />
+      </div>
+
+      {/* ═══ Filter bar ═══ */}
+      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        {/* Quick filter tabs */}
+        <div className="flex items-center gap-1">
+          {QUICK_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              className={`btn-ghost text-data-sm px-2.5 py-1.5 ${quickFilter === f.key ? 'active' : ''}`}
+              style={
+                quickFilter === f.key
+                  ? {
+                      background: 'hsl(var(--swiss-accent-ghost))',
+                      color: 'hsl(var(--swiss-accent))',
+                      border: '1px solid hsl(var(--swiss-accent-subtle))',
+                    }
+                  : {}
+              }
+              onClick={() => setQuickFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Search */}
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            style={{ color: 'hsl(var(--text-tertiary))' }}
+          />
+          <input
+            type="text"
+            placeholder="搜索板块..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 pr-3 py-2 text-sm rounded-lg border w-48"
+            style={{
+              background: 'var(--bg-input)',
+              borderColor: 'var(--border-default)',
+              color: 'var(--text-primary)',
+            }}
+          />
+        </div>
+
+        {/* Sort selector */}
+        <select
+          value={sortField}
+          onChange={(e) => {
+            const field = e.target.value as SortField;
+            setSortField(field);
+            setSortOrder('desc');
+          }}
+          className="text-sm rounded-lg border px-3 py-2"
+          style={{
+            background: 'var(--bg-input)',
+            borderColor: 'var(--border-default)',
+            color: 'var(--text-primary)',
+          }}
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.field} value={opt.field}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* ═══ Loading / Error / Table ═══ */}
@@ -447,91 +731,91 @@ export default function SectorStockRankPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto rounded-lg border glass-card-flat">
-          <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-            <thead className="sticky top-0 z-10" style={{ background: 'var(--bg-card)' }}>
-              <tr
-                className="border-b text-data-xs uppercase tracking-wider"
-                style={{
-                  borderColor: 'var(--border-default)',
-                  color: 'hsl(var(--text-tertiary))',
-                }}
-              >
-                <th className="py-3 px-3 text-left w-10">#</th>
-                <th
-                  className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none"
-                  onClick={() => toggleSort('name')}
+        <>
+          <div className="flex-1 overflow-auto rounded-lg border glass-card-flat">
+            <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+              <thead className="sticky top-0 z-10" style={{ background: 'var(--bg-card)' }}>
+                <tr
+                  className="border-b text-data-xs uppercase tracking-wider"
+                  style={{
+                    borderColor: 'var(--border-default)',
+                    color: 'hsl(var(--text-tertiary))',
+                  }}
                 >
-                  板块名称 {sortIndicator('name')}
-                </th>
-                <th
-                  className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-24"
-                  onClick={() => toggleSort('change_percent')}
-                >
-                  涨跌幅 {sortIndicator('change_percent')}
-                </th>
-                <th className="py-3 px-3 text-right w-22">涨/跌家</th>
-                <th
-                  className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden md:table-cell"
-                  onClick={() => toggleSort('volume')}
-                >
-                  成交量 {sortIndicator('volume')}
-                </th>
-                <th
-                  className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden lg:table-cell"
-                  onClick={() => toggleSort('turnover')}
-                >
-                  成交额 {sortIndicator('turnover')}
-                </th>
-                <th
-                  className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden lg:table-cell"
-                  onClick={() => toggleSort('fund_flow')}
-                >
-                  主力净流入 {sortIndicator('fund_flow')}
-                </th>
-                <th
-                  className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden xl:table-cell"
-                  onClick={() => toggleSort('change_5d')}
-                >
-                  5日涨幅 {sortIndicator('change_5d')}
-                </th>
-                <th
-                  className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden xl:table-cell"
-                  onClick={() => toggleSort('change_1m')}
-                >
-                  1月涨幅 {sortIndicator('change_1m')}
-                </th>
-                <th
-                  className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none w-28"
-                  onClick={() => toggleSort('leading_change')}
-                >
-                  领涨股 {sortIndicator('leading_change')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((s, i) => (
-                <SectorRow
-                  key={s.name}
-                  sector={s}
-                  rank={i + 1}
-                  onClick={() => navigate(`/sector?sector=${encodeURIComponent(s.name)}`)}
-                />
-              ))}
-              {sorted.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={10}
-                    className="py-16 text-center text-sm"
-                    style={{ color: 'hsl(var(--text-tertiary))' }}
+                  <th className="py-3 px-3 text-left w-10">#</th>
+                  <th
+                    className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none"
+                    onClick={() => toggleSort('name')}
                   >
-                    {search ? '未找到匹配板块' : '暂无板块数据'}
-                  </td>
+                    板块 {sortIndicator('name')}
+                  </th>
+                  <th
+                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-24"
+                    onClick={() => toggleSort('change_percent')}
+                  >
+                    涨跌幅 {sortIndicator('change_percent')}
+                  </th>
+                  <th className="py-3 px-3 text-right w-22">涨/跌</th>
+                  <th
+                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden lg:table-cell"
+                    onClick={() => toggleSort('fund_flow')}
+                  >
+                    资金流 {sortIndicator('fund_flow')}
+                  </th>
+                  <th
+                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden xl:table-cell"
+                    onClick={() => toggleSort('change_5d')}
+                  >
+                    5日% {sortIndicator('change_5d')}
+                  </th>
+                  <th
+                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden xl:table-cell"
+                    onClick={() => toggleSort('change_1m')}
+                  >
+                    1月% {sortIndicator('change_1m')}
+                  </th>
+                  <th
+                    className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none w-28"
+                    onClick={() => toggleSort('leading_change')}
+                  >
+                    领涨 {sortIndicator('leading_change')}
+                  </th>
+                  <th className="py-3 px-3 text-right w-16">操作</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {sorted.map((s, i) => (
+                  <SectorRow
+                    key={s.name}
+                    sector={s}
+                    rank={i + 1}
+                    isExpanded={expandedSector === s.name}
+                    onClick={() => handleRowClick(s.name)}
+                  />
+                ))}
+                {sorted.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="py-16 text-center text-sm"
+                      style={{ color: 'hsl(var(--text-tertiary))' }}
+                    >
+                      {search ? '未找到匹配板块' : '暂无板块数据'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ═══ Expanded sector stock panel ═══ */}
+          {expandedSector && (
+            <SectorStockPanel
+              sector={expandedSector}
+              onClose={() => setExpandedSector(null)}
+            />
+          )}
+        </>
       )}
     </div>
   );

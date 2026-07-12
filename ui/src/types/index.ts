@@ -47,6 +47,17 @@ export interface PriceData {
 export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'indicatorLab' | 'settings' | 'quote';
 
 // v0.2.0 new types
+export interface SectorTopStock {
+  id: string;
+  ticker: string;
+  name: string;
+  price: number;
+  change: number;
+  change_percent: number;
+  volume: number;
+  turnover_rate: number;
+}
+
 export interface HotSector {
   name: string;
   change_percent: number;

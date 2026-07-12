@@ -84,6 +84,13 @@ pub async fn get_sector_stocks(sector: String, state: State<'_, AppState>) -> Re
 }
 
 #[tauri::command]
+pub async fn get_sector_top_stocks(sector: String, state: State<'_, AppState>) -> Result<Vec<domain::HotStock>, domain::ApiError> {
+    validate_sector(&sector)?;
+    tracing::info!("[CMD] get_sector_top_stocks: sector={}", sector);
+    state.data_service.get_sector_stocks(&sector).await
+}
+
+#[tauri::command]
 pub async fn get_stock_finance(stock_id: String, state: State<'_, AppState>) -> Result<Option<domain::StockFinance>, domain::ApiError> {
     validate_stock_id(&stock_id)?;
     state.data_service.get_stock_finance(&stock_id).await
