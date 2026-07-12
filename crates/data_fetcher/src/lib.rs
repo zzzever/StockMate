@@ -73,6 +73,7 @@ struct DataServiceInner {
     sector_realtime: RwLock<Option<Vec<HotSector>>>,
     /// Daily sector snapshots for computing 5d/1m change (last ~30 days).
     sector_snapshots: RwLock<Vec<Vec<HotSector>>>,
+    last_snapshot_date: RwLock<Option<String>>,
     refresh_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
     /// Handle for the inner WS reconnect task (spawned by start_ws_client_with_rx),
     /// stored so shutdown can abort the perpetual reconnect loop.
@@ -121,6 +122,7 @@ impl DataService {
             ws_cache: Arc::new(RwLock::new(HashMap::new())),
             sector_realtime: RwLock::new(None),
             sector_snapshots: RwLock::new(Vec::new()),
+            last_snapshot_date: RwLock::new(None),
             refresh_handle: RwLock::new(None),
             ws_inner_handle: RwLock::new(None),
             ws_handle: RwLock::new(None),
@@ -404,13 +406,13 @@ impl DataService {
                     // Compute change_5d / change_1m from snapshots
                     {
                         let mut snapshots = inner_for_task.sector_snapshots.write().await;
+                        let mut last_date = inner_for_task.last_snapshot_date.write().await;
                         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-                        // Store snapshot once per day (or if none exist)
-                        if snapshots.is_empty() || snapshots.last().map(|last: &Vec<HotSector>| {
-                            // Check if this is a new day by comparing sector names (same 47 sectors)
-                            last.first().map(|s| s.name.clone()).unwrap_or_default() != today
-                        }).unwrap_or(true) {
+                        // Store snapshot once per day
+                        let is_new_day = last_date.as_ref().map_or(true, |d| d != &today);
+                        if is_new_day {
                             snapshots.push(sectors.clone());
+                            *last_date = Some(today.clone());
                             if snapshots.len() > 30 {
                                 snapshots.remove(0);
                             }

@@ -413,7 +413,7 @@ function SectorStockPanel({
                     {fmtChange(stock.change_percent)}
                   </td>
                   <td className="py-2 px-3 text-right text-data-sm font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
-                    {stock.turnover_rate.toFixed(2)}%
+                    {stock.turnover_rate != null ? stock.turnover_rate.toFixed(2) + '%' : '--'}
                   </td>
                 </tr>
               ))}
@@ -610,8 +610,8 @@ export default function SectorStockRankPage() {
 
       {/* ═══ Stat cards (original compact) ═══ */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <StatCard label="上涨" value={stats.up} icon={TrendingUp} valueCls="price-up" iconCls="text-up" />
-        <StatCard label="下跌" value={stats.down} icon={TrendingDown} valueCls="price-down" iconCls="text-down" />
+        <StatCard label="上涨" value={stats.up} icon={TrendingUp} valueCls="price-up" iconCls="price-up" />
+        <StatCard label="下跌" value={stats.down} icon={TrendingDown} valueCls="price-down" iconCls="price-down" />
         <StatCard label="平盘" value={stats.flat} icon={Minus} />
         <StatCard
           label="主力净流入"
@@ -622,7 +622,7 @@ export default function SectorStockRankPage() {
           }
           iconCls={
             stats.totalFundFlow > 0
-              ? 'text-up'
+              ? 'price-up'
               : stats.totalFundFlow < 0
                 ? 'text-down'
                 : ''
