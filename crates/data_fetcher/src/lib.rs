@@ -544,8 +544,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     id: format!("{}.{}", code, suffix),
                     ticker: item.get("代码").and_then(|v| v.as_str()).unwrap_or("").into(),
                     name: item.get("名称").and_then(|v| v.as_str()).unwrap_or("").into(),
-                    price: Decimal::ZERO,
-                    change: Decimal::ZERO,
+                    price: 0.0,
+                    change: 0.0,
                     change_percent: item
                         .get("涨跌幅")
                         .and_then(|v| v.as_f64())
@@ -574,10 +574,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     id: id.into(),
                     ticker: data.ticker,
                     name: data.name,
-                    price: Decimal::from_f64_retain(data.current_price)
-                        .unwrap_or_default(),
-                    change: Decimal::from_f64_retain(data.change)
-                        .unwrap_or_default(),
+                    price: data.current_price,
+                    change: data.change,
                     change_percent: data.change_percent,
                     volume: data.volume,
                     turnover_rate: Some(data.turnover_rate),
@@ -596,8 +594,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     id: "600519.SH".into(),
                     ticker: "600519".into(),
                     name: "贵州茅台".into(),
-                    price: Decimal::new(173245, 2),
-                    change: Decimal::new(234, 2),
+                    price: 1732.45,
+                    change: 2.34,
                     change_percent: 1.37,
                     volume: 2_500_000,
                     turnover_rate: Some(0.35), main_fund_flow: Some(120000000.0), five_day_change: Some(2.15),
@@ -607,8 +605,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     id: "000001.SZ".into(),
                     ticker: "000001".into(),
                     name: "平安银行".into(),
-                    price: Decimal::new(1123, 2),
-                    change: Decimal::new(45, 2),
+                    price: 11.23,
+                    change: -0.45,
                     change_percent: 4.18,
                     volume: 45_000_000,
                     turnover: None,
@@ -644,8 +642,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     let suffix = code_to_exchange_suffix(&price.ticker);
                     format!("{}.{}", price.ticker, suffix)
                 }, ticker: price.ticker.clone(), name: price.name.clone(),
-                price: Decimal::from_f64_retain(price.current_price).unwrap_or_default(),
-                change: Decimal::from_f64_retain(price.change).unwrap_or_default(),
+                price: price.current_price,
+                change: price.change,
                 change_percent: price.change_percent, volume: price.volume,
                 turnover: Some(Decimal::from_f64_retain(price.amount).unwrap_or_default()),
                 turnover_rate: Some(price.turnover_rate), main_fund_flow: None, five_day_change: None,

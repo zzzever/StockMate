@@ -84,8 +84,9 @@ function fmtChange(v: number | null | undefined): string {
   return prefix + v.toFixed(2) + '%';
 }
 
-function fmtPrice(v: number): string {
-  return v.toFixed(2);
+function fmtPrice(v: number | string): string {
+  const n = Number(v);
+  return isNaN(n) ? '--' : n.toFixed(2);
 }
 
 // ── Color helpers ──
