@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, LineStyle } from 'lightweight-charts';
 import { Star, RefreshCw } from 'lucide-react';
-import { useStockList, useStockDetail, useStockHistory, useStockFinance, useRealtimeQuote, useStockFundFlow, useIntraday, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove, useSupportResistance, useHotSectors, useMarketOverview, useSectorStocks } from '@/hooks/useTauriQuery';
+import { useStockList, useStockDetail, useStockHistory, useStockFinance, useRealtimeQuote, useStockFundFlow, useIntraday, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove, useSupportResistance } from '@/hooks/useTauriQuery';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume } from '@/lib/format';
@@ -405,10 +405,6 @@ export default function StockDetailPage() {
   const { data: financeData, error: financeError, refetch: refetchFinance } = useStockFinance(effectiveCode);
   const { data: fundFlowData, error: fundFlowError, refetch: refetchFundFlow } = useStockFundFlow(effectiveCode);
   const { data: sr, error: srError, refetch: refetchSr } = useSupportResistance(effectiveCode);
-  const { data: sectors = [] } = useHotSectors();
-  const { data: marketOverview } = useMarketOverview();
-  const sectorName = stockDetail?.sector || '';
-  const { data: sectorStocks } = useSectorStocks(sectorName);
   const watchlist = { add: useWatchlistAdd(), remove: useWatchlistRemove(), check: useWatchlistCheck(effectiveCode.split('.')[0]) };
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
   const watchlistBusy = watchlist.add.isPending || watchlist.remove.isPending || watchlist.check.isLoading;
@@ -434,7 +430,6 @@ export default function StockDetailPage() {
   const finance = (financeData || {}) as Partial<StockFinance>;
   const ff = Array.isArray(fundFlowData) ? fundFlowData : [];
   const mainFlow = ff.length > 0 ? safeNumber(ff[ff.length - 1].main_inflow) : 0;
-  const fundFlowTrend = useMemo(() => ff.slice(-5).map(f => safeNumber(f.main_inflow)), [ff]);
   const limits = hasQuote ? priceLimit(displayCode, displayName, prevClose) : null;
   const fiveDayChange = useMemo(() => {
     if (!dayHistoryData || dayHistoryData.length < 6) return null;
@@ -464,46 +459,6 @@ export default function StockDetailPage() {
   const ruleSignals = useMemo(() => evaluateRules(tradingRules, chartData), [tradingRules, chartData]);
   const ruleMarkerOverlays = useMemo(() => { const ruleMap = new Map(tradingRules.filter(r => r.enabled).map(r => [r.id, r])); return ruleSignals.map(s => { const rule = ruleMap.get(s.ruleId); return { time: s.date, color: rule?.color ?? '#888', label: String(rule?.markerIndex ?? 0) }; }); }, [ruleSignals, tradingRules]);
 
-  // 量价关系标注
-  const volumeMarkers = useMemo(() => {
-    if (!chartData.length) return [];
-    const markers: { time: string; color: string; label: string }[] = [];
-    const closes = chartData.map((d: any) => Number(d.close) || 0);
-    const volumes = chartData.map((d: any) => Number(d.volume) || 0);
-    const avgVol5 = (i: number) => {
-      if (i < 5) return 0;
-      let sum = 0;
-      for (let j = i - 5; j < i; j++) sum += volumes[j];
-      return sum / 5;
-    };
-    for (let i = 0; i < chartData.length; i++) {
-      const d = chartData[i] as any;
-      const changePct = i > 0 && closes[i] > 0 && closes[i - 1] > 0
-        ? ((closes[i] - closes[i - 1]) / closes[i - 1]) * 100 : 0;
-      const vol = volumes[i];
-      const avg5 = avgVol5(i);
-      if (avg5 === 0) continue;
-      // 放量突破：当日涨幅 > 2% 且成交量 > 前 5 日均量的 1.5 倍
-      if (changePct > 2 && vol > avg5 * 1.5) {
-        markers.push({ time: d.date, color: '#22c55e', label: '放量' });
-      }
-      // 量价背离：涨幅 > 0 但成交量 < 前 5 日均量的 0.5 倍
-      if (changePct > 0 && vol < avg5 * 0.5) {
-        markers.push({ time: d.date, color: '#f59e0b', label: '背离' });
-      }
-      // 缩量止跌：连续 3 日下跌且成交量逐日缩小
-      if (i >= 2) {
-        if (closes[i - 2] > closes[i - 1] && closes[i - 1] > closes[i] &&
-            volumes[i - 2] > volumes[i - 1] && volumes[i - 1] > volumes[i]) {
-          markers.push({ time: d.date, color: '#3b82f6', label: '缩量' });
-        }
-      }
-    }
-    return markers;
-  }, [chartData]);
-
-  const allMarkers = useMemo(() => [...ruleMarkerOverlays, ...volumeMarkers], [ruleMarkerOverlays, volumeMarkers]);
-
   return (
     <div className="flex flex-col h-full gap-4">
       {primaryError && (
@@ -532,38 +487,6 @@ export default function StockDetailPage() {
           </div>
         </div>
       </div>
-      {marketOverview && (
-        <div className="flex items-center gap-3 px-1 py-1 text-data-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
-          <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'hsl(var(--price-up))' }} />
-            上涨 {marketOverview.up_count}
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'hsl(var(--price-down))' }} />
-            下跌 {marketOverview.down_count}
-          </span>
-          {marketOverview.northbound_inflow != null && (
-            <span>北向 {marketOverview.northbound_inflow}</span>
-          )}
-        </div>
-      )}
-      {/* Sector context bar */}
-      {stockDetail?.sector && (() => {
-        const sectorData = sectors.find(s => stockDetail?.sector?.includes(s.name));
-        if (!sectorData) return null;
-        return (
-          <div className="flex items-center gap-2 px-1 py-1 text-data-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
-            <span>所属板块：</span>
-            <button onClick={() => navigate(`/sector?sector=${encodeURIComponent(sectorData.name)}`)}
-              className="text-data-sm font-medium hover:underline" style={{ color: 'hsl(var(--text-primary))' }}>
-              {sectorData.name}
-            </button>
-            <span className={`font-mono-nums ${sectorData.change_percent >= 0 ? 'price-up' : 'price-down'}`}>
-              {sectorData.change_percent >= 0 ? '+' : ''}{sectorData.change_percent.toFixed(2)}%
-            </span>
-          </div>
-        );
-      })()}
       <IndexBar />
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
         <div className="flex items-center gap-2 px-1 py-0.5 shrink-0">
@@ -614,7 +537,7 @@ export default function StockDetailPage() {
             ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
             : historyError && !chartData.length
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
-              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={allMarkers} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
+              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
       </div>
       {secondaryErrors.length > 0 && (
         <div className="shrink-0 px-1">
@@ -627,42 +550,7 @@ export default function StockDetailPage() {
         mainFlow={mainFlow}
         prevClose={prevClose}
         supportResistance={sr}
-        fundFlowTrend={fundFlowTrend}
       />
-      {sectorStocks && sectorStocks.length > 0 && (
-        <details className="mt-1">
-          <summary className="text-data-xs cursor-pointer select-none px-1 py-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
-            同行业对比 · {sectorStocks.length} 只 ▾
-          </summary>
-          <div className="overflow-x-auto mt-1 max-h-48 overflow-y-auto">
-            <table className="w-full text-data-xs">
-              <thead>
-                <tr className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-                  <th className="text-left py-1 px-1">代码</th>
-                  <th className="text-left py-1 px-1">名称</th>
-                  <th className="text-right py-1 px-1">涨幅</th>
-                  <th className="text-right py-1 px-1 hidden md:table-cell">换手率</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sectorStocks.slice(0, 15).map(s => (
-                  <tr key={s.id} className="border-b cursor-pointer hover-surface" style={{ borderColor: 'var(--border-subtle)' }}
-                    onClick={() => navigate(`/stock?code=${s.id}`)}>
-                    <td className="py-1 px-1 font-mono">{s.ticker}</td>
-                    <td className="py-1 px-1 truncate max-w-[80px]">{s.name}</td>
-                    <td className={`py-1 px-1 text-right font-mono-nums ${s.change_percent >= 0 ? 'price-up' : 'price-down'}`}>
-                      {s.change_percent >= 0 ? '+' : ''}{s.change_percent.toFixed(2)}%
-                    </td>
-                    <td className="py-1 px-1 text-right font-mono-nums hidden md:table-cell">
-                      {s.turnover_rate != null ? s.turnover_rate.toFixed(2) + '%' : '--'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
     </div>
   );
 }
