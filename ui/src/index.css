@@ -1,26 +1,169 @@
 @tailwind base;
-@tailwind.theme-ghibli.dark {
-  --swiss-accent: 5 60% 50%;
-  --swiss-accent-ghost: 5 60% 50% / 0.12;
-  --swiss-accent-subtle: 5 60% 50% / 0.2;
-  --swiss-accent-strong: 5 60% 50% / 0.85;
-  --price-up: 5 65% 55%;
-  --price-down: 145 40% 45%;
-  --price-up-bg: 5 50% 12%;
-  --price-down-bg: 145 40% 10%;
-  --bg-root: #1c1610;
-  --bg-sidebar: #1c1610;
-  --bg-topbar: #241e16;
-  --bg-card: #241e16;
-  --bg-input: #30281e;
-  --bg-hover: #282016;
-  --text-primary: #f0e6d8;
-  --text-secondary: #8a7a64;
-  --text-tertiary: #6a5a44;
-  --border-default: #3a3022;
-  --border-subtle: #2a2016;
-  --chart-grid: #2a2016;
-}.theme-ghibli.dark {
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════
+   StockMate Design System — Japanese/Taiwanese Style
+   鮮やかな色彩、強力なタイポグラフィ、温かみのある背景
+   ═══════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Grid (8px base unit) ── */
+  --grid-unit: 8px;
+  --grid-gutter: 16px;
+  --grid-margin: 32px;
+
+  /* ── 日本/台湾风格调色板 ── */
+  --swiss-accent: 0 75% 48%;           /* 鲜艳绯红 */
+  --swiss-accent-ghost: 0 75% 48% / 0.08;
+  --swiss-accent-subtle: 0 75% 48% / 0.18;
+  --swiss-accent-strong: 0 75% 48% / 0.85;
+  --accent-orange: 25 95% 50%;          /* 活力橙 */
+  --accent-gold: 45 95% 50%;            /* 金色 */
+  --accent-purple: 270 60% 55%;         /* 紫色 - 用于AI/科技 */
+  --accent-cyan: 190 80% 45%;           /* 青色 - 用于数据 */
+  --price-up: 0 80% 45%;                /* 上涨红 */
+  --price-down: 145 55% 35%;            /* 下跌绿 */
+  --price-up-bg: 0 75% 94%;
+  --price-down-bg: 145 55% 92%;
+
+  /* ── 背景 - 暖色调 ── */
+  --bg-root: #fdf8f0;                   /* 暖米色 */
+  --bg-sidebar: #f8f0e4;                /* 更暖的侧边栏 */
+  --bg-topbar: #fdf8f0;
+  --bg-card: #fffcf7;                   /* 暖白卡片 */
+  --bg-input: #f5ede2;
+  --bg-hover: #efe5d6;
+
+  /* ── 文字颜色 ── */
+  --text-primary: #1a1206;              /* 深暖黑 */
+  --text-secondary: #6b5c48;            /* 暖灰 */
+  --text-tertiary: #9a8b78;             /* 暖浅灰 */
+  --text-inverse: #ffffff;
+
+  /* ── 边框 ── */
+  --border-default: #d4c8b6;
+  --border-subtle: #e3d8c8;
+  --border-strong: #1a1206;
+
+  /* ── 阴影 ── */
+  --shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06), 0 1px 3px -1px rgb(0 0 0 / 0.08);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.10);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.14);
+
+  /* ── 圆角 ── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-xxl: 28px;
+
+  /* ── 侧边栏 ── */
+  --sidebar-width: 220px;
+  --sidebar-collapsed: 56px;
+
+  /* ── 过渡 ── */
+  --transition-fast: 150ms ease-out;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+
+  /* ── 图表颜色 ── */
+  --chart-grid: #e3d8c8;
+  --chart-text: #4a3f32;
+  --chart-border: #d4c8b6;
+
+  /* ── 风险等级 ── */
+  --risk-safe: 210 55% 42%;       /* 蓝色 — 安全 */
+  --risk-warning: 35 90% 48%;     /* 琥珀色 — 中等风险 */
+  --risk-danger: 0 75% 48%;       /* 红色 — 高风险 */
+
+  color-scheme: light;
+}
+
+/* ── Dark Mode (暖色调暗色) ── */
+.dark {
+  --swiss-accent: 0 75% 52%;
+  --swiss-accent-ghost: 0 75% 52% / 0.12;
+  --swiss-accent-subtle: 0 75% 52% / 0.25;
+  --swiss-accent-strong: 0 75% 52% / 0.85;
+  --accent-orange: 25 95% 50%;
+  --accent-gold: 45 95% 50%;
+  --accent-purple: 270 55% 60%;
+  --accent-cyan: 190 75% 50%;
+
+  --price-up: 0 75% 55%;
+  --price-down: 145 50% 42%;
+  --price-up-bg: 0 50% 14%;
+  --price-down-bg: 145 40% 12%;
+
+  --bg-root: #1a1510;
+  --bg-sidebar: #18130e;
+  --bg-topbar: #1f1a14;
+  --bg-card: #231e18;
+  --bg-input: #2e2820;
+  --bg-hover: #2a241d;
+
+  --text-primary: #f0e8d8;
+  --text-secondary: #a89880;
+  --text-tertiary: #7a6a58;
+  --text-inverse: #1a1510;
+
+  --border-default: #3d342a;
+  --border-subtle: #2e2820;
+  --border-strong: #a89880;
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.4);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.5);
+
+  --chart-grid: #2e2820;
+  --chart-text: #a89880;
+  --chart-border: #3d342a;
+
+  /* ── Risk level indicators (dark) ── */
+  --risk-safe: 210 55% 55%;
+  --risk-warning: 35 80% 52%;
+  --risk-danger: 0 70% 55%;
+
+  color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Theme: Ghibli — 吉卜力工作室风格
+   温暖、柔和、梦幻，灵感来自《龙猫》《千与千寻》
+   ═══════════════════════════════════════════════════════ */
+.theme-ghibli {
+  --swiss-accent: 30 60% 50%;           /* 温暖琥珀色 */
+  --swiss-accent-ghost: 30 60% 50% / 0.1;
+  --swiss-accent-subtle: 30 60% 50% / 0.2;
+  --swiss-accent-strong: 30 60% 50% / 0.85;
+  --accent-orange: 25 70% 55%;
+  --accent-gold: 40 80% 55%;
+  --accent-purple: 280 40% 60%;
+  --accent-cyan: 180 40% 55%;
+  --price-up: 0 70% 50%;
+  --price-down: 150 45% 40%;
+  --price-up-bg: 0 70% 95%;
+  --price-down-bg: 150 45% 93%;
+  --bg-root: #f5f0e8;
+  --bg-sidebar: #efe8dc;
+  --bg-topbar: #f5f0e8;
+  --bg-card: #faf6ef;
+  --bg-input: #ede6da;
+  --bg-hover: #e5ddd0;
+  --text-primary: #2a2218;
+  --text-secondary: #6b5c48;
+  --text-tertiary: #9a8b78;
+  --border-default: #d4c8b8;
+  --border-subtle: #e0d6c8;
+  --border-strong: #2a2218;
+  --shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --chart-grid: #e0d6c8;
+  --risk-warning: 35 80% 50%;
+  --risk-danger: 0 70% 45%;
+}
+.theme-ghibli.dark {
   --swiss-accent: 30 50% 55%;
   --swiss-accent-ghost: 30 50% 55% / 0.12;
   --swiss-accent-subtle: 30 50% 55% / 0.25;

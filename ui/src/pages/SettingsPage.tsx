@@ -369,7 +369,7 @@ function CacheClearButton() {
 // ── Theme scheme selector (jp / ghibli / bloomberg / swiss) ──
 const THEME_SCHEMES: { key: ThemeName; label: string; desc: string; colors: string[] }[] = [
   { key: 'jp', label: '日式TV', desc: '鲜艳绯红 · 暖色调默认', colors: ['hsl(0 75% 48%)', 'hsl(25 95% 50%)', 'hsl(45 95% 50%)'] },
-  { key: 'ghibli', label: '吉卜力', desc: '宫崎骏红 · 温暖自然', colors: ['hsl(5 65% 45%)', 'hsl(38 80% 50%)', 'hsl(180 40% 50%)'] },
+  { key: 'ghibli', label: '吉卜力', desc: '温暖琥珀 · 柔和梦幻', colors: ['hsl(30 60% 50%)', 'hsl(40 80% 55%)', 'hsl(180 40% 55%)'] },
   { key: 'bloomberg', label: 'Bloomberg', desc: '冷静蓝调 · 金融专业', colors: ['hsl(220 60% 50%)', 'hsl(30 90% 50%)', 'hsl(120 55% 40%)'] },
   { key: 'swiss', label: '瑞士风格', desc: '经典蓝 · 简约清晰', colors: ['hsl(221 83% 53%)', 'hsl(25 95% 50%)', 'hsl(350 75% 38%)'] },
 ];
