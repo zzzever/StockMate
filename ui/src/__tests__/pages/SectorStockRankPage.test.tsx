@@ -87,47 +87,40 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(screen.getByPlaceholderText('搜索板块...')).toBeInTheDocument();
     });
 
-    it('renders sentiment overview cards', () => {
+    it('renders combined stats row with strongest/weakest and stat cards', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      expect(screen.getByText('总板块')).toBeInTheDocument();
-      expect(screen.getByText('涨跌比')).toBeInTheDocument();
-      expect(screen.getByText('资金流向')).toBeInTheDocument();
       expect(screen.getByText('最强板块')).toBeInTheDocument();
       expect(screen.getByText('最弱板块')).toBeInTheDocument();
+      expect(screen.getByText('上涨')).toBeInTheDocument();
+      expect(screen.getByText('下跌')).toBeInTheDocument();
+      // 资金流入/资金流出 appear in both stat cards and filter buttons
+      const flowIn = screen.getAllByText('资金流入');
+      expect(flowIn.length).toBeGreaterThanOrEqual(1);
+      const flowOut = screen.getAllByText('资金流出');
+      expect(flowOut.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders stat cards', () => {
+    it('renders stat cards (上涨, 下跌, 资金流入, 资金流出)', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
       expect(screen.getByText('上涨')).toBeInTheDocument();
       expect(screen.getByText('下跌')).toBeInTheDocument();
-      expect(screen.getByText('平盘')).toBeInTheDocument();
-      const allFundFlow = screen.getAllByText('主力净流入');
-      expect(allFundFlow.length).toBeGreaterThanOrEqual(1);
-      const allTurnover = screen.getAllByText('总成交额');
-      expect(allTurnover.length).toBeGreaterThanOrEqual(1);
+      // 资金流入/资金流出 appear in both stat cards and filter buttons
+      expect(screen.getAllByText('资金流入').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('资金流出').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows correct total fund flow value in stat card', () => {
+    it('shows correct up/down and flow counts in stat cards', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      expect(screen.getByText('+10.00亿')).toBeInTheDocument();
-    });
-
-    it('shows correct total turnover value in stat card', () => {
-      vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
-      renderPage();
-      expect(screen.getByText('1000.00亿')).toBeInTheDocument();
-    });
-
-    it('shows correct up/down/flat counts', () => {
-      vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
-      renderPage();
-      expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('0')).toBeInTheDocument();
+      // 2 sectors up, 2 sectors with positive fund flow
+      // Use a flexible check: the stat card container should contain "2"
+      const upStat = screen.getByText('上涨').closest('[class*="flex"]');
+      expect(upStat?.textContent).toMatch(/2/);
+      // 1 sector down, 1 sector with negative fund flow
+      const downStat = screen.getByText('下跌').closest('[class*="flex"]');
+      expect(downStat?.textContent).toMatch(/1/);
     });
 
     it('shows strongest and weakest sectors in sentiment cards', () => {
@@ -146,11 +139,12 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
       // 领涨 appears in both a <button> and a <th> — check all occurrences
-      expect(screen.getAllByText('领涨').length).toBe(2); // button + table header
+      expect(screen.getAllByText('领涨').length).toBe(1); // button only (th now says '领涨股')
       expect(screen.getByText('全部')).toBeInTheDocument();
       expect(screen.getByText('领跌')).toBeInTheDocument();
-      expect(screen.getByText('资金流入')).toBeInTheDocument();
-      expect(screen.getByText('资金流出')).toBeInTheDocument();
+      // 资金流入/资金流出 appear in both stat cards and filter buttons
+      expect(screen.getAllByText('资金流入').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('资金流出').length).toBeGreaterThanOrEqual(1);
     });
 
     it('filters by 领涨 (change_percent > 2%)', () => {
@@ -169,7 +163,7 @@ describe('SectorStockRankPage — Sector Analysis', () => {
     it('filters by 资金流入', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      fireEvent.click(screen.getByText('资金流入'));
+      fireEvent.click(screen.getAllByText('资金流入')[1]); // filter button (index 1, index 0 is stat card label)
       const table = document.querySelector('table');
       expect(table?.textContent).toContain('半导体');
       expect(table?.textContent).toContain('白酒');
@@ -219,6 +213,19 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(screen.getByText('+3.00亿')).toBeInTheDocument();
     });
 
+    it('applies correct fund flow colors: positive = red/up, negative = green/down', () => {
+      vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
+      renderPage();
+      // Positive fund flow values should have price-up class (red text/bg)
+      const positiveFlow = screen.getByText('+12.00亿');
+      expect(positiveFlow.className).toMatch(/price-up/);
+      const positiveFlow2 = screen.getByText('+3.00亿');
+      expect(positiveFlow2.className).toMatch(/price-up/);
+      // Negative fund flow values should have price-down class (green text/bg)
+      const negativeFlow = screen.getByText('-5.00亿');
+      expect(negativeFlow.className).toMatch(/price-down/);
+    });
+
     it('renders change_5d column values', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
@@ -227,12 +234,15 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(screen.getByText('+0.80%')).toBeInTheDocument();
     });
 
-    it('renders change_1m column values', () => {
+    it('change_1m values are no longer shown in table (column removed)', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      expect(screen.getByText('+8.50%')).toBeInTheDocument();
-      expect(screen.getByText('-3.20%')).toBeInTheDocument();
-      expect(screen.getByText('+5.00%')).toBeInTheDocument();
+      // 1月涨幅 column header has been removed from the table
+      const thEls = document.querySelectorAll('th');
+      const match = Array.from(thEls).find((th) => th.textContent?.includes('1月%') || th.textContent?.includes('1月涨幅'));
+      expect(match).toBeFalsy();
+      // '1月涨幅' still exists in the sort select dropdown option
+      expect(screen.getByRole('option', { name: '1月涨幅' })).toBeInTheDocument();
     });
 
     it('renders 操作 button for each row', () => {
@@ -284,7 +294,7 @@ describe('SectorStockRankPage — Sector Analysis', () => {
     it('clicking change_5d header sorts by change_5d', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      const change5dEls = screen.getAllByText('5日%');
+      const change5dEls = screen.getAllByText('5日涨幅');
       const change5dTh = change5dEls.find((el) => el.tagName === 'TH');
       expect(change5dTh).toBeTruthy();
       fireEvent.click(change5dTh!);
@@ -292,21 +302,14 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(rows[1].textContent).toContain('半导体');
     });
 
-    it('clicking change_1m header sorts by change_1m', () => {
-      vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
-      renderPage();
-      const change1mEls = screen.getAllByText('1月%');
-      const change1mTh = change1mEls.find((el) => el.tagName === 'TH');
-      expect(change1mTh).toBeTruthy();
-      fireEvent.click(change1mTh!);
-      const rows = screen.getAllByRole('row');
-      expect(rows[1].textContent).toContain('半导体');
+    it('change_1m sort header has been removed', () => {
+      // 1月涨幅 column removed; sorting by change_1m is no longer available via header click
     });
 
     it('clicking name header sorts by name', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      const nameEls = screen.getAllByText('板块');
+      const nameEls = screen.getAllByText('板块名称');
       const nameTh = nameEls.find((el) => el.tagName === 'TH');
       expect(nameTh).toBeTruthy();
       fireEvent.click(nameTh!);

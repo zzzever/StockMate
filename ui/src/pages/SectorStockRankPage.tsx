@@ -5,7 +5,6 @@ import {
   Search,
   TrendingUp,
   TrendingDown,
-  Minus,
   BarChart3,
   ArrowUp,
   ArrowDown,
@@ -219,7 +218,7 @@ function SectorRow({
     >
       {/* # */}
       <td
-        className="py-2.5 px-3 text-data-sm font-mono-nums w-10"
+        className="py-2 px-3 text-data-sm font-mono-nums w-10"
         style={{ color: 'hsl(var(--text-tertiary))' }}
       >
         {rank}
@@ -227,7 +226,7 @@ function SectorRow({
 
       {/* 板块名称 */}
       <td
-        className="py-2.5 px-3 text-data-sm font-medium truncate max-w-[140px]"
+        className="py-2 px-3 text-data-sm font-medium truncate max-w-[140px]"
         style={{ color: 'var(--text-primary)' }}
       >
         <span className="flex items-center gap-1">
@@ -238,14 +237,14 @@ function SectorRow({
 
       {/* 涨跌幅 — with deep color coding */}
       <td
-        className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums ${chgColorDeep(sector.change_percent)}`}
+        className={`py-2 px-3 text-right text-data-sm font-semibold font-mono-nums ${chgColorDeep(sector.change_percent)}`}
         style={{ ...chgStyle(sector.change_percent), fontWeight: Math.abs(sector.change_percent) > 3 ? 700 : 500 }}
       >
         {fmtChange(sector.change_percent)}
       </td>
 
       {/* 涨/跌家 */}
-      <td className="py-2.5 px-3 text-right text-data-sm font-mono-nums whitespace-nowrap">
+      <td className="py-2 px-3 text-right text-data-sm font-mono-nums whitespace-nowrap">
         {sector.up_count != null && sector.down_count != null ? (
           <span>
             <span style={{ color: 'hsl(var(--price-up))' }}>{sector.up_count}</span>
@@ -260,32 +259,42 @@ function SectorRow({
       </td>
 
       {/* 资金流 — with bg color */}
-      <td
-        className={`py-2.5 px-3 text-right text-data-sm font-semibold font-mono-nums hidden lg:table-cell rounded`}
-        style={fundFlowBg(sector.fund_flow ?? null)}
-      >
-        {fmtFundFlow(sector.fund_flow ?? null)}
+      <td className="py-2 px-3 text-right text-data-sm font-semibold font-mono-nums">
+        {sector.fund_flow != null ? (
+          <span
+            className={`inline-flex items-center justify-end px-2 py-0.5 rounded-sm ${
+              sector.fund_flow > 0
+                ? 'price-up'
+                : sector.fund_flow < 0
+                  ? 'price-down'
+                  : ''
+            }`}
+            style={
+              sector.fund_flow > 0
+                ? { background: 'hsl(var(--price-up-bg))', color: 'hsl(var(--price-up))' }
+                : sector.fund_flow < 0
+                  ? { background: 'hsl(var(--price-down-bg))', color: 'hsl(var(--price-down))' }
+                  : { color: 'hsl(var(--text-tertiary))' }
+            }
+          >
+            {fmtFundFlow(sector.fund_flow)}
+          </span>
+        ) : (
+          '--'
+        )}
       </td>
 
       {/* 5日涨幅 */}
       <td
-        className={`py-2.5 px-3 text-right text-data-sm font-mono-nums hidden xl:table-cell ${chgColorDeep(sector.change_5d ?? null)}`}
+        className={`py-2 px-3 text-right text-data-sm font-mono-nums hidden lg:table-cell ${chgColorDeep(sector.change_5d ?? null)}`}
         style={chgStyle(sector.change_5d ?? null)}
       >
         {fmtChange(sector.change_5d ?? null)}
       </td>
 
-      {/* 1月涨幅 */}
-      <td
-        className={`py-2.5 px-3 text-right text-data-sm font-mono-nums hidden xl:table-cell ${chgColorDeep(sector.change_1m ?? null)}`}
-        style={chgStyle(sector.change_1m ?? null)}
-      >
-        {fmtChange(sector.change_1m ?? null)}
-      </td>
-
       {/* 领涨股 */}
       <td
-        className="py-2.5 px-3 text-data-sm truncate max-w-[120px]"
+        className="py-2 px-3 text-data-sm truncate max-w-[120px]"
         style={{ color: 'var(--text-primary)' }}
       >
         <span className="flex items-center gap-1.5">
@@ -302,7 +311,7 @@ function SectorRow({
       </td>
 
       {/* 操作 */}
-      <td className="py-2.5 px-3 text-right">
+      <td className="py-2 px-3 text-right">
         <button
           className="btn-ghost text-data-xs"
           onClick={(e) => {
@@ -572,68 +581,34 @@ export default function SectorStockRankPage() {
         </div>
       </div>
 
-      {/* ═══ Market Sentiment Overview ═══ */}
+      {/* ═══ Combined Stats Row ═══ */}
       <div className="flex items-stretch gap-3 shrink-0 flex-wrap">
-        <SentimentCard
-          label="总板块"
-          value={stats.total}
-          sub={`${stats.up}涨 / ${stats.down}跌`}
-        />
-        <SentimentCard
-          label="涨跌比"
-          value={stats.down > 0 ? (stats.up / stats.down).toFixed(2) : '∞'}
-          sub={`上涨 ${stats.up} / 下跌 ${stats.down}`}
-          color={stats.up > stats.down ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'}
-        />
-        <SentimentCard
-          label="资金流向"
-          value={`${stats.positiveFlow} / ${stats.negativeFlow}`}
-          sub="正流入 / 负流入板块"
-          color={stats.positiveFlow > stats.negativeFlow ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'}
-        />
-        {extremes.strongest && (
-          <SentimentCard
-            label="最强板块"
-            value={extremes.strongest.name}
-            sub={fmtChange(extremes.strongest.change_percent)}
-            color="hsl(var(--price-up))"
-          />
-        )}
-        {extremes.weakest && (
-          <SentimentCard
-            label="最弱板块"
-            value={extremes.weakest.name}
-            sub={fmtChange(extremes.weakest.change_percent)}
-            color="hsl(var(--price-down))"
-          />
-        )}
-      </div>
-
-      {/* ═══ Stat cards (original compact) ═══ */}
-      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <StatCard label="上涨" value={stats.up} icon={TrendingUp} valueCls="price-up" iconCls="price-up" />
-        <StatCard label="下跌" value={stats.down} icon={TrendingDown} valueCls="price-down" iconCls="price-down" />
-        <StatCard label="平盘" value={stats.flat} icon={Minus} />
-        <StatCard
-          label="主力净流入"
-          value={stats.totalFundFlow !== 0 ? fmtFundFlow(stats.totalFundFlow) : '--'}
-          icon={DollarSign}
-          valueCls={
-            stats.totalFundFlow > 0 ? 'price-up' : stats.totalFundFlow < 0 ? 'price-down' : ''
-          }
-          iconCls={
-            stats.totalFundFlow > 0
-              ? 'price-up'
-              : stats.totalFundFlow < 0
-                ? 'text-down'
-                : ''
-          }
-        />
-        <StatCard
-          label="总成交额"
-          value={stats.totalTurnover > 0 ? fmtTurnover(stats.totalTurnover) : '--'}
-          icon={BarChart3}
-        />
+        {/* Left: strongest / weakest sector */}
+        <div className="flex-1 flex items-stretch gap-3 min-w-0">
+          {extremes.strongest && (
+            <SentimentCard
+              label="最强板块"
+              value={extremes.strongest.name}
+              sub={fmtChange(extremes.strongest.change_percent)}
+              color="hsl(var(--price-up))"
+            />
+          )}
+          {extremes.weakest && (
+            <SentimentCard
+              label="最弱板块"
+              value={extremes.weakest.name}
+              sub={fmtChange(extremes.weakest.change_percent)}
+              color="hsl(var(--price-down))"
+            />
+          )}
+        </div>
+        {/* Right: statistics */}
+        <div className="flex-1 flex items-stretch gap-3 min-w-0 flex-wrap">
+          <StatCard label="上涨" value={stats.up} icon={TrendingUp} valueCls="price-up" iconCls="price-up" />
+          <StatCard label="下跌" value={stats.down} icon={TrendingDown} valueCls="price-down" iconCls="price-down" />
+          <StatCard label="资金流入" value={stats.positiveFlow} icon={DollarSign} valueCls="price-up" />
+          <StatCard label="资金流出" value={stats.negativeFlow} icon={DollarSign} valueCls="price-down" />
+        </div>
       </div>
 
       {/* ═══ Filter bar ═══ */}
@@ -748,7 +723,7 @@ export default function SectorStockRankPage() {
                     className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none"
                     onClick={() => toggleSort('name')}
                   >
-                    板块 {sortIndicator('name')}
+                    板块名称 {sortIndicator('name')}
                   </th>
                   <th
                     className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-24"
@@ -756,30 +731,24 @@ export default function SectorStockRankPage() {
                   >
                     涨跌幅 {sortIndicator('change_percent')}
                   </th>
-                  <th className="py-3 px-3 text-right w-22">涨/跌</th>
+                  <th className="py-3 px-3 text-right w-22">涨/跌家</th>
                   <th
-                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden lg:table-cell"
+                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28"
                     onClick={() => toggleSort('fund_flow')}
                   >
                     资金流 {sortIndicator('fund_flow')}
                   </th>
                   <th
-                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden xl:table-cell"
+                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden lg:table-cell"
                     onClick={() => toggleSort('change_5d')}
                   >
-                    5日% {sortIndicator('change_5d')}
-                  </th>
-                  <th
-                    className="py-3 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-20 hidden xl:table-cell"
-                    onClick={() => toggleSort('change_1m')}
-                  >
-                    1月% {sortIndicator('change_1m')}
+                    5日涨幅 {sortIndicator('change_5d')}
                   </th>
                   <th
                     className="py-3 px-3 text-left cursor-pointer hover:text-[var(--text-primary)] select-none w-28"
                     onClick={() => toggleSort('leading_change')}
                   >
-                    领涨 {sortIndicator('leading_change')}
+                    领涨股 {sortIndicator('leading_change')}
                   </th>
                   <th className="py-3 px-3 text-right w-16">操作</th>
                 </tr>
@@ -797,7 +766,7 @@ export default function SectorStockRankPage() {
                 {sorted.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={8}
                       className="py-16 text-center text-sm"
                       style={{ color: 'hsl(var(--text-tertiary))' }}
                     >
