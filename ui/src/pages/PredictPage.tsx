@@ -239,7 +239,7 @@ export default function PredictPage() {
           <div className="text-center space-y-3">
             <ShieldAlert size={40} className="mx-auto text-red-400" />
             <p className="text-lg font-bold" style={{ color: 'hsl(var(--ink))' }}>请先在设置页配置 DeepSeek API Key</p>
-            <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: '#6366f1', color: '#ffffff' }}>
+            <button onClick={() => navigate('/settings')} className="btn-primary">
               <Settings size={12} /> 前往设置
             </button>
           </div>

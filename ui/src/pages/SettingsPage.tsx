@@ -156,7 +156,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs transition-colors disabled:opacity-50"
+                className="btn-secondary text-xs"
                 style={{ color: 'hsl(var(--swiss-accent))', border: '1px solid hsl(var(--swiss-accent) / 0.3)', background: 'hsl(var(--swiss-accent) / 0.2)' }}
               >
                 <Save size={12} />
@@ -165,7 +165,7 @@ export default function SettingsPage() {
               <button
                 onClick={handleTest}
                 disabled={testing}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+                className="btn-ghost text-xs"
                 style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'hsl(var(--text-secondary))' }}
               >
                 <TestTube size={12} />

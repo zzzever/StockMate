@@ -997,7 +997,7 @@ export default function BacktestPage() {
           <h3 className="text-lg font-bold text-slate-700 dark:text-zinc-300">请先选择股票</h3>
           <p className="text-sm text-slate-500 dark:text-zinc-500">从个股分析页选择股票后进入策略回测</p>
         </div>
-        <button onClick={() => navigate('/sector')} className="px-5 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/30 text-sm font-medium text-violet-400 hover:bg-violet-500/30 transition-colors">前往选股</button>
+        <button onClick={() => navigate('/sector')} className="btn-secondary">前往选股</button>
       </div>
     );
   }
@@ -1187,7 +1187,7 @@ export default function BacktestPage() {
                       />
                       <button
                         onClick={handleSave}
-                        className="px-4 py-2 bg-violet-500/30 border border-violet-500/40 rounded-lg text-sm text-violet-700 dark:text-violet-700 dark:text-violet-300 hover:bg-violet-500/40 transition-colors"
+                        className="btn-ghost"
                       >
                         确认
                       </button>
