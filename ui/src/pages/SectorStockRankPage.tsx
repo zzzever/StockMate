@@ -96,7 +96,7 @@ function SectorHeatmap({ sectors }: { sectors: HotSector[] }) {
   }, [sectors]);
 
   return (
-    <div className="glass-jp px-3 py-2.5 shrink-0">
+    <div className="glass-jp px-2 py-2 shrink-0">
       <div
         className="grid"
         style={{
@@ -140,7 +140,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
     >
       {/* # */}
       <td
-        className="py-2 px-3 text-data-sm font-mono-nums w-10"
+        className="py-1.5 px-2 text-data-sm font-mono-nums w-10"
         style={{ color: 'hsl(var(--text-tertiary))' }}
       >
         {rank}
@@ -148,7 +148,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
 
       {/* 板块名称 */}
       <td
-        className="py-2 px-3 text-data-sm font-medium truncate max-w-[140px]"
+        className="py-1.5 px-2 text-data-sm font-medium truncate max-w-[120px]"
         style={{ color: 'var(--text-primary)' }}
       >
         {sector.name}
@@ -156,7 +156,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
 
       {/* 涨跌幅 + 迷你条形图 */}
       <td
-        className="py-2 px-3 text-right text-data-sm font-semibold font-mono-nums"
+        className="py-1.5 px-2 text-right text-data-sm font-semibold font-mono-nums"
         style={{ ...chgStyle(sector.change_percent), fontWeight: Math.abs(sector.change_percent) > 3 ? 700 : 500 }}
       >
         <div className="flex items-center justify-end gap-2">
@@ -177,7 +177,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
       </td>
 
       {/* 涨/跌家 */}
-      <td className="py-2 px-3 text-right text-data-sm font-mono-nums whitespace-nowrap">
+      <td className="py-1.5 px-2 text-right text-data-sm font-mono-nums whitespace-nowrap">
         {sector.up_count != null && sector.down_count != null ? (
           <span>
             <span style={{ color: 'hsl(var(--price-up))' }}>{sector.up_count}</span>
@@ -192,7 +192,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
       </td>
 
       {/* 资金流 — hidden on small screens */}
-      <td className="py-2 px-3 text-right text-data-sm font-semibold font-mono-nums hidden md:table-cell">
+      <td className="py-1.5 px-2 text-right text-data-sm font-semibold font-mono-nums hidden md:table-cell">
         {sector.fund_flow != null ? (
           <span
             className={`inline-flex items-center justify-end px-2 py-0.5 rounded-sm ${
@@ -215,7 +215,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
 
       {/* 领涨股 */}
       <td
-        className="py-2 px-3 text-sm truncate max-w-[180px]"
+        className="py-1.5 px-2 text-sm truncate max-w-[140px]"
         style={{ color: 'var(--text-primary)' }}
       >
         <span className="flex items-center gap-1.5">
@@ -316,9 +316,9 @@ export default function SectorStockRankPage() {
 
   // ── Render ──
   return (
-    <div className="h-full flex flex-col gap-4">
+    <div className="h-full flex flex-col gap-3">
       {/* ═══ Header ═══ */}
-      <div className="flex items-center justify-between shrink-0 flex-wrap gap-3">
+      <div className="flex items-center justify-between shrink-0 flex-wrap gap-2">
         <div>
           <h1 className="text-display text-gradient">板块分析</h1>
           <p className="text-data-sm mt-1" style={{ color: 'hsl(var(--text-secondary))' }}>
@@ -331,7 +331,7 @@ export default function SectorStockRankPage() {
       <SectorHeatmap sectors={sectors} />
 
       {/* ═══ Filter bar ═══ */}
-      <div className="flex items-center gap-3 shrink-0 flex-wrap">
+      <div className="flex items-center gap-2 shrink-0 flex-wrap">
         {/* Quick filter pills */}
         <div className="flex items-center gap-1">
           {QUICK_FILTERS.map((f) => (
@@ -432,24 +432,24 @@ export default function SectorStockRankPage() {
                 className="border-b text-data-xs uppercase tracking-wider"
                 style={{ borderColor: 'hsl(var(--border-default) / 0.5)', color: 'hsl(var(--text-secondary))' }}
               >
-                <th className="py-2 px-3 text-left w-10">#</th>
-                <th className="py-2 px-3 text-left">
+                <th className="py-1.5 px-2 text-left w-10">#</th>
+                <th className="py-1.5 px-2 text-left">
                   板块名称
                 </th>
                 <th
-                  className="py-2 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-24"
+                  className="py-1.5 px-2 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-24"
                   onClick={() => toggleSort('change_percent')}
                 >
                   涨跌幅 {sortIndicator('change_percent')}
                 </th>
-                <th className="py-2 px-3 text-right w-22">涨/跌家</th>
+                <th className="py-1.5 px-2 text-right w-22">涨/跌家</th>
                 <th
-                  className="py-2 px-3 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden md:table-cell"
+                  className="py-1.5 px-2 text-right cursor-pointer hover:text-[var(--text-primary)] select-none w-28 hidden md:table-cell"
                   onClick={() => toggleSort('fund_flow')}
                 >
                   资金流 {sortIndicator('fund_flow')}
                 </th>
-                <th className="py-2 px-3 text-left w-36">
+                <th className="py-1.5 px-2 text-left w-36">
                   领涨股
                 </th>
               </tr>
