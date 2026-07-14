@@ -190,109 +190,107 @@ export default function StockMetricsPanel({
 
   return (
     <div
-      className={`shrink-0 flex items-center overflow-hidden ${className}`}
+      className={`shrink-0 flex items-start gap-2 px-3 py-2 overflow-x-auto ${className}`}
       style={{
-        height: 36,
-        padding: '0 4px',
         borderTop: '1px solid hsl(var(--border-subtle))',
         borderBottom: '1px solid hsl(var(--border-subtle))',
         background: 'hsl(var(--bg-card))',
       }}
     >
       {/* ════ 成交额 ════ */}
-      <span
-        className="text-[10px] font-semibold tracking-wide shrink-0"
-        style={{ color: 'hsl(var(--text-tertiary))' }}
-      >
-        成交额
-      </span>
-      <span
-        className="ml-1 font-mono-nums text-[12px] font-medium shrink-0"
-        style={{ color: 'hsl(var(--text-primary))' }}
-      >
-        {hasQuote ? fmtAmount(safeNumber(realtimeQuote.amount)) : '--'}
-      </span>
-
-      <Div />
+      <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+        <span
+          className="text-[10px] font-semibold tracking-wide"
+          style={{ color: 'hsl(var(--text-tertiary))' }}
+        >
+          成交额
+        </span>
+        <span
+          className="font-mono-nums text-[12px] font-medium"
+          style={{ color: 'hsl(var(--text-primary))' }}
+        >
+          {hasQuote ? fmtAmount(safeNumber(realtimeQuote.amount)) : '--'}
+        </span>
+      </div>
 
       {/* ════ 主力净流入 ════ */}
-      <span
-        className="font-mono-nums text-[12px] font-medium shrink-0"
-        style={{
-          color: mainFlow
-            ? mainFlow > 0
-              ? 'hsl(var(--price-up))'
-              : 'hsl(var(--price-down))'
-            : 'hsl(var(--text-primary))',
-        }}
-      >
-        {mainFlow
-          ? (mainFlow > 0 ? '+' : '-') + fmtAmount(Math.abs(mainFlow))
-          : '--'}
-      </span>
-      <FlowArrow value={mainFlow} />
-      <span
-        className="text-[10px] font-semibold tracking-wide shrink-0"
-        style={{ color: 'hsl(var(--text-tertiary))' }}
-      >
-        主力
-      </span>
-
-      <Div />
+      <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+        <span
+          className="font-mono-nums text-[12px] font-medium leading-none"
+          style={{
+            color: mainFlow
+              ? mainFlow > 0
+                ? 'hsl(var(--price-up))'
+                : 'hsl(var(--price-down))'
+              : 'hsl(var(--text-primary))',
+          }}
+        >
+          {mainFlow
+            ? (mainFlow > 0 ? '+' : '-') + fmtAmount(Math.abs(mainFlow))
+            : '--'}
+        </span>
+        <span className="flex items-center gap-0.5">
+          <FlowArrow value={mainFlow} />
+          <span
+            className="text-[10px] font-semibold tracking-wide"
+            style={{ color: 'hsl(var(--text-tertiary))' }}
+          >
+            主力
+          </span>
+        </span>
+      </div>
 
       {/* ════ PE 市盈率 ════ */}
-      <span
-        className="text-[10px] font-semibold tracking-wide shrink-0"
-        style={{ color: 'hsl(var(--text-tertiary))' }}
-      >
-        PE
-      </span>
-      <span
-        className="ml-1 font-mono-nums text-[12px] font-medium shrink-0"
-        style={{ color: 'hsl(var(--text-primary))' }}
-      >
-        {finance?.pe != null ? finance.pe.toFixed(1) : '--'}
-      </span>
-      <RiskDot level={peLvl} />
-
-      <Div />
+      <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+        <svg width="32" height="32" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="18" fill="none" stroke="hsl(var(--border-subtle))" strokeWidth="4" />
+          {finance?.pe != null && (
+            <circle cx="24" cy="24" r="18" fill="none" stroke={RISK_COLORS[peLvl]} strokeWidth="4"
+              strokeDasharray={`${(Math.min(Math.max(Math.abs(finance.pe), 0), 60) / 60) * 113} 113`}
+              transform="rotate(-90 24 24)" strokeLinecap="round" />
+          )}
+        </svg>
+        <span className="text-data-sm font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>PE</span>
+        <span className="text-data-xs font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
+          {finance?.pe != null ? finance.pe.toFixed(1) : '--'}
+        </span>
+      </div>
 
       {/* ════ 换手率 ════ */}
-      <span
-        className="text-[10px] font-semibold tracking-wide shrink-0"
-        style={{ color: 'hsl(var(--text-tertiary))' }}
-      >
-        换手
-      </span>
-      <span
-        className="ml-1 font-mono-nums text-[12px] font-medium shrink-0"
-        style={{ color: 'hsl(var(--text-primary))' }}
-      >
-        {hasQuote ? `${safeNumber(realtimeQuote.turnover_rate).toFixed(2)}%` : '--'}
-      </span>
-      <ActivityDots segments={to.segments} />
-
-      <Div />
+      <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+        <svg width="32" height="32" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="18" fill="none" stroke="hsl(var(--border-subtle))" strokeWidth="4" />
+          {hasQuote && (
+            <circle cx="24" cy="24" r="18" fill="none" stroke={RISK_COLORS[to.level]} strokeWidth="4"
+              strokeDasharray={`${(Math.min(Math.max(safeNumber(realtimeQuote.turnover_rate), 0), 7) / 7) * 113} 113`}
+              transform="rotate(-90 24 24)" strokeLinecap="round" />
+          )}
+        </svg>
+        <span className="text-data-sm font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>换手</span>
+        <span className="text-data-xs font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
+          {hasQuote ? `${safeNumber(realtimeQuote.turnover_rate).toFixed(2)}%` : '--'}
+        </span>
+      </div>
 
       {/* ════ 振幅 ════ */}
-      <span
-        className="text-[10px] font-semibold tracking-wide shrink-0"
-        style={{ color: 'hsl(var(--text-tertiary))' }}
-      >
-        振幅
-      </span>
-      <span
-        className="ml-1 font-mono-nums text-[12px] font-medium shrink-0"
-        style={{ color: 'hsl(var(--text-primary))' }}
-      >
-        {amp != null ? `${amp.toFixed(2)}%` : '--'}
-      </span>
-      <RiskDot level={ampLvl ?? 'normal'} />
+      <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+        <svg width="32" height="32" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="18" fill="none" stroke="hsl(var(--border-subtle))" strokeWidth="4" />
+          {amp != null && (
+            <circle cx="24" cy="24" r="18" fill="none" stroke={RISK_COLORS[ampLvl ?? 'normal']} strokeWidth="4"
+              strokeDasharray={`${(Math.min(Math.max(Math.abs(amp), 0), 8) / 8) * 113} 113`}
+              transform="rotate(-90 24 24)" strokeLinecap="round" />
+          )}
+        </svg>
+        <span className="text-data-sm font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>振幅</span>
+        <span className="text-data-xs font-mono-nums" style={{ color: 'hsl(var(--text-primary))' }}>
+          {amp != null ? `${amp.toFixed(2)}%` : '--'}
+        </span>
+      </div>
 
       {/* ════ 支撑/阻力 (when available) ════ */}
       {supportResistance && (
-        <>
-          <Div />
+        <div className="flex items-center gap-2 h-full">
           <span
             className="text-[10px] font-semibold tracking-wide shrink-0"
             style={{ color: 'hsl(var(--text-tertiary))' }}
@@ -300,7 +298,7 @@ export default function StockMetricsPanel({
             阻力
           </span>
           <span
-            className="ml-1 font-mono-nums text-[12px] font-medium shrink-0"
+            className="font-mono-nums text-[12px] font-medium shrink-0"
             style={{ color: 'hsl(var(--price-up))' }}
           >
             {supportResistance.resistances?.[0] != null
@@ -309,20 +307,20 @@ export default function StockMetricsPanel({
           </span>
 
           <span
-            className="ml-2 text-[10px] font-semibold tracking-wide shrink-0"
+            className="text-[10px] font-semibold tracking-wide shrink-0"
             style={{ color: 'hsl(var(--text-tertiary))' }}
           >
             支撑
           </span>
           <span
-            className="ml-1 font-mono-nums text-[12px] font-medium shrink-0"
+            className="font-mono-nums text-[12px] font-medium shrink-0"
             style={{ color: 'hsl(var(--price-down))' }}
           >
             {supportResistance.supports?.[0] != null
               ? fmtPrice(supportResistance.supports[0])
               : '--'}
           </span>
-        </>
+        </div>
       )}
 
       {/* ════ Spacer — pushes warning right ════ */}

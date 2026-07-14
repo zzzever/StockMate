@@ -350,9 +350,9 @@ describe('StockMetricsPanel', () => {
 
     // No text badge
     expect(screen.queryByText('活跃')).not.toBeInTheDocument();
-    // Activity dots present (amber filled circles)
-    const amberDots = container.querySelectorAll('[style*="risk-warning"][style*="border-radius: 50%"]');
-    expect(amberDots.length).toBeGreaterThan(0);
+    // SVG ring stroke uses risk-warning color for elevated turnover
+    const svgCircles = container.querySelectorAll('circle[stroke*="risk-warning"]');
+    expect(svgCircles.length).toBeGreaterThan(0);
   });
 
   it('shows -- for PE when finance data missing', () => {
@@ -628,7 +628,8 @@ describe('StockMetricsPanel', () => {
     );
 
     expect(screen.getByText('0.0')).toBeInTheDocument();
-    const dots = container.querySelectorAll('[style*="risk-safe"]');
-    expect(dots.length).toBeGreaterThan(0);
+    // SVG ring stroke uses risk-safe color for PE=0
+    const svgCircles = container.querySelectorAll('circle[stroke*="risk-safe"]');
+    expect(svgCircles.length).toBeGreaterThan(0);
   });
 });

@@ -86,37 +86,19 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(screen.getByPlaceholderText('搜索板块...')).toBeInTheDocument();
     });
 
-    it('renders the sentiment overview bar with labels', () => {
+    it('renders the sector heatmap grid', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      expect(screen.getByText('上涨')).toBeInTheDocument();
-      expect(screen.getByText('下跌')).toBeInTheDocument();
-      expect(screen.getByText('最强')).toBeInTheDocument();
-      expect(screen.getByText('最弱')).toBeInTheDocument();
-      expect(screen.getByText('平盘')).toBeInTheDocument();
-      expect(screen.getAllByText('资金流入').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('流出')).toBeInTheDocument();
-      expect(screen.getByText('总成交')).toBeInTheDocument();
-      expect(screen.getByText('主力净流入')).toBeInTheDocument();
-    });
-
-    it('shows correct up/down counts in sentiment bar', () => {
-      vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
-      renderPage();
-      // 2 sectors up (+3.45%, +1.25%), 1 sector down (-0.82%)
-      const upElements = screen.getAllByText('2');
-      expect(upElements.length).toBeGreaterThanOrEqual(1);
-      const downElements = screen.getAllByText('1');
-      expect(downElements.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('shows strongest and weakest sectors in sentiment bar', () => {
-      vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
-      renderPage();
-      // 半导体 appears in both sentiment bar (as strongest) and table (as sector row)
+      // Heatmap shows short names for each sector
+      const heatmapGrid = document.querySelector('.grid[style*="grid-template-columns: repeat(auto-fill, minmax(48px, 1fr))"]');
+      expect(heatmapGrid).toBeInTheDocument();
+      // Each sector short name appears in the heatmap
       expect(screen.getAllByText('半导体').length).toBeGreaterThanOrEqual(2);
-      // 银行 appears in both sentiment bar (as weakest) and table
       expect(screen.getAllByText('银行').length).toBeGreaterThanOrEqual(2);
+      // Heatmap cells have tooltip titles with full name + percent
+      const heatmapCells = document.querySelectorAll('[title]');
+      expect(heatmapCells.length).toBe(3);
+      expect(heatmapCells[0].getAttribute('title')).toContain('半导体 +3.45%');
     });
   });
 
@@ -152,7 +134,7 @@ describe('SectorStockRankPage — Sector Analysis', () => {
     it('filters by 资金流入', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      fireEvent.click(screen.getAllByText('资金流入')[1]); // filter button (index 1, index 0 is stat card label)
+      fireEvent.click(screen.getByText('资金流入')); // filter button
       const table = document.querySelector('table');
       expect(table?.textContent).toContain('半导体');
       expect(table?.textContent).toContain('白酒');
@@ -167,17 +149,21 @@ describe('SectorStockRankPage — Sector Analysis', () => {
     it('renders sector names in table rows', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
+      // Sector names appear in both heatmap and table
       expect(screen.getAllByText('半导体').length).toBeGreaterThanOrEqual(2);
       expect(screen.getAllByText('银行').length).toBeGreaterThanOrEqual(2);
-      // 白酒 only appears in table (not in sentiment cards — only extremes shown)
-      expect(screen.getByText('白酒')).toBeInTheDocument();
+      // 白酒 appears in both heatmap (shortName = 白酒) and table
+      expect(screen.getAllByText('白酒').length).toBeGreaterThanOrEqual(2);
     });
 
     it('renders change percent in table', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      expect(screen.getAllByText('+3.45%').length).toBeGreaterThanOrEqual(2);
-      expect(screen.getAllByText('-0.82%').length).toBeGreaterThanOrEqual(2);
+      // Heatmap uses toFixed(1) (+3.5%), table uses fmtChange (+3.45%)
+      const table = document.querySelector('table');
+      expect(table?.textContent).toContain('+3.45%');
+      expect(table?.textContent).toContain('-0.82%');
+      expect(table?.textContent).toContain('+1.25%');
     });
 
     it('renders up/down counts', () => {
