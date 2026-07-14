@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# post-commit — auto-build frontend + backend after every commit
+# post-commit — auto-build frontend + backend in the background
+# Runs asynchronously so git commit completes immediately.
 set -e
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 
-echo ""
-echo "═══════════════════════════════════════════════════"
-echo "  post-commit: 构建前后端..."
-echo "═══════════════════════════════════════════════════"
-
-# 前端构建
-echo "→ 前端 npm run build..."
-cd "$REPO/ui"
+nohup bash -c "
+echo ''
+echo '═══════════════════════════════════════════════════'
+echo '  post-commit: 构建前后端 (后台)...'
+echo '═══════════════════════════════════════════════════'
+echo '→ 前端 npm run build...'
+cd '$REPO/ui'
 npm run build 2>&1 | tail -3
-echo "  前端构建完成 ✓"
-
-# 后端构建
-echo "→ 后端 cargo build --release..."
-cd "$REPO"
-"$HOME/.cargo/bin/cargo" build --release 2>&1 | tail -3
-echo "  后端构建完成 ✓"
-
-echo "═══════════════════════════════════════════════════"
-echo "  前后端构建均已完成"
-echo "═══════════════════════════════════════════════════"
+echo '  前端构建完成 ✓'
+echo '→ 后端 cargo build --release...'
+cd '$REPO'
+'$HOME/.cargo/bin/cargo' build --release 2>&1 | tail -3
+echo '  后端构建完成 ✓'
+echo '═══════════════════════════════════════════════════'
+echo '  前后端构建均已完成'
+echo '═══════════════════════════════════════════════════'
+" > /dev/null 2>&1 &
