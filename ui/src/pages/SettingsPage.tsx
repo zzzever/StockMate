@@ -3,6 +3,7 @@ import { Database, Palette, Trash2, Wifi, Bot, Eye, EyeOff, Save, TestTube, Chec
 import { invoke } from '@tauri-apps/api/core';
 import { useDeepSeekConfig } from '@/hooks/useTauriQuery';
 import { useAppStore } from '@/store/useAppStore';
+import { useThemeStore, type ThemeName } from '@/store/useThemeStore';
 import { chartThemes, type ChartStyle } from '@/config/chartThemes';
 import DataSourceStatus from '@/components/DataSourceStatus';
 
@@ -244,6 +245,14 @@ export default function SettingsPage() {
 
         <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
+            <Palette size={16} style={{ color: 'hsl(var(--accent-purple))' }} />
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>配色方案</h2>
+          </div>
+          <ThemeSchemeSelector />
+        </div>
+
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
             <Palette size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>外观设置</h2>
           </div>
@@ -354,6 +363,46 @@ function CacheClearButton() {
         </div>
       )}
     </>
+  );
+}
+
+// ── Theme scheme selector (jp / ghibli / bloomberg / swiss) ──
+const THEME_SCHEMES: { key: ThemeName; label: string; desc: string; colors: string[] }[] = [
+  { key: 'jp', label: '日式TV', desc: '鲜艳绯红 · 暖色调默认', colors: ['hsl(0 75% 48%)', 'hsl(25 95% 50%)', 'hsl(45 95% 50%)'] },
+  { key: 'ghibli', label: '吉卜力', desc: '温暖琥珀 · 柔和梦幻', colors: ['hsl(30 60% 50%)', 'hsl(40 80% 55%)', 'hsl(180 40% 55%)'] },
+  { key: 'bloomberg', label: 'Bloomberg', desc: '冷静蓝调 · 金融专业', colors: ['hsl(220 60% 50%)', 'hsl(30 90% 50%)', 'hsl(120 55% 40%)'] },
+  { key: 'swiss', label: '瑞士风格', desc: '经典蓝 · 简约清晰', colors: ['hsl(221 83% 53%)', 'hsl(25 95% 50%)', 'hsl(350 75% 38%)'] },
+];
+
+function ThemeSchemeSelector() {
+  const theme = useThemeStore((s) => s.theme);
+  const setTheme = useThemeStore((s) => s.setTheme);
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {THEME_SCHEMES.map((opt) => (
+        <button key={opt.key} onClick={() => setTheme(opt.key)}
+          className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border transition-all ${
+            theme === opt.key
+              ? '' : 'hover:border-slate-300 dark:hover:border-zinc-600'
+          }`}
+          style={{
+            borderColor: theme === opt.key ? 'hsl(var(--swiss-accent) / 0.5)' : 'var(--border-default)',
+            background: theme === opt.key ? 'hsl(var(--swiss-accent-ghost))' : undefined
+          }}
+        >
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-xs font-bold" style={{ color: 'hsl(var(--text-primary))' }}>{opt.label}</span>
+            {theme === opt.key && <CheckCircle size={10} style={{ color: 'hsl(var(--swiss-accent))' }} className="ml-auto" />}
+          </div>
+          <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>{opt.desc}</span>
+          <div className="flex gap-1 mt-0.5">
+            {opt.colors.map((c, i) => (
+              <div key={i} className="w-4 h-4 rounded-full" style={{ backgroundColor: c }} />
+            ))}
+          </div>
+        </button>
+      ))}
+    </div>
   );
 }
 

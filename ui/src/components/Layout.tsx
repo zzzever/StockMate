@@ -1,4 +1,5 @@
 import { useAppStore, initSystemThemeListener } from '@/store/useAppStore';
+import { useThemeStore } from '@/store/useThemeStore';
 import Sidebar from '@/components/Sidebar';
 import TitleBar from '@/components/TitleBar';
 import TopBar from '@/components/TopBar';
@@ -29,6 +30,20 @@ export default function Layout({ children }: LayoutProps) {
     const cleanup = initSystemThemeListener();
     return () => cleanup();
   }, []);
+
+  // Apply theme (jp / ghibli / bloomberg / swiss) to <html> element
+  const theme = useThemeStore((s) => s.theme);
+  useEffect(() => {
+    const html = document.documentElement;
+    // Remove any existing theme-* class
+    html.className = html.className
+      .replace(/\btheme-\w+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (theme !== 'jp') {
+      html.classList.add(`theme-${theme}`);
+    }
+  }, [theme]);
 
   useRealtimePriceListener();
 
