@@ -206,10 +206,10 @@
   --accent-gold: 45 85% 50%;
   --accent-purple: 260 50% 55%;
   --accent-cyan: 190 70% 50%;
-  --price-up: 120 55% 40%;              /* 涨=绿 (西方惯例) */
-  --price-down: 0 65% 45%;              /* 跌=红 */
-  --price-up-bg: 120 55% 10%;
-  --price-down-bg: 0 65% 10%;
+  --price-up: 0 65% 50%;                /* 涨=红 (中文惯例) */
+  --price-down: 145 50% 35%;              /* 跌=绿 */
+  --price-up-bg: 0 65% 12%;
+  --price-down-bg: 145 50% 10%;
   --bg-root: #0a0e15;
   --bg-sidebar: #0a0e15;
   --bg-topbar: #0f1520;

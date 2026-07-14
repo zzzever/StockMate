@@ -63,7 +63,6 @@ function AppRoutes() {
             <Route path="/backtest" element={<BacktestPage />} />
             <Route path="/predict" element={<PredictPage />} />
             <Route path="/rules" element={<RulesPage />} />
-            <Route path="/indicator-lab" element={<IndicatorLabPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </Suspense>

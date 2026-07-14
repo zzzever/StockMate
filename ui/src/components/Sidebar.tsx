@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
-  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
+  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/settings': 'settings',
 };
 
 const navGroups = [
@@ -45,7 +45,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'quote'];
+  const stockPages = ['backtest', 'predict', 'rules', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {
