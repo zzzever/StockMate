@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
-  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/settings': 'settings',
+  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
 };
 
 const navGroups = [
@@ -28,6 +28,7 @@ const navGroups = [
     items: [
       { id: 'backtest' as const, label: '回測', icon: TrendingUp, path: '/backtest' },
       { id: 'predict' as const, label: '預測', icon: BrainCircuit, path: '/predict' },
+      { id: 'indicatorLab' as const, label: '支撐線', icon: FlaskConical, path: '/indicator-lab' },
       { id: 'rules' as const, label: '規則', icon: ScrollText, path: '/rules' },
     ],
   },
@@ -45,7 +46,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'quote'];
+  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {

@@ -7,7 +7,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
 import { fmtPrice, fmtPct, fmtVolume } from '@/lib/format';
 import { getChartTheme } from '@/config/chartThemes';
-import type { StockFinance, SupportResistance } from '@/types';
+import type { StockFinance } from '@/types';
 import type { PriceData, Quote } from '@/types';
 import type { TradingRule } from '@/types';
 import { invoke } from '@tauri-apps/api/core';
@@ -41,7 +41,7 @@ const EMA = (data: number[], period: number): number[] => { if (data.length === 
 
 type IndicatorType = 'macd' | 'kdj' | 'boll' | 'none';
 
-function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, showSR, sr, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; showSR?: boolean; sr?: SupportResistance | null; drawMode?: boolean; drawColor?: string }) {
+function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; drawMode?: boolean; drawColor?: string }) {
   const chartStyle = useAppStore(s => s.chartStyle);
   const darkMode = useAppStore(s => s.darkMode);
   const T = useMemo(() => getChartTheme(chartStyle, darkMode), [chartStyle, darkMode]);
@@ -301,19 +301,6 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       c.ma5.setData(ml(maData.ma5)); c.ma10.setData(ml(maData.ma10)); c.ma20.setData(ml(maData.ma20)); c.ma60.setData(ml(maData.ma60));
       // BOLL toggleable
       if (showBOLL) { c.bbUMain.setData(indData.bbU); c.bbMMain.setData(indData.bbM); c.bbLMain.setData(indData.bbL); }
-      if (showSR && sr) {
-        const allLines = [...(c.candle as any).chartRef?.current?.priceLines() || []];
-        if (allLines.length === 0) {
-          sr.supports.forEach((s: number) => {
-            try { (c.candle as any).createPriceLine({ price: s, color: "hsl(var(--price-down))", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "S" }); } catch(_) {}
-          });
-          sr.resistances.forEach((r: number) => {
-            try { (c.candle as any).createPriceLine({ price: r, color: "hsl(var(--price-up))", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: "R" }); } catch(_) {}
-          });
-        }
-      } else if (!showSR) {
-        try { (c.candle as any).priceLines().forEach((pl: any) => (c.candle as any).removePriceLine(pl)); } catch(_) {}
-      }
       else { c.bbUMain.setData([]); c.bbMMain.setData([]); c.bbLMain.setData([]); }
       // Indicator sub-chart
       if (IND === 'macd') { c.macdHist.setData(indData.macd); c.macdDif.setData(indData.dif.map((v: number, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v }))); c.macdDea.setData(indData.dea.map((v: number, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v }))); c.kdjK.setData([]); c.kdjD.setData([]); c.kdjJ.setData([]); c.bbU.setData([]); c.bbM.setData([]); c.bbL.setData([]); }
@@ -323,7 +310,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       if (data.length !== prevLenRef.current) { c.mc.timeScale().fitContent(); c.mc.timeScale().scrollToPosition(0, false); prevLenRef.current = data.length; }
       updateOverlays();
     } catch (e) { console.warn('Chart data update failed:', e); }
-  }, [data, maData, T, IND, indData, updateOverlays, showBOLL, showSR, sr]);
+  }, [data, maData, T, IND, indData, updateOverlays, showBOLL]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ position: 'relative' }}>
@@ -387,7 +374,6 @@ export default function StockDetailPage() {
   const handleSetPeriod = (p: string) => { setPeriod(p); if (p === 'minute') setCrosshair(null); };
   const [indicator, setIndicator] = useState<IndicatorType>('none');
   const [showBOLL, setShowBOLL] = useState(false);
-  const [showSR, setShowSR] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
   const [drawColor, setDrawColor] = useState<string>(DRAW_COLORS[0].value);
   // Sync draw mode off when chart signals exit (Escape) — event-driven, no polling
@@ -541,7 +527,7 @@ export default function StockDetailPage() {
             ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
             : historyError && !chartData.length
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
-              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} showSR={showSR} sr={sr} drawMode={drawMode} drawColor={drawColor} />)}
+              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
       </div>
       {secondaryErrors.length > 0 && (
         <div className="shrink-0 px-1">

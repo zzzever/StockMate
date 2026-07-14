@@ -18,6 +18,7 @@ const SectorStockRankPage = lazy(() => import('@/pages/SectorStockRankPage'));
 const BacktestPage = lazy(() => import('@/pages/BacktestPage'));
 const PredictPage = lazy(() => import('@/pages/PredictPage'));
 const RulesPage = lazy(() => import('@/pages/RulesPage'));
+const IndicatorLabPage = lazy(() => import('@/pages/IndicatorLabPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 
 const queryClient = new QueryClient({
@@ -62,6 +63,7 @@ function AppRoutes() {
             <Route path="/backtest" element={<BacktestPage />} />
             <Route path="/predict" element={<PredictPage />} />
             <Route path="/rules" element={<RulesPage />} />
+            <Route path="/indicator-lab" element={<IndicatorLabPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </Suspense>
