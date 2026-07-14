@@ -117,7 +117,7 @@ export default function WatchlistPage() {
                 {/* Star button */}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleRemove(e, item.stock_code); }}
-                  className="shrink-0 mt-0.5 text-amber-500 hover:text-amber-600 transition-colors"
+                  className="shrink-0 mt-0.5 hover:text-amber-600 transition-colors" style={{ color: 'hsl(var(--risk-warning))' }}
                   title="取消自选"
                 >
                   <Star size={14} fill="currentColor" />

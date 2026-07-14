@@ -415,7 +415,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
     if (!containerRef.current) return;
     try {
       const chart = createChart(containerRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: '#a1a1aa' },
+        layout: { background: { color: 'transparent' }, textColor: 'hsl(var(--text-tertiary))' },
         grid: { vertLines: { color: 'rgba(255,255,255,0.05)' }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
         crosshair: { mode: 1 },
         rightPriceScale: { borderColor: 'rgba(255,255,255,0.05)' },
@@ -423,7 +423,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
         autoSize: true,
       });
       chartRef.current = chart;
-      strategySeriesRef.current = chart.addAreaSeries({ topColor: 'rgba(16,185,129,0.4)', bottomColor: 'rgba(16,185,129,0.05)', lineColor: '#10b981', lineWidth: 2 });
+      strategySeriesRef.current = chart.addAreaSeries({ topColor: 'rgba(16,185,129,0.4)', bottomColor: 'rgba(16,185,129,0.05)', lineColor: 'hsl(var(--price-up))', lineWidth: 2 });
       benchmarkSeriesRef.current = chart.addLineSeries({ color: 'rgba(161,161,170,0.6)', lineWidth: 1, lineStyle: LineStyle.Dashed });
     } catch (e) { console.error('EquityCurveChart creation failed:', e); }
     return () => { isMounted.current = false; try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
@@ -455,7 +455,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
         time: t.date as any,
         position: t.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
         shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
-        color: t.type === 'buy' ? '#22c55e' : '#ef4444',
+        color: t.type === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
         text: t.type === 'buy' ? 'B' : 'S',
         size: 1,
       }));
@@ -555,7 +555,7 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
   const getTextColor = (ret: number) => {
     if (ret > 0) return '#6ee7b7';
     if (ret < 0) return '#fda4af';
-    return '#71717a';
+    return 'hsl(var(--text-secondary))';
   };
 
   return (
@@ -711,15 +711,15 @@ function StrategyRadarChart({ results, names }: { results: SavedResult[]; names:
     });
   }, [results, names]);
 
-  const colors = ['#10b981', '#6366f1', '#f59e0b', '#ec4899'];
+  const colors = ['hsl(var(--price-up))', 'hsl(var(--swiss-accent))', 'hsl(var(--risk-warning))', 'hsl(var(--risk-danger))'];
 
   return (
     <div className="w-full h-72">
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={radarData}>
           <PolarGrid stroke="rgba(255,255,255,0.1)" />
-          <PolarAngleAxis dataKey="metric" tick={{ fill: '#a1a1aa', fontSize: 10 }} />
-          <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#71717a', fontSize: 9 }} />
+          <PolarAngleAxis dataKey="metric" tick={{ fill: 'hsl(var(--text-tertiary))', fontSize: 10 }} />
+          <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: 'hsl(var(--text-secondary))', fontSize: 9 }} />
           {results.map((_, i) => (
             <Radar
               key={i}
@@ -736,7 +736,7 @@ function StrategyRadarChart({ results, names }: { results: SavedResult[]; names:
             labelStyle={{ color: '#ccc' }}
           />
           <Legend
-            wrapperStyle={{ fontSize: '11px', color: '#a1a1aa' }}
+            wrapperStyle={{ fontSize: '11px', color: 'hsl(var(--text-tertiary))' }}
           />
         </RadarChart>
       </ResponsiveContainer>
@@ -810,7 +810,7 @@ function StrategyComparison({ savedResults, onRemove }: {
               <tr className="border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
                 <th className="text-left py-2 px-2 font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>指标</th>
                 {compareResults.map((s, i) => (
-                  <th key={s.id} className="text-right py-2 px-2 font-medium" style={{ color: ['#10b981', '#6366f1', '#f59e0b', '#ec4899'][i] }}>
+                  <th key={s.id} className="text-right py-2 px-2 font-medium" style={{ color: ['hsl(var(--price-up))', 'hsl(var(--swiss-accent))', 'hsl(var(--risk-warning))', 'hsl(var(--risk-danger))'][i] }}>
                     {s.name}
                   </th>
                 ))}
@@ -818,12 +818,12 @@ function StrategyComparison({ savedResults, onRemove }: {
             </thead>
             <tbody>
               {[
-                { label: '总收益率', key: 'total_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? '#22c55e' : '#ef4444' },
-                { label: '年化收益率', key: 'annual_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? '#22c55e' : '#ef4444' },
-                { label: '最大回撤', key: 'max_drawdown', fmt: (v: number) => formatPct(v), color: () => '#ef4444' },
-                { label: '夏普比率', key: 'sharpe_ratio', fmt: (v: number) => safeToFixed(v, 2), color: (v: number) => v >= 1 ? '#22c55e' : '#a1a1aa' },
-                { label: '胜率', key: 'win_rate', fmt: (v: number) => `${safeToFixed(v, 1)}%`, color: () => '#a78bfa' },
-                { label: '交易次数', key: 'trade_count', fmt: (v: number) => String(v), color: () => '#a1a1aa' },
+                { label: '总收益率', key: 'total_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' },
+                { label: '年化收益率', key: 'annual_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' },
+                { label: '最大回撤', key: 'max_drawdown', fmt: (v: number) => formatPct(v), color: () => 'hsl(var(--price-down))' },
+                { label: '夏普比率', key: 'sharpe_ratio', fmt: (v: number) => safeToFixed(v, 2), color: (v: number) => v >= 1 ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))' },
+                { label: '胜率', key: 'win_rate', fmt: (v: number) => `${safeToFixed(v, 1)}%`, color: () => 'hsl(var(--swiss-accent))' },
+                { label: '交易次数', key: 'trade_count', fmt: (v: number) => String(v), color: () => 'hsl(var(--text-tertiary))' },
               ].map(row => (
                 <tr key={row.key} className="border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
                   <td className="py-2 px-2" style={{ color: 'hsl(var(--text-secondary))' }}>{row.label}</td>
@@ -854,7 +854,7 @@ function StrategyComparison({ savedResults, onRemove }: {
           {savedResults.map((s, i) => (
             <div key={s.id} className="flex items-center justify-between px-2 py-1.5 rounded text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid hsl(var(--border-subtle))' }}>
               <div className="flex items-center gap-2 min-w-0">
-                <span className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ background: ['#10b981', '#6366f1', '#f59e0b', '#ec4899'][i % 4] }}>
+                <span className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ background: ['hsl(var(--price-up))', 'hsl(var(--swiss-accent))', 'hsl(var(--risk-warning))', 'hsl(var(--risk-danger))'][i % 4] }}>
                   {i + 1}
                 </span>
                 <span className="truncate font-medium" style={{ color: 'hsl(var(--text-primary))' }}>{s.name}</span>

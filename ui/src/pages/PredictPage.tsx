@@ -409,7 +409,7 @@ function DimCard({ label, data }: { label: string; data: import('@/types').Dimen
           <span key={k} className={`text-[10px] font-bold px-1.5 py-0.5 border ${
             s.direction === 'bullish' ? 'bg-red-50 text-red-700 border-red-300' :
             s.direction === 'bearish' ? 'bg-blue-50 text-blue-700 border-blue-300' :
-            'bg-gray-50 text-gray-600 border-gray-300'
+            'text-gray-600'
           }`}>{s.name} {s.strength != null ? `${(s.strength * 100).toFixed(0)}%` : ''}</span>
         ))}
       </div>

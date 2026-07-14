@@ -1,7 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createChart, type IChartApi, type ISeriesApi, type Time } from 'lightweight-charts';
-import { motion } from 'framer-motion';
 import { ArrowLeft, Shield, Brain, RefreshCw } from 'lucide-react';
 import { useStockHistory, useStockDetail } from '@/hooks/useTauriQuery';
 import { invoke } from '@tauri-apps/api/core';
@@ -196,17 +195,17 @@ export default function IndicatorLabPage() {
   useEffect(() => {
     if (!mainRef.current) return;
     const c = createChart(mainRef.current, {
-      layout: { background: { color: 'transparent' }, textColor: '#94a3b8' },
-      grid: { vertLines: { color: 'rgba(148,163,184,0.1)' }, horzLines: { color: 'rgba(148,163,184,0.1)' } },
+      layout: { background: { color: 'transparent' }, textColor: 'hsl(var(--text-tertiary))' },
+      grid: { vertLines: { color: 'hsla(var(--text-tertiary), 0.1)' }, horzLines: { color: 'hsla(var(--text-tertiary), 0.1)' } },
       autoSize: true, crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: 'rgba(148,163,184,0.2)' },
-      timeScale: { borderColor: 'rgba(148,163,184,0.2)', timeVisible: true },
+      rightPriceScale: { borderColor: 'hsla(var(--text-tertiary), 0.2)' },
+      timeScale: { borderColor: 'hsla(var(--text-tertiary), 0.2)', timeVisible: true },
     });
     c.timeScale().applyOptions({ minBarSpacing: 4, fixLeftEdge: true, fixRightEdge: true });
     const candle = c.addCandlestickSeries({
-      upColor: '#ff6b6b', downColor: '#4ecdc4',
-      borderUpColor: '#ff6b6b', borderDownColor: '#4ecdc4',
-      wickUpColor: '#ff6b6b', wickDownColor: '#4ecdc4',
+      upColor: 'hsl(var(--risk-danger))', downColor: 'hsl(var(--price-down))',
+      borderUpColor: 'hsl(var(--risk-danger))', borderDownColor: 'hsl(var(--price-down))',
+      wickUpColor: 'hsl(var(--risk-danger))', wickDownColor: 'hsl(var(--price-down))',
     });
     storeRef.current = { chart: c, candle, maLine: null, dasLine: null };
     return () => { try { c.remove() } catch (_) { } storeRef.current = null; }
@@ -229,7 +228,7 @@ export default function IndicatorLabPage() {
     if (showMA) {
       if (!s.maLine) {
         s.maLine = s.chart.addLineSeries({
-          color: '#f9ca24', lineWidth: 1, lineStyle: 0,
+          color: 'hsl(var(--risk-warning))', lineWidth: 1, lineStyle: 0,
           priceLineVisible: false, lastValueVisible: true,
         });
       }
@@ -243,7 +242,7 @@ export default function IndicatorLabPage() {
     if (showDAS) {
       if (!s.dasLine) {
         s.dasLine = s.chart.addLineSeries({
-          color: '#10b981', lineWidth: 2, lineStyle: 2,
+          color: 'hsl(var(--price-up))', lineWidth: 2, lineStyle: 2,
           priceLineVisible: false, lastValueVisible: true,
         });
       }
@@ -261,11 +260,11 @@ export default function IndicatorLabPage() {
   if (stockError) return <div className="p-4 text-red-500">加载股票详情失败: {stockError.message}</div>;
   if (historyError) return <div className="p-4 text-red-500">加载历史数据失败: {historyError.message}</div>;
   if (!dailyLoading && dailyData?.length === 0) {
-    return <div className="p-4 text-gray-500">暂无历史数据</div>;
+    return <div className="p-4" style={{ color: 'hsl(var(--text-secondary))' }}>暂无历史数据</div>;
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col gap-3 p-3">
+    <div className="h-full flex flex-col gap-3 p-3">
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)}
@@ -288,7 +287,7 @@ export default function IndicatorLabPage() {
 
       {!stockId ? (
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-400 font-bold">请先选择一只股票</p>
+          <p className="font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>请先选择一只股票</p>
         </div>
       ) : (
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-3 overflow-hidden">
@@ -305,26 +304,25 @@ export default function IndicatorLabPage() {
             </h3>
 
             {/* ── 公式1：均线支撑 ── */}
-            <div className="p-3 border rounded" style={{ borderColor: 'rgba(249,202,36,0.4)' }}>
+            <div className="p-3 border rounded" style={{ borderColor: 'hsla(var(--risk-warning), 0.4)' }}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-black" style={{ color: '#f9ca24' }}>━ 公式1：均线支撑</span>
+                <span className="text-xs font-black" style={{ color: 'hsl(var(--risk-warning))' }}>━ 公式1：均线支撑</span>
                 <button onClick={() => setShowMA(!showMA)}
-                  className={`text-[10px] font-bold px-2 py-0.5 border ${showMA
-                    ? 'border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-500/10'
-                    : 'border-gray-300 text-gray-500'}`}>
+                  className="text-[10px] font-bold px-2 py-0.5 border dark:bg-amber-500/10"
+                  style={showMA ? { borderColor: 'hsl(var(--risk-warning))', color: 'hsl(var(--risk-warning))', background: 'var(--bg-input)' } : { borderColor: 'var(--border-default)', color: 'hsl(var(--text-secondary))' }}>
                   {showMA ? 'ON' : 'OFF'}
                 </button>
               </div>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px]" style={{ color: 'hsl(var(--text-secondary))' }}>周期 N =</span>
                 <input type="range" min={5} max={250} value={maPeriod}
-                  onChange={e => setMaPeriod(+e.target.value)} className="flex-1 h-1 accent-amber-500" />
+                  onChange={e => setMaPeriod(+e.target.value)} className="flex-1 h-1" style={{ accentColor: 'hsl(var(--risk-warning))' }} />
                 <span className="text-xs font-black w-8 text-right"
                   style={{ color: 'hsl(var(--ink))' }}>{maPeriod}</span>
               </div>
-              <div className="mt-2 p-2 rounded bg-amber-50/50 dark:bg-amber-500/5 text-[10px] leading-relaxed font-mono"
-                style={{ color: 'hsl(var(--ink))' }}>
-                <div className="font-bold mb-1 text-amber-700 dark:text-amber-400">指数移动平均 EMA(N)</div>
+              <div className="mt-2 p-2 rounded dark:bg-amber-500/5 text-[10px] leading-relaxed font-mono"
+                style={{ color: 'hsl(var(--ink))', background: 'var(--bg-input)' }}>
+                <div className="font-bold mb-1" style={{ color: 'hsl(var(--risk-warning))' }}>指数移动平均 EMA(N)</div>
                 <div>EMA₁ = C₁</div>
                 <div>EMAₜ = α·Cₜ + (1-α)·EMAₜ₋₁</div>
                 <div className="mt-0.5 text-[9px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
@@ -334,20 +332,19 @@ export default function IndicatorLabPage() {
             </div>
 
             {/* ── 公式2：动态锚点支撑 DAS ── */}
-            <div className="p-3 border rounded" style={{ borderColor: 'rgba(16,185,129,0.4)' }}>
+            <div className="p-3 border rounded" style={{ borderColor: 'hsla(var(--price-up), 0.4)' }}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-black" style={{ color: '#10b981' }}>┅ 公式2：动态锚点支撑 DAS</span>
+                <span className="text-xs font-black" style={{ color: 'hsl(var(--price-up))' }}>┅ 公式2：动态锚点支撑 DAS</span>
                 <button onClick={() => setShowDAS(!showDAS)}
-                  className={`text-[10px] font-bold px-2 py-0.5 border ${showDAS
-                    ? 'border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10'
-                    : 'border-gray-300 text-gray-500'}`}>
+                  className="text-[10px] font-bold px-2 py-0.5 border dark:bg-emerald-500/10"
+                  style={showDAS ? { borderColor: 'hsl(var(--price-up))', color: 'hsl(var(--price-up))', background: 'var(--bg-input)' } : { borderColor: 'var(--border-default)', color: 'hsl(var(--text-secondary))' }}>
                   {showDAS ? 'ON' : 'OFF'}
                 </button>
               </div>
               <div className="mt-2 space-y-2 text-[10px] leading-relaxed" style={{ color: 'hsl(var(--ink))' }}>
                 {/* Step A */}
-                <div className="p-2 rounded bg-emerald-50/50 dark:bg-emerald-500/5 font-mono">
-                  <div className="font-bold mb-1 text-emerald-700 dark:text-emerald-400">Step A · 锚点检测</div>
+                <div className="p-2 rounded dark:bg-emerald-500/5 font-mono" style={{ background: 'var(--bg-input)' }}>
+                  <div className="font-bold mb-1" style={{ color: 'hsl(var(--price-up))' }}>Step A · 锚点检测</div>
                   <div>VR = V / EMA₂₀(V)</div>
                   <div>ΔP₃ = (Cₜ - Cₜ₋₃) / Cₜ₋₃</div>
                   <div className="mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
@@ -360,8 +357,8 @@ export default function IndicatorLabPage() {
                 </div>
 
                 {/* Step B */}
-                <div className="p-2 rounded bg-emerald-50/50 dark:bg-emerald-500/5 font-mono">
-                  <div className="font-bold mb-1 text-emerald-700 dark:text-emerald-400">Step B · 加权锚定</div>
+                <div className="p-2 rounded dark:bg-emerald-500/5 font-mono" style={{ background: 'var(--bg-input)' }}>
+                  <div className="font-bold mb-1" style={{ color: 'hsl(var(--price-up))' }}>Step B · 加权锚定</div>
                   <div>DASₜ = P_anchor × 0.6 + EMA₃₀(C)ₜ × 0.4</div>
                   <div className="mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
                     P_anchor = Σ(价ₐ × 强度ₐ × e<sup>-dist/10</sup>) / Σ(强度ₐ × e<sup>-dist/10</sup>)
@@ -372,8 +369,8 @@ export default function IndicatorLabPage() {
                 </div>
 
                 {/* Step C */}
-                <div className="p-2 rounded bg-emerald-50/50 dark:bg-emerald-500/5 font-mono">
-                  <div className="font-bold mb-1 text-emerald-700 dark:text-emerald-400">Step C · 平滑</div>
+                <div className="p-2 rounded dark:bg-emerald-500/5 font-mono" style={{ background: 'var(--bg-input)' }}>
+                  <div className="font-bold mb-1" style={{ color: 'hsl(var(--price-up))' }}>Step C · 平滑</div>
                   <div>DAS'ₜ = EMA(DASₜ, α=0.2)</div>
                   <div className="mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
                     缺口 {'≤'} 15 bar 线性插值填充
@@ -381,8 +378,8 @@ export default function IndicatorLabPage() {
                 </div>
 
                 {/* 降级 */}
-                <div className="p-2 rounded bg-gray-100 dark:bg-zinc-700/50 font-mono text-[9px]"
-                  style={{ color: 'hsl(var(--text-tertiary))' }}>
+                <div className="p-2 rounded dark:bg-zinc-700/50 font-mono text-[9px]"
+                  style={{ color: 'hsl(var(--text-tertiary))', background: 'var(--bg-input)' }}>
                   <div className="font-bold">降级策略（锚点 {'<'} 3）</div>
                   <div>DASₜ = EMA₃₀(C)ₜ × vol_corr × mom_corr</div>
                   <div>vol_corr: VR {'>'} 1.5 → ×1.015, VR {'<'} 0.5 → ×0.985</div>
@@ -393,21 +390,20 @@ export default function IndicatorLabPage() {
             </div>
 
             {/* DeepSeek 心理 */}
-            <div className="p-3 border rounded bg-purple-50 dark:bg-purple-500/5"
-              style={{ borderColor: 'rgba(168,85,247,0.3)' }}>
+            <div className="p-3 border rounded dark:bg-purple-500/5"
+              style={{ borderColor: 'hsla(var(--swiss-accent), 0.3)', background: 'var(--bg-input)' }}>
               <div className="flex items-center gap-2 mb-1">
-                <Brain size={12} className="text-purple-500" />
-                <span className="text-xs font-black" style={{ color: '#a855f7' }}>DeepSeek 市场心理</span>
+                <Brain size={12} style={{ color: 'hsl(var(--swiss-accent))' }} />
+                <span className="text-xs font-black" style={{ color: 'hsl(var(--swiss-accent))' }}>DeepSeek 市场心理</span>
                 <button onClick={fetchPsychology} disabled={psychLoading} className="ml-auto">
-                  <RefreshCw size={12} className={`text-purple-500 ${psychLoading ? 'animate-spin' : ''}`} />
+                  <RefreshCw size={12} className={`${psychLoading ? 'animate-spin' : ''}`} style={{ color: 'hsl(var(--swiss-accent))' }} />
                 </button>
               </div>
               <div className="text-[10px] mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>
                 {psychLoading ? '正在获取心理分析...' : (psychDetail || '点击刷新获取心理分析')}
               </div>
-              <div className="h-1.5 rounded-full bg-gray-200 dark:bg-zinc-700 overflow-hidden">
-                <div className="h-full rounded-full bg-gray-500 transition-all"
-                  style={{ width: `${psychology}%` }} />
+              <div className="h-1.5 rounded-full dark:bg-zinc-700 overflow-hidden" style={{ background: 'var(--bg-hover)' }}>
+                <div className="h-full rounded-full transition-all" style={{ background: 'hsl(var(--text-tertiary))', width: `${psychology}%` }} />
               </div>
               <div className="flex justify-between text-[9px] mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
                 <span>恐惧 0</span><span>中性 50</span><span>贪婪 100</span>
@@ -416,6 +412,6 @@ export default function IndicatorLabPage() {
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

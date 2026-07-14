@@ -129,7 +129,7 @@ export default function SettingsPage() {
                 />
                 <button
                   onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 hover:text-slate-700 dark:text-slate-700 dark:text-zinc-300" style={{ color: 'hsl(var(--text-secondary))' }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 dark:text-zinc-300" style={{ color: 'hsl(var(--text-secondary))' }}
                 >
                   {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
@@ -281,11 +281,11 @@ function ThemeSelector() {
         <button key={opt.value} onClick={() => setTheme(opt.value)}
           className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all ${
             theme === opt.value
-              ? 'bg-violet-50' : 'hover:border-slate-300 dark:hover:border-zinc-600'
+              ? '' : 'hover:border-slate-300 dark:hover:border-zinc-600'
           }`}
           style={{
             borderColor: theme === opt.value ? 'hsl(var(--swiss-accent) / 0.5)' : 'var(--border-default)',
-            background: theme === opt.value ? 'hsl(var(--swiss-accent) / 0.1)' : undefined
+            background: theme === opt.value ? 'hsl(var(--swiss-accent-ghost))' : undefined
           }}
         >
           <span className="text-lg">{opt.icon}</span>
@@ -371,11 +371,12 @@ function ChartStyleSelector() {
           onClick={() => setChartStyle(key)}
           className={`relative flex flex-col items-center gap-1.5 p-3 border transition-all ${
             chartStyle === key
-              ? 'border-gray-900 dark:border-white bg-gray-100 dark:bg-white/10'
-              : 'bg-white dark:bg-zinc-900 hover:border-gray-400'
+              ? 'border-gray-900 dark:border-white dark:bg-white/10'
+              : 'bg-white dark:bg-zinc-900'
           }`}
           style={{
             borderColor: chartStyle === key ? undefined : 'var(--border-default)',
+            background: chartStyle === key ? 'var(--bg-input)' : undefined,
           }}
         >
           <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{config.name}</span>
