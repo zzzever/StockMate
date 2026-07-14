@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
-import { motion, AnimatePresence } from 'framer-motion';
 import { createChart, type IChartApi, type ISeriesApi, LineStyle } from 'lightweight-charts';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -336,14 +335,11 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
 // 子组件
 // ───────────────────────────────────────────────
 
-function MetricCard({ label, value, color, suffix, icon: Icon, delay }: {
-  label: string; value: string; color: string; suffix?: string; icon: React.ElementType; delay: number;
+function MetricCard({ label, value, color, suffix, icon: Icon }: {
+  label: string; value: string; color: string; suffix?: string; icon: React.ElementType;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.3 }}
+    <div
       className="glass-card p-4"
     >
       <div className="flex items-center gap-2 mb-2">
@@ -354,7 +350,7 @@ function MetricCard({ label, value, color, suffix, icon: Icon, delay }: {
         {value}
         {suffix && <span className="text-xs font-normal text-slate-500 dark:text-slate-500 dark:text-zinc-500 ml-1">{suffix}</span>}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -515,12 +511,8 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
       </div>
 
       {/* Selected trade detail */}
-      <AnimatePresence>
         {selectedTrade && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
+          <div
             className="glass-card p-3 text-xs"
           >
             <div className="flex items-center justify-between">
@@ -541,9 +533,8 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
                 </span>
               )}
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -568,10 +559,7 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.4 }}
+    <div
       className="glass-card p-4"
     >
       <div className="flex items-center gap-2 mb-3">
@@ -623,7 +611,7 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
         </span>
         <span className="ml-auto">颜色越深 | 幅度越大</span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -632,10 +620,7 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
   if (!trades || trades.length === 0) return null;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.5 }}
+    <div
       className="glass-card p-4"
     >
       <button
@@ -647,12 +632,8 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
         <span className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">交易记录</span>
         <span className="text-xs text-slate-500 dark:text-slate-500 dark:text-zinc-500 ml-1">({trades.length} 笔)</span>
       </button>
-      <AnimatePresence>
         {expanded && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+          <div
             className="overflow-hidden"
           >
             <div className="max-h-80 overflow-auto mt-2">
@@ -693,10 +674,9 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
                 </tbody>
               </table>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
 
@@ -786,9 +766,7 @@ function StrategyComparison({ savedResults, onRemove }: {
   const formatPct = (v: number) => `${v > 0 ? '+' : ''}${safeToFixed(v, 2)}%`;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       className="glass-card p-4"
     >
       <div className="flex items-center justify-between mb-3">
@@ -897,7 +875,7 @@ function StrategyComparison({ savedResults, onRemove }: {
           ))}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -1042,21 +1020,17 @@ export default function BacktestPage() {
   return (
     <div className="space-y-5">
       {/* 股票信息头部 */}
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-5 flex items-center justify-between"
+      <div
+            className="glass-card p-5 flex items-center justify-between"
       >
         <div className="flex items-center gap-3">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <button
             onClick={() => navigate(code ? `/stock?code=${code}` : '/sector')}
             className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:text-white transition-colors"
           >
             <ArrowLeft size={16} />
             <span>{code ? '返回分析' : '返回板块'}</span>
-          </motion.button>
+          </button>
           <div className="w-px h-5 bg-slate-200 dark:bg-slate-200 dark:bg-white/10" />
           <div>
             <div className="flex items-center gap-2">
@@ -1073,15 +1047,12 @@ export default function BacktestPage() {
             <span>{up ? '+' : ''}{safeToFixed(change, 2)} ({up ? '+' : ''}{safeToFixed(changePercent, 2)}%)</span>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {/* 策略选择 + 参数配置 */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* 策略选择区 */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+        <div
           className="lg:col-span-1 glass-card p-4 space-y-3"
         >
           <div className="flex items-center gap-2 mb-2">
@@ -1089,15 +1060,12 @@ export default function BacktestPage() {
             <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">选择策略</h2>
           </div>
           <div className="space-y-2">
-            {STRATEGIES.map((s, i) => {
+            {STRATEGIES.map((s) => {
               const Icon = s.icon;
               const selected = s.id === selectedStrategy;
               return (
-                <motion.button
+                <button
                   key={s.id}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 + i * 0.05 }}
                   onClick={() => setSelectedStrategy(s.id)}
                   className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
                     selected
@@ -1110,17 +1078,14 @@ export default function BacktestPage() {
                     <span className={`text-sm font-medium ${selected ? 'text-slate-900 dark:text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-700 dark:text-zinc-300'}`}>{s.name}</span>
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-500 dark:text-zinc-500 mt-1 ml-6">{s.description}</div>
-                </motion.button>
+                </button>
               );
             })}
           </div>
-        </motion.div>
+        </div>
 
         {/* 参数配置区 */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+        <div
           className="lg:col-span-3 glass-card p-5"
         >
           <div className="flex items-center justify-between mb-4">
@@ -1131,13 +1096,8 @@ export default function BacktestPage() {
             </div>
           </div>
 
-          <AnimatePresence mode="wait">
-            <motion.div
+            <div
               key={selectedStrategy}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
             >
               {/* 策略专属参数 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
@@ -1192,38 +1152,28 @@ export default function BacktestPage() {
 
               {/* 开始回测按钮 */}
               <div className="flex items-center gap-3">
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <button
                   onClick={handleRun}
                   disabled={running || !quotes || quotes.length === 0}
                   className="flex-1 flex items-center justify-center gap-2 bg-emerald-500/20 border border-emerald-500/30 px-6 py-3 rounded-xl text-sm font-bold text-emerald-300 hover:bg-emerald-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {running ? <RotateCcw size={16} className="animate-spin" /> : <Play size={16} />}
                   {running ? '回测运行中...' : '开始回测'}
-                </motion.button>
+                </button>
                 {result && (
-                  <motion.button
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                  <button
                     onClick={() => setShowSaveInput(!showSaveInput)}
                     className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 px-4 py-3 rounded-xl text-sm font-medium text-violet-700 dark:text-violet-700 dark:text-violet-300 hover:bg-violet-500/30 transition-colors"
                   >
                     <Save size={16} />
                     保存结果
-                  </motion.button>
+                  </button>
                 )}
               </div>
 
               {/* 保存输入框 */}
-              <AnimatePresence>
-                {showSaveInput && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                        {showSaveInput && (
+                  <div
                     className="overflow-hidden mt-3"
                   >
                     <div className="flex items-center gap-2">
@@ -1242,40 +1192,29 @@ export default function BacktestPage() {
                         确认
                       </button>
                     </div>
-                  </motion.div>
+                  </div>
                 )}
-              </AnimatePresence>
-            </motion.div>
-          </AnimatePresence>
-        </motion.div>
+                    </div>
+            </div>
       </div>
 
       {/* 回测结果面板 */}
-      <AnimatePresence>
         {running && !result && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+          <div
             className="glass-card p-8 flex flex-col items-center justify-center gap-3"
           >
             <RotateCcw size={24} className="text-violet-600 dark:text-violet-600 dark:text-violet-400 animate-spin" />
             <span className="text-sm text-slate-600 dark:text-slate-600 dark:text-zinc-400">正在运行回测引擎...</span>
             <div className="w-48 h-1.5 bg-slate-200 dark:bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-              <motion.div
+              <div
                 className="h-full bg-violet-400 rounded-full"
-                animate={{ width: ['0%', '100%'] }}
-                transition={{ duration: 1.2, ease: 'easeInOut' }}
               />
             </div>
-          </motion.div>
+          </div>
         )}
 
         {result && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+          <div
             className="space-y-4"
           >
             {/* 收益指标卡片 */}
@@ -1285,35 +1224,30 @@ export default function BacktestPage() {
                 value={formatPct(result.total_return)}
                 color={result.total_return >= 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}
                 icon={BarChart3}
-                delay={0}
               />
               <MetricCard
                 label="年化收益率"
                 value={formatPct(result.annual_return)}
                 color={result.annual_return >= 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}
                 icon={TrendingUp}
-                delay={0.05}
               />
               <MetricCard
                 label="最大回撤"
                 value={formatPct(result.max_drawdown)}
                 color="text-rose-600 dark:text-rose-600 dark:text-rose-400"
                 icon={Shield}
-                delay={0.1}
               />
               <MetricCard
                 label="夏普比率"
                 value={safeToFixed(result.sharpe_ratio, 2)}
                 color={result.sharpe_ratio >= 1 ? 'text-cyan-400' : 'text-slate-600 dark:text-slate-600 dark:text-zinc-400'}
                 icon={Activity}
-                delay={0.15}
               />
               <MetricCard
                 label="胜率"
                 value={`${safeToFixed(result.win_rate, 1)}%`}
                 color="text-violet-600 dark:text-violet-600 dark:text-violet-400"
                 icon={Target}
-                delay={0.2}
               />
               <MetricCard
                 label="交易次数"
@@ -1321,7 +1255,6 @@ export default function BacktestPage() {
                 color="text-slate-900 dark:text-slate-900 dark:text-white"
                 suffix={`盈利 ${result.profit_trades} / 亏损 ${result.loss_trades}`}
                 icon={Hash}
-                delay={0.25}
               />
             </div>
 
@@ -1333,9 +1266,8 @@ export default function BacktestPage() {
               <MonthlyHeatmap data={result.monthly_returns} />
               <TradeTable trades={result.trades} />
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* 策略对比区 */}
       {savedResults.length > 0 && (

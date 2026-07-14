@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Minus, Bot, ArrowLeft, RefreshCw,
   Target, BarChart3, AlertTriangle, CheckCircle2, Activity,
@@ -30,8 +29,16 @@ function isValidMultiDim(obj: unknown): obj is MultiDimensionAnalysis {
 }
 
 const DIR_ICON: Record<string, typeof TrendingUp> = { up: TrendingUp, down: TrendingDown, sideways: Minus };
-const DIR_COLOR: Record<string, string> = { up: 'text-red-700', down: 'text-blue-700', sideways: 'text-amber-600' };
-const DIR_BG: Record<string, string> = { up: 'bg-red-50 border-red-300', down: 'bg-blue-50 border-blue-300', sideways: 'bg-amber-50 border-amber-300' };
+const DIR_STYLE: Record<string, React.CSSProperties> = {
+  up: { color: 'hsl(var(--price-up))' },
+  down: { color: 'hsl(var(--text-secondary))' },
+  sideways: { color: 'hsl(var(--risk-warning))' },
+};
+const DIR_BG_STYLE: Record<string, React.CSSProperties> = {
+  up: { background: 'hsl(var(--price-up-bg))', borderColor: 'hsl(var(--price-up))' },
+  down: { background: 'hsl(var(--bg-input))', borderColor: 'hsl(var(--border-default))' },
+  sideways: { background: 'hsl(var(--bg-hover))', borderColor: 'hsl(var(--border-subtle))' },
+};
 const DIR_LABEL: Record<string, string> = { up: '看涨', down: '看跌', sideways: '震荡' };
 
 // ── History storage ──
@@ -150,7 +157,7 @@ export default function PredictPage() {
   }, [stockId]);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col gap-3 p-3">
+    <div className="h-full flex flex-col gap-3 p-3">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -198,7 +205,7 @@ export default function PredictPage() {
           )}
           {import.meta.env.DEV && (
             /* Debug: hook states */
-            <span className="text-[10px] text-gray-400 font-mono">
+            <span className="text-[10px] font-mono" style={{ color: 'hsl(var(--text-tertiary))' }}>
               pred={prediction?'ok':isLoading?'loading':error?'err':'--'}
               card={card?.recommendation?'ok':isLoading?'loading':error?'err':'--'}
               env={marketEnv?'ok':isLoading?'loading':'--'}
@@ -265,24 +272,21 @@ export default function PredictPage() {
               { id: 'history' as const, label: '历史准确率' },
             ]).map((t) => (
               <button key={t.id} onClick={() => setActiveTab(t.id)}
-                className={`px-3 py-1.5 text-xs font-black border-2 border-b-0 transition-colors ${
-                  activeTab === t.id ? 'bg-white text-red-800 border-red-700' : 'bg-gray-50 text-gray-500 border-gray-300 hover:bg-gray-100'
-                }`}>
+                className={`px-3 py-1.5 text-xs font-black border-2 border-b-0 transition-colors`}
+                style={activeTab === t.id ? { background: '#ffffff', color: 'hsl(var(--price-up))', borderColor: 'hsl(var(--price-up))' } : { background: 'var(--bg-input)', color: 'hsl(var(--text-secondary))', borderColor: 'var(--border-default)' }}>
                 {t.label}
               </button>
             ))}
           </div>
 
-          <AnimatePresence mode="wait">
             {activeTab === 'predict' && <PredictPanel key="predict" data={activePred} loading={isLoading && !selectedDate} />}
             {activeTab === 'multi' && <MultiDimPanel key="multi" data={activeMulti} loading={isLoading && !selectedDate} />}
             {activeTab === 'card' && <CardPanel key="card" data={activeCard} loading={isLoading && !selectedDate} error={error ?? null} />}
             {activeTab === 'market' && <MarketEnvPanel key="market" data={activeMarket} loading={isLoading && !selectedDate} stockId={stockId} />}
             {activeTab === 'history' && <HistoryPanel key="history" stockId={stockId} />}
-          </AnimatePresence>
         </>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -292,22 +296,22 @@ export default function PredictPage() {
 
 function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; loading: boolean }) {
   const Icon = data ? DIR_ICON[data.direction] ?? Minus : Minus;
-  const colorClass = data ? DIR_COLOR[data.direction] ?? '' : '';
-  const bgClass = data ? DIR_BG[data.direction] ?? '' : '';
+  const dirStyle = data ? DIR_STYLE[data.direction] ?? {} : {};
+  const dirBgStyle = data ? DIR_BG_STYLE[data.direction] ?? {} : {};
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+    <div
       className="flex-1 grid grid-cols-2 gap-3 overflow-auto">
       {/* Main prediction card */}
       <div className="glass-card p-5 col-span-2 flex flex-col items-center justify-center gap-4 min-h-[200px]">
         {loading ? (
-          <RefreshCw size={32} className="animate-spin text-gray-400" />
+          <RefreshCw size={32} className="animate-spin" style={{ color: 'hsl(var(--text-tertiary))' }} />
         ) : data ? (
           <>
-            <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center ${bgClass}`}>
-              <Icon size={40} className={colorClass} />
+            <div className="w-20 h-20 rounded-full border-4 flex items-center justify-center" style={dirBgStyle}>
+              <Icon size={40} style={dirStyle} />
             </div>
-            <h2 className={`text-3xl font-black ${colorClass}`}>{DIR_LABEL[data.direction]}</h2>
+            <h2 className="text-3xl font-black" style={dirStyle}>{DIR_LABEL[data.direction]}</h2>
             <div className="flex gap-4 text-sm font-bold">
               <span>置信度 <b className="text-lg">{fmtConfidence(data.confidence)}</b></span>
               {data.target_price && <span>目标价 <b className="text-lg">{data.target_price}</b></span>}
@@ -317,7 +321,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
             <p className="text-sm leading-relaxed max-w-2xl text-center" style={{ color: 'hsl(var(--text-secondary))' }}>{data.reasoning}</p>
           </>
         ) : (
-          <p className="text-gray-400 font-bold">点击刷新获取 AI 预测</p>
+          <p className="font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>点击刷新获取 AI 预测</p>
         )}
       </div>
 
@@ -349,7 +353,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
               {labels.map((label, i) => (
                 <div key={label} className="flex items-center gap-2">
                   <span className="text-xs font-bold w-16 shrink-0">{label}</span>
-                  <div className="flex-1 h-5 border border-gray-200">
+                  <div className="flex-1 h-5 border" style={{ borderColor: 'var(--border-subtle)' }}>
                     <div className={`h-full ${colors[i]} transition-all duration-500`} style={{ width: `${probs[i]}%` }} />
                   </div>
                   <span className="text-xs font-mono font-bold w-10 text-right">{probs[i]}%</span>
@@ -358,7 +362,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
             </div>
           );
         })() : (
-          <p className="text-xs text-gray-400">等待数据…</p>
+          <p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>等待数据…</p>
         )}
       </div>
 
@@ -369,16 +373,16 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
         </h3>
         {data ? (
           <div className="space-y-2 text-sm font-bold">
-            <div className="flex justify-between border-b pb-1"><span>预测方向</span><span className={colorClass}>{DIR_LABEL[data.direction]}</span></div>
+            <div className="flex justify-between border-b pb-1"><span>预测方向</span><span style={dirStyle}>{DIR_LABEL[data.direction]}</span></div>
             <div className="flex justify-between border-b pb-1"><span>置信度</span><span>{fmtConfidence(data.confidence)}</span></div>
             <div className="flex justify-between border-b pb-1"><span>时间周期</span><span>{data.time_frame}</span></div>
             {data.target_price && <div className="flex justify-between border-b pb-1"><span>目标价格</span><span className="text-lg">{data.target_price}</span></div>}
           </div>
         ) : (
-          <p className="text-xs text-gray-400">等待数据…</p>
+          <p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>等待数据…</p>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -387,7 +391,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
 // ═══════════════════════════════════════════════════════
 
 function DimCard({ label, data }: { label: string; data: import('@/types').DimensionScore | null }) {
-  if (!data) return <div className="glass-card p-4"><p className="text-xs text-gray-400">等待数据…</p></div>;
+  if (!data) return <div className="glass-card p-4"><p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>等待数据…</p></div>;
   return (
     <div className="glass-card p-4">
       <div className="flex items-center justify-between mb-2">
@@ -415,7 +419,7 @@ function DimCard({ label, data }: { label: string; data: import('@/types').Dimen
 
 function MultiDimPanel({ data, loading }: { data: MultiDimensionAnalysis | null; loading: boolean }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+    <div
       className="flex-1 overflow-auto space-y-3">
       {loading ? (
         <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin text-gray-400" /></div>
@@ -455,9 +459,9 @@ function MultiDimPanel({ data, loading }: { data: MultiDimensionAnalysis | null;
           )}
         </>
       ) : (
-        <div className="flex items-center justify-center py-20"><p className="text-gray-400 font-bold">点击刷新获取多维分析</p></div>
+        <div className="flex items-center justify-center py-20"><p className="font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>点击刷新获取多维分析</p></div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -484,7 +488,7 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+    <div
       className="flex-1 overflow-auto flex flex-col items-center">
       {loading ? (
         <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin text-gray-400" /></div>
@@ -492,7 +496,7 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
         <div className="flex flex-col items-center justify-center py-20 gap-3">
           <AlertTriangle size={40} className="text-red-500" />
           <p className="text-sm font-bold text-red-700">DeepSeek 生成失败</p>
-          <p className="text-xs text-gray-500">{error.message}</p>
+          <p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>{error.message}</p>
         </div>
       ) : data ? (
         <div className="flex flex-col items-center gap-3 w-full max-w-[480px]">
@@ -574,10 +578,10 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
         </div>
       ) : (
         <div className="flex items-center justify-center py-20">
-          <p className="text-gray-400 font-bold">点击刷新获取 AI 快评</p>
+          <p className="font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>点击刷新获取 AI 快评</p>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -585,7 +589,11 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
 //  Market Environment Panel
 // ═══════════════════════════════════════════════════════
 
-const CTX_COLORS: Record<string, string> = { bullish: 'text-red-700 bg-red-50 border-red-300', bearish: 'text-blue-700 bg-blue-50 border-blue-300', neutral: 'text-amber-600 bg-amber-50 border-amber-300' };
+const CTX_STYLE: Record<string, React.CSSProperties> = {
+  bullish: { color: 'hsl(var(--price-up))', background: 'hsl(var(--price-up-bg))', borderColor: 'hsl(var(--price-up))' },
+  bearish: { color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-input))', borderColor: 'hsl(var(--border-default))' },
+  neutral: { color: 'hsl(var(--risk-warning))', background: 'hsl(var(--bg-hover))', borderColor: 'hsl(var(--border-subtle))' },
+};
 const CTX_LABELS: Record<string, string> = { bullish: '偏多', bearish: '偏空', neutral: '中性' };
 
 function CtxCard({ title, items }: { title: string; items: [string, import('@/types').MarketContextItem][] }) {
@@ -596,7 +604,7 @@ function CtxCard({ title, items }: { title: string; items: [string, import('@/ty
         {items.map(([label, item]) => (
           <div key={label} className="flex items-start justify-between gap-2">
             <span className="text-xs font-bold shrink-0">{label}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 border ${CTX_COLORS[item.status] ?? ''}`}>{CTX_LABELS[item.status] ?? item.status}</span>
+            <span style={CTX_STYLE[item.status] ?? {}} className="text-[10px] font-bold px-1.5 py-0.5 border">{CTX_LABELS[item.status] ?? item.status}</span>
             <span className="text-xs text-right flex-1" style={{ color: 'hsl(var(--text-secondary))' }}>{item.detail}</span>
           </div>
         ))}
@@ -607,7 +615,7 @@ function CtxCard({ title, items }: { title: string; items: [string, import('@/ty
 
 function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loading: boolean; stockId: string }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+    <div
       className="flex-1 overflow-auto space-y-3">
       {loading ? (
         <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin text-gray-400" /></div>
@@ -658,9 +666,9 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
           </div>
         </>
       ) : (
-        <div className="flex items-center justify-center py-20"><p className="text-gray-400 font-bold">点击刷新获取市场环境分析</p></div>
+        <div className="flex items-center justify-center py-20"><p className="font-bold" style={{ color: 'hsl(var(--text-tertiary))' }}>点击刷新获取市场环境分析</p></div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -690,7 +698,7 @@ function HistoryPanel({ stockId }: { stockId: string }) {
   const correct = records.filter(r => r.correct === true).length;
   const accuracy = verifiedCount > 0 ? (correct / verifiedCount * 100) : 0;
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+    <div
       className="flex-1 overflow-auto space-y-3">
       <div className="glass-card p-5">
         <h3 className="text-sm font-black tracking-wider mb-4" style={{ color: 'hsl(var(--ink))' }}>历史预测准确率</h3>
@@ -730,13 +738,13 @@ function HistoryPanel({ stockId }: { stockId: string }) {
                 return (
                   <div key={pct} className="flex items-center gap-2">
                     <span className="text-xs font-bold w-12">{pct}%+</span>
-                    <div className="flex-1 h-4 border border-gray-200 bg-gray-50"><div className="h-full bg-red-600" style={{ width: `${bandAcc}%` }} /></div>
+                    <div className="flex-1 h-4 border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-input)' }}><div className="h-full bg-red-600" style={{ width: `${bandAcc}%` }} /></div>
                     <span className="text-xs font-mono w-14 text-right">{ok}/{count}</span>
                   </div>
                 );
               })}
             </div>
-            <p className="text-[10px] mt-2 text-gray-400">校准曲线：横轴=置信度区间 纵轴=正确率</p>
+            <p className="text-[10px] mt-2" style={{ color: 'hsl(var(--text-tertiary))' }}>校准曲线：横轴=置信度区间 纵轴=正确率</p>
             <div className="mt-3 max-h-40 overflow-auto space-y-1">
               {records.slice(-10).reverse().map((r, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs border-b pb-1">
@@ -750,6 +758,6 @@ function HistoryPanel({ stockId }: { stockId: string }) {
           </>
         ) : null}
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { Database, Palette, Trash2, Wifi, Bot, Eye, EyeOff, Save, TestTube, CheckCircle, XCircle, AlertCircle, BarChart3, RefreshCw } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDeepSeekConfig } from '@/hooks/useTauriQuery';
@@ -76,7 +75,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-900 dark:text-white">设置</h1>
+      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>设置</h1>
 
       {configLoading && (
         <div className="flex items-center justify-center p-8">
@@ -92,11 +91,11 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 gap-4">
         {/* DeepSeek Config */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Bot size={16} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">DeepSeek AI 配置</h2>
-            <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${config?.has_key ? 'bg-emerald-500/20 text-emerald-300' : 'bg-zinc-500/20 text-slate-600 dark:text-slate-600 dark:text-zinc-400'}`}>
+            <Bot size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>DeepSeek AI 配置</h2>
+            <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${config?.has_key ? '' : 'bg-zinc-500/20'}`} style={{ color: config?.has_key ? 'hsl(var(--price-up))' : 'hsl(var(--text-secondary))', background: config?.has_key ? 'hsl(var(--price-up) / 0.2)' : undefined }}>
               {config?.has_key ? '已配置' : '未配置'}
             </span>
           </div>
@@ -105,30 +104,32 @@ export default function SettingsPage() {
             {/* AI Enable Toggle */}
             <div className="flex items-center justify-between py-1">
               <div>
-                <div className="text-sm font-medium text-slate-900 dark:text-white">AI 智能分析</div>
-                <div className="text-xs text-slate-500 dark:text-zinc-500">关闭后个股详情页和预测页将不调用 DeepSeek</div>
+                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>AI 智能分析</div>
+                <div className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>关闭后个股详情页和预测页将不调用 DeepSeek</div>
               </div>
               <button
                 onClick={toggleDeepseek}
-                className={`relative w-11 h-6 rounded-full transition-colors ${deepseekEnabled ? 'bg-violet-600' : 'bg-zinc-600'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${deepseekEnabled ? '' : 'bg-zinc-600'}`}
+                style={{ background: deepseekEnabled ? 'hsl(var(--swiss-accent))' : undefined }}
               >
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${deepseekEnabled ? 'translate-x-5' : ''}`} />
               </button>
             </div>
             {/* API Key */}
             <div>
-              <label className="block text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400 mb-1.5">API Key</label>
+              <label className="block text-xs mb-1.5" style={{ color: 'hsl(var(--text-secondary))' }}>API Key</label>
               <div className="relative">
                 <input
                   type={showKey ? 'text' : 'password'}
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={config?.has_key ? '••••••••••••••••' : '请输入 DeepSeek API Key'}
-                  className="w-full bg-slate-100 dark:bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-400 dark:placeholder-zinc-500 outline-none focus:border-violet-500/50 pr-10"
+                  className="w-full border rounded-xl px-3 py-2 text-sm placeholder-slate-400 dark:placeholder-slate-400 dark:placeholder-zinc-500 outline-none pr-10"
+                  style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', outline: '2px solid hsl(var(--swiss-accent))', outlineOffset: '2px' }}
                 />
                 <button
                   onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:text-slate-700 dark:text-zinc-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 hover:text-slate-700 dark:text-slate-700 dark:text-zinc-300" style={{ color: 'hsl(var(--text-secondary))' }}
                 >
                   {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
                 </button>
@@ -137,11 +138,12 @@ export default function SettingsPage() {
 
             {/* Model Select */}
             <div>
-              <label className="block text-xs text-slate-600 dark:text-slate-600 dark:text-zinc-400 mb-1.5">模型选择</label>
+              <label className="block text-xs mb-1.5" style={{ color: 'hsl(var(--text-secondary))' }}>模型选择</label>
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full bg-slate-100 dark:bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-slate-900 dark:text-white outline-none focus:border-violet-500/50"
+                className="w-full border rounded-xl px-3 py-2 text-sm outline-none"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', outline: '2px solid hsl(var(--swiss-accent))', outlineOffset: '2px' }}
               >
                 <option value="deepseek-v4-pro" className="bg-zinc-900">deepseek-v4-pro</option>
                 <option value="deepseek-v4-flash" className="bg-zinc-900">deepseek-v4-flash</option>
@@ -153,7 +155,8 @@ export default function SettingsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 bg-violet-500/20 border border-violet-500/30 px-4 py-2 rounded-lg text-xs text-violet-700 dark:text-violet-700 dark:text-violet-300 hover:bg-violet-500/30 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs transition-colors disabled:opacity-50"
+                style={{ color: 'hsl(var(--swiss-accent))', border: '1px solid hsl(var(--swiss-accent) / 0.3)', background: 'hsl(var(--swiss-accent) / 0.2)' }}
               >
                 <Save size={12} />
                 {saving ? '保存中...' : '保存配置'}
@@ -161,7 +164,8 @@ export default function SettingsPage() {
               <button
                 onClick={handleTest}
                 disabled={testing}
-                className="flex items-center gap-2 bg-slate-100 dark:bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-200 dark:border-white/10 px-4 py-2 rounded-lg text-xs text-slate-700 dark:text-slate-700 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs hover:bg-slate-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50"
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'hsl(var(--text-secondary))' }}
               >
                 <TestTube size={12} />
                 {testing ? '测试中...' : '连接测试'}
@@ -170,34 +174,32 @@ export default function SettingsPage() {
 
             {/* Save Toast */}
             {saveToast && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${saveToast.type === 'success' ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'}`}
+              <div
+                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg`}
+                style={{ color: saveToast.type === 'success' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))', border: saveToast.type === 'success' ? '1px solid hsl(var(--price-up) / 0.2)' : '1px solid hsl(var(--price-down) / 0.2)', background: saveToast.type === 'success' ? 'hsl(var(--price-up) / 0.1)' : 'hsl(var(--price-down) / 0.1)' }}
               >
                 {saveToast.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
                 {saveToast.message}
-              </motion.div>
+              </div>
             )}
 
             {/* Test Status */}
             {testStatus && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg ${testStatus.success ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-300 border border-rose-500/20'}`}
+              <div
+                className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg`}
+                style={{ color: testStatus.success ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))', border: testStatus.success ? '1px solid hsl(var(--price-up) / 0.2)' : '1px solid hsl(var(--price-down) / 0.2)', background: testStatus.success ? 'hsl(var(--price-up) / 0.1)' : 'hsl(var(--price-down) / 0.1)' }}
               >
                 {testStatus.success ? <CheckCircle size={14} /> : <XCircle size={14} />}
                 {testStatus.message}
-              </motion.div>
+              </div>
             )}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Wifi size={16} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">数据源配置</h2>
+            <Wifi size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>数据源配置</h2>
             <DataSourceStatus compact />
           </div>
           <div className="space-y-2 text-xs font-bold">
@@ -210,39 +212,39 @@ export default function SettingsPage() {
               <div key={label} className="flex items-center justify-between border px-3 py-2" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
                 <span style={{ color: 'hsl(var(--text-secondary))' }}>{label}</span>
                 <span className="flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" /> {src}
+                  <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'hsl(var(--price-up))' }} /> {src}
                 </span>
               </div>
             ))}
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-5">
+        <div className="glass-card p-5">
           <DataSourceStatus />
-        </motion.div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Database size={16} className="text-emerald-600 dark:text-emerald-600 dark:text-emerald-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">缓存管理</h2>
+            <Database size={16} style={{ color: 'hsl(var(--price-up))' }} />
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>缓存管理</h2>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold" style={{ color: 'hsl(var(--text-secondary))' }}>本地 SQLite 数据缓存</span>
             <CacheClearButton />
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="glass-card p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <BarChart3 size={16} className="text-amber-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-900 dark:text-white">K线风格</h2>
+            <BarChart3 size={16} style={{ color: 'hsl(var(--risk-warning))' }} />
+            <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>K线风格</h2>
           </div>
           <ChartStyleSelector />
-        </motion.div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="glass-card p-5">
+        <div className="glass-card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Palette size={16} className="text-violet-500" />
+            <Palette size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>外观设置</h2>
           </div>
           <div className="space-y-3">
@@ -257,7 +259,7 @@ export default function SettingsPage() {
               <AccentColorPicker />
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
@@ -279,9 +281,12 @@ function ThemeSelector() {
         <button key={opt.value} onClick={() => setTheme(opt.value)}
           className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all ${
             theme === opt.value
-              ? 'border-violet-500/50 bg-violet-50 dark:bg-violet-500/10'
-              : 'border-slate-200 dark:border-zinc-700 hover:border-slate-300 dark:hover:border-zinc-600'
+              ? 'bg-violet-50' : 'hover:border-slate-300 dark:hover:border-zinc-600'
           }`}
+          style={{
+            borderColor: theme === opt.value ? 'hsl(var(--swiss-accent) / 0.5)' : 'var(--border-default)',
+            background: theme === opt.value ? 'hsl(var(--swiss-accent) / 0.1)' : undefined
+          }}
         >
           <span className="text-lg">{opt.icon}</span>
           <span className="text-xs font-medium" style={{ color: 'hsl(var(--text-primary))' }}>{opt.label}</span>
@@ -367,8 +372,11 @@ function ChartStyleSelector() {
           className={`relative flex flex-col items-center gap-1.5 p-3 border transition-all ${
             chartStyle === key
               ? 'border-gray-900 dark:border-white bg-gray-100 dark:bg-white/10'
-              : 'border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-gray-400'
+              : 'bg-white dark:bg-zinc-900 hover:border-gray-400'
           }`}
+          style={{
+            borderColor: chartStyle === key ? undefined : 'var(--border-default)',
+          }}
         >
           <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{config.name}</span>
           <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>{config.description}</span>
@@ -379,7 +387,7 @@ function ChartStyleSelector() {
           </div>
           {chartStyle === key && (
             <div className="absolute top-1 right-1">
-              <CheckCircle size={10} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
+              <CheckCircle size={10} style={{ color: 'hsl(var(--swiss-accent))' }} />
             </div>
           )}
         </button>

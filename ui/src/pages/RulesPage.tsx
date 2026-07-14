@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
 import type { TradingRule } from '@/types';
 import InlineAiParsePanel from '@/components/InlineAiParsePanel';
@@ -51,17 +50,14 @@ function CodeRuleEditor({ rule, onSave, onClose }: {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
+    <div
       className="rounded-lg overflow-hidden border mb-4"
       style={{ borderColor: 'hsl(var(--border-default))', background: 'hsl(var(--bg-card))' }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
         <div className="flex items-center gap-2">
-          <FileCode size={14} className="text-violet-400" />
+          <FileCode size={14} style={{ color: 'hsl(var(--swiss-accent))' }} />
           <span className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
             {rule ? '编辑代码规则' : '新建代码规则'}
           </span>
@@ -142,7 +138,7 @@ function CodeRuleEditor({ rule, onSave, onClose }: {
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -219,9 +215,9 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
         <div className="flex items-center gap-2 px-2 py-1.5 rounded text-[11px] font-bold" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>
           <span style={{ color: 'hsl(var(--text-tertiary))' }}>已选 {selected.size}</span>
           <button onClick={() => setSelected(new Set(rules.map(r => r.id)))} style={{ color: 'hsl(var(--text-secondary))' }}>全选</button>
-          <button onClick={() => batchSet(true)} style={{ color: '#22c55e' }}>批量启用</button>
+          <button onClick={() => batchSet(true)} style={{ color: 'hsl(var(--price-up))' }}>批量启用</button>
           <button onClick={() => batchSet(false)} style={{ color: 'hsl(var(--text-tertiary))' }}>批量禁用</button>
-          <button onClick={batchDelete} className="ml-auto" style={{ color: '#ef4444' }}>删除选中</button>
+          <button onClick={batchDelete} className="ml-auto" style={{ color: 'hsl(var(--price-down))' }}>删除选中</button>
         </div>
       )}
 
@@ -237,7 +233,7 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
               <span className="flex items-center justify-center w-5 h-5 rounded-full shrink-0 text-[10px] font-bold text-white" style={{ backgroundColor: rule.color, opacity: rule.enabled ? 1 : 0.35 }}>{rule.markerIndex}</span>
               <span className="text-[11px] font-bold truncate" style={{ color: rule.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))' }}>{rule.name}</span>
               {rule.kind === 'code' && (
-                <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'rgba(197, 134, 192, 0.15)', color: '#c586c0' }}>code</span>
+                <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'hsl(var(--text-tertiary) / 0.15)', color: 'hsl(var(--text-tertiary))' }}>code</span>
               )}
               <span className="text-[10px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{ruleSignalLabel(rule.signal)}</span>
               <BacktestBadge stat={stats.get(rule.id)} />
@@ -335,7 +331,7 @@ export default function RulesPage() {
   }, []);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: 'easeOut' }}
+    <div
       className="flex flex-col h-full pt-6 px-8">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>交易规则</h1>
@@ -366,8 +362,7 @@ export default function RulesPage() {
         <InlineAiParsePanel stockId={selectedStock?.code || ''} onRulesAdded={handleRulesAdded} autoOpen={aiParseAutoOpen} onVisibilityChange={setAiParseAutoOpen} />
 
         {/* Inline Code Rule Editor */}
-        <AnimatePresence>
-          {(showNewCodeRule || editingRule) && (
+        {(showNewCodeRule || editingRule) && (
             <CodeRuleEditor
               key={editingRule?.id ?? 'new'}
               rule={editingRule ? { name: editingRule.name, code: editingRule.code ?? '', signal: editingRule.signal, explanation: editingRule.explanation } : null}
@@ -375,7 +370,6 @@ export default function RulesPage() {
               onClose={() => { setShowNewCodeRule(false); setEditingRule(null); }}
             />
           )}
-        </AnimatePresence>
 
         {/* K-line marking rules */}
         <div className="pb-4" style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
@@ -443,6 +437,6 @@ export default function RulesPage() {
         </div>
       </div>
       <CodeViewerModal rule={viewingCodeRule} onClose={() => setViewingCodeRule(null)} />
-    </motion.div>
+    </div>
   );
 }
