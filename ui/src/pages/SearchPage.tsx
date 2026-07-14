@@ -146,7 +146,7 @@ export default function SearchPage() {
     <div className="flex flex-col items-center h-full pt-16 px-4">
       {/* Title */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
+        <h1 className="text-4xl font-bold text-gradient">
           股票检索
         </h1>
         <p className="text-sm mt-2" style={{ color: 'hsl(var(--text-tertiary))' }}>

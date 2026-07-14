@@ -84,6 +84,8 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
     <tr
       className="border-b hover-surface transition-colors"
       style={{ borderColor: 'var(--border-subtle)' }}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'hsl(var(--bg-hover) / 0.6)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
     >
       {/* # */}
       <td
@@ -275,7 +277,7 @@ export default function SectorStockRankPage() {
       {/* ═══ Header ═══ */}
       <div className="flex items-center justify-between shrink-0 flex-wrap gap-3">
         <div>
-          <h1 className="text-display">板块分析</h1>
+          <h1 className="text-display text-gradient">板块分析</h1>
           <p className="text-data-sm mt-1" style={{ color: 'hsl(var(--text-secondary))' }}>
             {updateTime ? `数据更新: ${updateTime}` : '全市场行业板块投资分析'}
           </p>
@@ -284,15 +286,14 @@ export default function SectorStockRankPage() {
 
       {/* ═══ Sentiment Overview Bar (2×2 grid) ═══ */}
       <div
-        className="rounded-lg border px-4 py-3 shrink-0"
-        style={{ background: 'var(--bg-card)', borderColor: 'var(--border-default)' }}
+        className="glass-jp px-4 py-3 shrink-0"
       >
         <div className="grid grid-cols-2 gap-x-6 gap-y-1">
           {/* 上涨 */}
           <div className="flex items-center gap-2 min-w-0">
             <TrendingUp size={14} className="price-up shrink-0" />
             <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>上涨</span>
-            <span className="text-display price-up font-bold">{stats.up}</span>
+            <span className="stat-number price-up">{stats.up}</span>
           </div>
           {/* 最强 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
@@ -309,7 +310,7 @@ export default function SectorStockRankPage() {
           <div className="flex items-center gap-2 min-w-0">
             <TrendingDown size={14} className="price-down shrink-0" />
             <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>下跌</span>
-            <span className="text-display price-down font-bold">{stats.down}</span>
+            <span className="stat-number price-down">{stats.down}</span>
           </div>
           {/* 最弱 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
@@ -325,7 +326,7 @@ export default function SectorStockRankPage() {
           {/* 平盘 */}
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>平盘</span>
-            <span className="text-display font-bold" style={{ color: 'var(--text-primary)' }}>{stats.flat}</span>
+            <span className="stat-number" style={{ color: 'var(--text-primary)' }}>{stats.flat}</span>
           </div>
           {/* 资金流入/流出 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
@@ -367,9 +368,11 @@ export default function SectorStockRankPage() {
               style={
                 quickFilter === f.key
                   ? {
-                      background: 'hsl(var(--swiss-accent-ghost))',
+                      background: 'linear-gradient(135deg, hsl(var(--swiss-accent) / 0.15), hsl(var(--accent-orange) / 0.12))',
                       color: 'hsl(var(--swiss-accent))',
-                      border: '1px solid hsl(var(--swiss-accent-subtle))',
+                      border: '1px solid hsl(var(--swiss-accent) / 0.4)',
+                      boxShadow: '0 1px 4px hsl(var(--swiss-accent) / 0.12)',
+                      fontWeight: 600,
                     }
                   : {}
               }
@@ -451,10 +454,10 @@ export default function SectorStockRankPage() {
       ) : (
         <div className="flex-1 overflow-auto rounded-lg border glass-card-flat">
           <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
-            <thead className="sticky top-0 z-10 shadow-sm" style={{ background: 'var(--bg-card)' }}>
+            <thead className="sticky top-0 z-10 shadow-sm" style={{ background: 'linear-gradient(180deg, hsl(var(--bg-card)) 0%, hsl(var(--bg-sidebar)) 100%)', borderBottom: '2px solid hsl(var(--border-default))' }}>
               <tr
                 className="border-b text-data-xs uppercase tracking-wider"
-                style={{ borderColor: 'var(--border-default)', color: 'hsl(var(--text-tertiary))' }}
+                style={{ borderColor: 'hsl(var(--border-default) / 0.5)', color: 'hsl(var(--text-secondary))' }}
               >
                 <th className="py-2 px-3 text-left w-10">#</th>
                 <th className="py-2 px-3 text-left">

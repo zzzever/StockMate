@@ -165,7 +165,7 @@ export default function PredictPage() {
             style={{ color: 'hsl(var(--ink))' }}>
             <ArrowLeft size={18} /> 返回
           </button>
-          <h1 className="heading-serif text-2xl font-bold tracking-tight" style={{ color: 'hsl(var(--text-primary))' }}>
+          <h1 className="heading-serif text-2xl font-bold tracking-tight text-gradient" style={{ color: 'hsl(var(--text-primary))' }}>
             AI 预测中心
           </h1>
           {stockId && <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-md" style={{ background: 'hsl(var(--bg-input))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-default))' }}>{stockId}</span>}

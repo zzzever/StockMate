@@ -52,7 +52,7 @@ export default function WatchlistPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-display">自選股</h1>
+          <h1 className="text-display text-gradient">自選股</h1>
           <p className="text-data-sm mt-1" style={{ color: 'hsl(var(--text-secondary))' }}>
             {watchlist?.length ?? 0} 只股票 · 实时更新
           </p>

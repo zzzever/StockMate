@@ -3,56 +3,55 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════
-   StockMate Design System — Swiss Style
-   Grid-driven, type-first, zero decoration.
+   StockMate Design System — Japanese/Taiwanese Style
+   鮮やかな色彩、強力なタイポグラフィ、温かみのある背景
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Swiss grid (8px base unit) ── */
+  /* ── Grid (8px base unit) ── */
   --grid-unit: 8px;
   --grid-gutter: 16px;
   --grid-margin: 32px;
 
-  /* ── Japanese TV Media palette ── */
-  --swiss-black: #1a1d23;
-  --swiss-white: #ffffff;
-  --swiss-gray-100: #f0ece6;
-  --swiss-gray-300: #d1ccc4;
-  --swiss-gray-700: #7a756e;
-  --swiss-accent: 0 70% 45%;        /* crimson red #c1272d */
-  --swiss-accent-ghost: 0 70% 45% / 0.08;
-  --swiss-accent-subtle: 0 70% 45% / 0.15;
-  --swiss-accent-strong: 0 70% 45% / 0.85;
-  --price-up: 350 75% 38%;            /* red = up */
-  --price-down: 210 55% 38%;          /* blue = down (Japanese convention) */
-  --price-up-bg: 350 75% 95%;
-  --price-down-bg: 210 55% 94%;
+  /* ── 日本/台湾风格调色板 ── */
+  --swiss-accent: 0 75% 48%;           /* 鲜艳绯红 */
+  --swiss-accent-ghost: 0 75% 48% / 0.08;
+  --swiss-accent-subtle: 0 75% 48% / 0.18;
+  --swiss-accent-strong: 0 75% 48% / 0.85;
+  --accent-orange: 25 95% 50%;          /* 活力橙 */
+  --accent-gold: 45 95% 50%;            /* 金色 */
+  --accent-purple: 270 60% 55%;         /* 紫色 - 用于AI/科技 */
+  --accent-cyan: 190 80% 45%;           /* 青色 - 用于数据 */
+  --price-up: 0 80% 45%;                /* 上涨红 */
+  --price-down: 145 55% 35%;            /* 下跌绿 */
+  --price-up-bg: 0 75% 94%;
+  --price-down-bg: 145 55% 92%;
 
-  /* ── Backgrounds (warm cream) ── */
-  --bg-root: #f8f6f1;
-  --bg-sidebar: #f3f0ea;
-  --bg-topbar: #f8f6f1;
-  --bg-card: #fdfbf8;
-  --bg-input: #edebe6;
-  --bg-hover: #e8e5df;
+  /* ── 背景 - 暖色调 ── */
+  --bg-root: #fdf8f0;                   /* 暖米色 */
+  --bg-sidebar: #f8f0e4;                /* 更暖的侧边栏 */
+  --bg-topbar: #fdf8f0;
+  --bg-card: #fffcf7;                   /* 暖白卡片 */
+  --bg-input: #f5ede2;
+  --bg-hover: #efe5d6;
 
-  /* ── Text ── */
-  --text-primary: #1a1d23;
-  --text-secondary: #6e6a63;
-  --text-tertiary: #9e9a92;
+  /* ── 文字颜色 ── */
+  --text-primary: #1a1206;              /* 深暖黑 */
+  --text-secondary: #6b5c48;            /* 暖灰 */
+  --text-tertiary: #9a8b78;             /* 暖浅灰 */
   --text-inverse: #ffffff;
 
-  /* ── Borders ── */
-  --border-default: #d1ccc4;
-  --border-subtle: #e0dcd4;
-  --border-strong: #1a1d23;
+  /* ── 边框 ── */
+  --border-default: #d4c8b6;
+  --border-subtle: #e3d8c8;
+  --border-strong: #1a1206;
 
-  /* ── Shadows ── */
-  --shadow-card: 0 2px 6px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  /* ── 阴影 ── */
+  --shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06), 0 1px 3px -1px rgb(0 0 0 / 0.08);
   --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.10);
   --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.14);
 
-  /* ── Radius scale ── */
+  /* ── 圆角 ── */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -60,64 +59,67 @@
   --radius-xl: 20px;
   --radius-xxl: 28px;
 
-  /* ── Sidebar ── */
+  /* ── 侧边栏 ── */
   --sidebar-width: 220px;
   --sidebar-collapsed: 56px;
 
-  /* ── Transitions ── */
+  /* ── 过渡 ── */
   --transition-fast: 150ms ease-out;
   --transition-normal: 250ms ease;
   --transition-slow: 350ms ease;
 
-  /* ── Chart colors ── */
-  --chart-grid: #e0dcd4;
-  --chart-text: #404040;
-  --chart-border: #d1ccc4;
+  /* ── 图表颜色 ── */
+  --chart-grid: #e3d8c8;
+  --chart-text: #4a3f32;
+  --chart-border: #d4c8b6;
 
-  /* ── Risk level indicators ── */
-  --risk-safe: 210 55% 38%;       /* blue — safe */
-  --risk-warning: 35 85% 48%;     /* amber — moderate risk */
-  --risk-danger: 0 75% 45%;       /* red — high risk */
+  /* ── 风险等级 ── */
+  --risk-safe: 210 55% 42%;       /* 蓝色 — 安全 */
+  --risk-warning: 35 90% 48%;     /* 琥珀色 — 中等风险 */
+  --risk-danger: 0 75% 48%;       /* 红色 — 高风险 */
 
   color-scheme: light;
 }
 
-/* ── Dark Mode (Japanese TV warm-dark) ── */
+/* ── Dark Mode (暖色调暗色) ── */
 .dark {
-  --swiss-white: #1e1e24;
-  --swiss-black: #f0ece6;
-  --swiss-gray-100: #2a2a30;
-  --swiss-gray-300: #3a3a42;
-  --swiss-gray-700: #8a867e;
+  --swiss-accent: 0 75% 52%;
+  --swiss-accent-ghost: 0 75% 52% / 0.12;
+  --swiss-accent-subtle: 0 75% 52% / 0.25;
+  --swiss-accent-strong: 0 75% 52% / 0.85;
+  --accent-orange: 25 95% 50%;
+  --accent-gold: 45 95% 50%;
+  --accent-purple: 270 55% 60%;
+  --accent-cyan: 190 75% 50%;
 
-  --price-up: 350 70% 55%;
-  --price-down: 210 55% 55%;
-  --price-up-bg: 350 50% 12%;
-  --price-down-bg: 210 50% 12%;
+  --price-up: 0 75% 55%;
+  --price-down: 145 50% 42%;
+  --price-up-bg: 0 50% 14%;
+  --price-down-bg: 145 40% 12%;
 
-  --bg-root: #141418;
-  --bg-sidebar: #141418;
-  --bg-topbar: #1e1e24;
-  --bg-card: #1e1e24;
-  --bg-input: #2a2a30;
-  --bg-hover: #24242a;
+  --bg-root: #1a1510;
+  --bg-sidebar: #18130e;
+  --bg-topbar: #1f1a14;
+  --bg-card: #231e18;
+  --bg-input: #2e2820;
+  --bg-hover: #2a241d;
 
-  --text-primary: #f0ece6;
-  --text-secondary: #8a867e;
-  --text-tertiary: #6a665e;
-  --text-inverse: #141418;
+  --text-primary: #f0e8d8;
+  --text-secondary: #a89880;
+  --text-tertiary: #7a6a58;
+  --text-inverse: #1a1510;
 
-  --border-default: #3a3a42;
-  --border-subtle: #2a2a30;
-  --border-strong: #8a867e;
+  --border-default: #3d342a;
+  --border-subtle: #2e2820;
+  --border-strong: #a89880;
 
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.4);
   --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.4);
   --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.5);
 
-  --chart-grid: #2a2a30;
-  --chart-text: #8a867e;
-  --chart-border: #3a3a42;
+  --chart-grid: #2e2820;
+  --chart-text: #a89880;
+  --chart-border: #3d342a;
 
   /* ── Risk level indicators (dark) ── */
   --risk-safe: 210 55% 55%;
@@ -189,9 +191,9 @@ body {
    ═══════════════════════════════════════════════════════ */
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--swiss-gray-100); }
-::-webkit-scrollbar-thumb { background: var(--swiss-gray-300); border-radius: 0; }
-::-webkit-scrollbar-thumb:hover { background: var(--swiss-gray-700); }
+::-webkit-scrollbar-track { background: var(--bg-input); }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 /* Mini watchlist window — thinner, subtler scrollbar for the compact 300px window */
 .mini-scroll::-webkit-scrollbar { width: 4px; }
@@ -199,7 +201,7 @@ body {
 .mini-scroll::-webkit-scrollbar-thumb { background: hsl(var(--border-default)); border-radius: 2px; }
 
 /* ═══════════════════════════════════════════════════════
-   Typography — Swiss modular scale (1.25 ratio), Inter-only
+   Typography — 強力なタイポグラフィ (Powerful Japanese typography)
    ═══════════════════════════════════════════════════════ */
 
 /* Monospace numbers: JetBrains Mono with tabular-nums */
@@ -209,11 +211,11 @@ body {
   font-feature-settings: "zero" on,"ss19" on,"calt" on;
 }
 
-/* No serif headings — all Inter */
+/* Bold headings — impact-driven */
 h1, h2, h3 {
   font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -231,13 +233,43 @@ h1, h2, h3 {
 
 .btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
 
-/* ── Typography scale ── */
-.text-display { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
-.text-heading { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.3; }
-.text-heading-sm { font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
-.text-body { font-size: 0.8125rem; font-weight: 400; line-height: 1.5; }
-.text-data-sm { font-size: 0.75rem; font-weight: 500; line-height: 1.4; }
-.text-data-xs { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; line-height: 1.3; }
+/* ── Typography scale (日本/台湾风格 — 大力、震撼) ── */
+.text-display { font-size: 2rem; font-weight: 900; letter-spacing: -0.02em; line-height: 1.15; }
+.text-heading { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.25; }
+.text-heading-sm { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.005em; line-height: 1.3; }
+.text-body { font-size: 0.9375rem; font-weight: 400; line-height: 1.6; }
+.text-data-sm { font-size: 0.8125rem; font-weight: 500; line-height: 1.4; }
+.text-data-xs { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1.2; }
+
+/* ── Text gradient (多彩大标题) ── */
+.text-gradient {
+  background: linear-gradient(135deg, hsl(var(--swiss-accent)), hsl(var(--accent-orange)), hsl(var(--accent-gold)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Stat number (情绪看板统计数字) ── */
+.stat-number {
+  font-family: 'JetBrains Mono','SF Mono',ui-monospace,'Fira Code',monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ── Glass card (日本风格) ── */
+.glass-jp {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card), 0 0 0 1px hsl(var(--swiss-accent) / 0.04);
+  transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
+}
+.glass-jp:hover {
+  border-color: hsl(var(--swiss-accent) / 0.25);
+  box-shadow: var(--shadow-dropdown), 0 0 0 1px hsl(var(--swiss-accent) / 0.06);
+}
 
 /* ── Button system ── */
 .btn-primary {

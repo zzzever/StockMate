@@ -334,7 +334,7 @@ export default function RulesPage() {
     <div
       className="flex flex-col h-full pt-6 px-8">
       <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>交易规则</h1>
+        <h1 className="text-2xl font-bold text-gradient" style={{ color: 'hsl(var(--text-primary))' }}>交易规则</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => { setShowNewCodeRule(true); setEditingRule(null); }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded border transition-colors"

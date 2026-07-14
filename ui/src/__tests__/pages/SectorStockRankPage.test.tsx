@@ -222,8 +222,8 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       const thEls = document.querySelectorAll('th');
       const match = Array.from(thEls).find((th) => th.textContent?.includes('1月%') || th.textContent?.includes('1月涨幅'));
       expect(match).toBeFalsy();
-      // '1月涨幅' still exists in the sort select dropdown option
-      expect(screen.getByRole('option', { name: '1月涨幅' })).toBeInTheDocument();
+      // '1月涨幅' no longer exists in sort options
+      expect(screen.queryByRole('option', { name: '1月涨幅' })).toBeNull();
     });
 
     it('filters by search', () => {
@@ -265,15 +265,15 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(rows[1].textContent).toContain('半导体');
     });
 
-    it('clicking name header sorts by name', () => {
+    it('clicking fund_flow header sorts by fund_flow', () => {
       vi.mocked(hooks.useHotSectors).mockReturnValue({ data: mockSectors(), isLoading: false, isError: false, error: null } as any);
       renderPage();
-      const nameEls = screen.getAllByText('板块名称');
-      const nameTh = nameEls.find((el) => el.tagName === 'TH');
-      expect(nameTh).toBeTruthy();
-      fireEvent.click(nameTh!);
+      const fundFlowEls = screen.getAllByText('资金流');
+      const fundFlowTh = fundFlowEls.find((el) => el.tagName === 'TH');
+      expect(fundFlowTh).toBeTruthy();
+      fireEvent.click(fundFlowTh!);
       const rows = screen.getAllByRole('row');
-      expect(rows[1].textContent).toContain('银行');
+      expect(rows[1].textContent).toContain('半导体');
     });
 
     it('clicking change_percent header again toggles sort order', () => {

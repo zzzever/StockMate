@@ -466,7 +466,7 @@ export default function StockDetailPage() {
       <div className="flex items-start justify-between shrink-0 px-1 pt-2 pb-1 overflow-hidden">
         <div className="flex items-center gap-2 min-w-0 pt-1">
           <button onClick={() => navigate(-1)} className="text-[11px] font-medium shrink-0" style={{ color: 'hsl(var(--text-secondary))' }}>←</button>
-          <span className="text-sm font-bold truncate" style={{ color: 'hsl(var(--text-primary))' }}>{displayName}</span>
+          <span className="text-sm font-bold truncate text-gradient" style={{ color: 'hsl(var(--text-primary))' }}>{displayName}</span>
           <span className="text-[11px] font-mono-nums shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{displayCode}</span>
         </div>
         <div className="flex items-start gap-3 shrink-0">

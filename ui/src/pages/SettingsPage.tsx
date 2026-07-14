@@ -75,7 +75,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>设置</h1>
+      <h1 className="text-2xl font-bold text-gradient" style={{ color: 'var(--text-primary)' }}>设置</h1>
 
       {configLoading && (
         <div className="flex items-center justify-center p-8">
