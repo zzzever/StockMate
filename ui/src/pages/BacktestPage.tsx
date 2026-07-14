@@ -423,7 +423,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
         autoSize: true,
       });
       chartRef.current = chart;
-      strategySeriesRef.current = chart.addAreaSeries({ topColor: 'rgba(16,185,129,0.4)', bottomColor: 'rgba(16,185,129,0.05)', lineColor: 'hsl(var(--price-up))', lineWidth: 2 });
+      strategySeriesRef.current = chart.addAreaSeries({ topColor: 'rgba(193,39,45,0.4)', bottomColor: 'rgba(193,39,45,0.05)', lineColor: '#c1272d', lineWidth: 2 });
       benchmarkSeriesRef.current = chart.addLineSeries({ color: 'rgba(161,161,170,0.6)', lineWidth: 1, lineStyle: LineStyle.Dashed });
     } catch (e) { console.error('EquityCurveChart creation failed:', e); }
     return () => { isMounted.current = false; try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
