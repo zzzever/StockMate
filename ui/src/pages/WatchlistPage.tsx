@@ -100,7 +100,7 @@ export default function WatchlistPage() {
 
       {/* Watchlist items */}
       {!isLoading && mergedWatchlist && mergedWatchlist.length > 0 && (
-        <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="flex-1 overflow-y-auto">
           {mergedWatchlist.map((item) => {
             const up = item.change > 0;
             const down = item.change < 0;
@@ -111,19 +111,21 @@ export default function WatchlistPage() {
                 tabIndex={0}
                 onClick={() => handleNavigate(item.stock_id)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleNavigate(item.stock_id); }}
-                className="rounded-xl p-4 border hover-surface cursor-pointer transition-colors"
+                className="flex items-center gap-4 py-3 px-1 border-b hover-surface cursor-pointer transition-colors"
                 style={{ borderColor: 'var(--border-subtle)' }}
               >
-                {/* Top row: Star + Name + Code */}
-                <div className="flex items-start gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleRemove(e, item.stock_code); }}
-                    className="shrink-0 mt-0.5 hover:text-amber-600 transition-colors" style={{ color: 'hsl(var(--risk-warning))' }}
-                    title="取消自选"
-                  >
-                    <Star size={14} fill="currentColor" />
-                  </button>
-                  <div className="flex items-center gap-2 min-w-0">
+                {/* Star */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleRemove(e, item.stock_code); }}
+                  className="shrink-0 hover:text-amber-600 transition-colors" style={{ color: 'hsl(var(--risk-warning))' }}
+                  title="取消自选"
+                >
+                  <Star size={14} fill="currentColor" />
+                </button>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
                     <span className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>
                       {item.stock_name}
                     </span>
@@ -131,27 +133,25 @@ export default function WatchlistPage() {
                       {item.stock_code}.{item.exchange}
                     </span>
                   </div>
+                  <div className="flex items-center gap-3 mt-1 text-data-xs font-mono-nums" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                    <span>量 {fmtVolume(item.volume)}</span>
+                    <span>换 {item.turnover_rate != null ? item.turnover_rate.toFixed(2) + '%' : '--'}</span>
+                    <span>高 {item.high > 0 ? fmtPrice(item.high) : '--'}</span>
+                    <span>低 {item.low > 0 ? fmtPrice(item.low) : '--'}</span>
+                  </div>
                 </div>
 
-                {/* Middle: Price large + Change */}
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black font-mono-nums" style={{ color: 'var(--text-primary)' }}>
+                {/* Price + Change */}
+                <div className="text-right shrink-0">
+                  <div className="text-xl font-black font-mono-nums" style={{ color: 'var(--text-primary)' }}>
                     ¥{fmtPrice(item.price || 0)}
-                  </span>
-                  <span className={`text-data-sm font-semibold font-mono-nums ${getChangeColor(item.change_percent)}`}
+                  </div>
+                  <div className={`text-data-sm font-semibold font-mono-nums mt-0.5 ${getChangeColor(item.change_percent)}`}
                     style={chgStyle(up, down)}>
                     {item.price > 0 ? (
                       <>{item.change > 0 ? '+' : ''}{fmtPrice(item.change)} ({item.change > 0 ? '+' : ''}{fmtPct(item.change_percent)}%)</>
                     ) : '--'}
-                  </span>
-                </div>
-
-                {/* Bottom: Volume, Turnover, High, Low */}
-                <div className="mt-2 flex items-center gap-3 text-data-xs font-mono-nums" style={{ color: 'hsl(var(--text-tertiary))' }}>
-                  <span>量 {fmtVolume(item.volume)}</span>
-                  <span>换 {item.turnover_rate != null ? item.turnover_rate.toFixed(2) + '%' : '--'}</span>
-                  <span>高 {item.high > 0 ? fmtPrice(item.high) : '--'}</span>
-                  <span>低 {item.low > 0 ? fmtPrice(item.low) : '--'}</span>
+                  </div>
                 </div>
               </div>
             );
