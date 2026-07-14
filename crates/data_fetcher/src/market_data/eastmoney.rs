@@ -3,7 +3,7 @@
 //! Stock APIs:
 //!   Real-time:  push2.eastmoney.com/api/qt/stock/get?secid={mkt}.{code}&fields=...
 //!   K-line:     push2his.eastmoney.com/api/qt/stock/kline/get?secid=...&klt=...
-//!   Intraday:   same K-line endpoint with klt=5 (5-min)
+//!   Intraday:   same K-line endpoint with klt=1 (1-min)
 //! Board APIs:
 //!   Industry:   push2.eastmoney.com/api/qt/clist/get?fs=m:90+t2
 //!   Concept:    push2.eastmoney.com/api/qt/clist/get?fs=m:90+t3
@@ -399,7 +399,7 @@ pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
         None => return vec![],
     };
     let url = format!(
-        "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=5&fqt=0&end=20500101&lmt=48",
+        "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57&klt=1&fqt=0&end=20500101&lmt=240",
         secid
     );
     let resp = match send_request(&client, &url).await {
