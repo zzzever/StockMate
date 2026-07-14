@@ -134,34 +134,34 @@
    温暖、柔和、梦幻，灵感来自《龙猫》《千与千寻》
    ═══════════════════════════════════════════════════════ */
 .theme-ghibli {
-  --swiss-accent: 30 60% 50%;           /* 温暖琥珀色 */
-  --swiss-accent-ghost: 30 60% 50% / 0.1;
-  --swiss-accent-subtle: 30 60% 50% / 0.2;
-  --swiss-accent-strong: 30 60% 50% / 0.85;
-  --accent-orange: 25 70% 55%;
-  --accent-gold: 40 80% 55%;
-  --accent-purple: 280 40% 60%;
-  --accent-cyan: 180 40% 55%;
-  --price-up: 0 70% 50%;
-  --price-down: 150 45% 40%;
-  --price-up-bg: 0 70% 95%;
-  --price-down-bg: 150 45% 93%;
-  --bg-root: #f5f0e8;
-  --bg-sidebar: #efe8dc;
-  --bg-topbar: #f5f0e8;
-  --bg-card: #faf6ef;
-  --bg-input: #ede6da;
-  --bg-hover: #e5ddd0;
-  --text-primary: #2a2218;
-  --text-secondary: #6b5c48;
-  --text-tertiary: #9a8b78;
-  --border-default: #d4c8b8;
-  --border-subtle: #e0d6c8;
-  --border-strong: #2a2218;
+  --swiss-accent: 5 65% 45%;             /* 宫崎骏红 */
+  --swiss-accent-ghost: 5 65% 45% / 0.1;
+  --swiss-accent-subtle: 5 65% 45% / 0.2;
+  --swiss-accent-strong: 5 65% 45% / 0.85;
+  --accent-orange: 25 75% 55%;
+  --accent-gold: 38 80% 50%;
+  --accent-purple: 280 35% 55%;
+  --accent-cyan: 180 40% 50%;
+  --price-up: 5 70% 48%;
+  --price-down: 145 45% 40%;
+  --price-up-bg: 5 70% 94%;
+  --price-down-bg: 145 45% 92%;
+  --bg-root: #f7f1e6;
+  --bg-sidebar: #f0e8da;
+  --bg-topbar: #f7f1e6;
+  --bg-card: #fcf7ef;
+  --bg-input: #ece4d6;
+  --bg-hover: #e4dcca;
+  --text-primary: #2a1f14;
+  --text-secondary: #6b5a44;
+  --text-tertiary: #9a8a72;
+  --border-default: #d4c4ae;
+  --border-subtle: #e0d4c0;
+  --border-strong: #2a1f14;
   --shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.08);
-  --chart-grid: #e0d6c8;
+  --chart-grid: #e0d4c0;
   --risk-warning: 35 80% 50%;
-  --risk-danger: 0 70% 45%;
+  --risk-danger: 5 70% 45%;
 }
 .theme-ghibli.dark {
   --swiss-accent: 30 50% 55%;
