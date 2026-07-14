@@ -143,6 +143,24 @@ export interface StockMetricsPanelProps {
   /** Support & resistance levels (merged from separate row). */
   supportResistance?: SupportResistance | null;
   className?: string;
+  /** Last 5 days' main net inflow values for mini trend bar. */
+  fundFlowTrend?: number[];
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FinanceItem — single data row for collapsible snapshot
+   ═══════════════════════════════════════════════════════════ */
+
+function FinanceItem({ label, value, unit }: { label: string; value?: number | null; unit?: string }) {
+  if (value == null) return null;
+  return (
+    <div className="flex flex-col">
+      <span className="text-data-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>{label}</span>
+      <span className="text-data-sm font-semibold font-mono-nums" style={{ color: 'var(--text-primary)' }}>
+        {value.toLocaleString()}{unit || ''}
+      </span>
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -163,6 +181,7 @@ export default function StockMetricsPanel({
   prevClose = 0,
   supportResistance,
   className = '',
+  fundFlowTrend,
 }: StockMetricsPanelProps) {
   const hasQuote = !!realtimeQuote;
 
@@ -326,6 +345,28 @@ export default function StockMetricsPanel({
       {/* ════ Spacer — pushes warning right ════ */}
       <span className="flex-1 min-w-[4px]" />
 
+      {/* ════ 近5日主力净流入趋势 (mini bar chart) ════ */}
+      {fundFlowTrend && fundFlowTrend.length > 0 && (
+        <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+          <span className="text-[10px] font-semibold tracking-wide" style={{ color: 'hsl(var(--text-tertiary))' }}>资金趋势</span>
+          <div className="flex items-end gap-px h-6">
+            {(() => {
+              const maxAbs = Math.max(...fundFlowTrend.map(Math.abs), 1);
+              return fundFlowTrend.map((v, i) => (
+                <div key={i} className="flex-1 relative flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                  <div className="w-full rounded-sm" style={{
+                    height: `${Math.abs(v) / maxAbs * 100}%`,
+                    background: v >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
+                    opacity: 0.7 + 0.3 * (i / fundFlowTrend.length),
+                    minHeight: v === 0 ? '1px' : undefined,
+                  }} />
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* ════ Risk Warning (right-aligned, truncates) ════ */}
       {showWarning && (
         <span
@@ -337,6 +378,25 @@ export default function StockMetricsPanel({
           {hasCritical ? '⚠' : '△'} {warnings.join(' · ')}
           {hasCritical ? ' 注意风险' : ''}
         </span>
+      )}
+
+      {/* ════ 可折叠财务快照 ════ */}
+      {finance && (
+        <details className="mt-2">
+          <summary className="text-data-xs cursor-pointer select-none" style={{ color: 'hsl(var(--text-tertiary))' }}>
+            财务详情 ▾
+          </summary>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <FinanceItem label="营收" value={finance.revenue} unit="亿" />
+            <FinanceItem label="净利" value={finance.net_profit} unit="亿" />
+            <FinanceItem label="毛利率" value={finance.gross_margin} unit="%" />
+            <FinanceItem label="净利率" value={finance.net_margin} unit="%" />
+            <FinanceItem label="ROE" value={finance.roe} unit="%" />
+            <FinanceItem label="PE" value={finance.pe} />
+            <FinanceItem label="PB" value={finance.pb} />
+            <FinanceItem label="市值" value={finance.total_market_cap} unit="亿" />
+          </div>
+        </details>
       )}
     </div>
   );
