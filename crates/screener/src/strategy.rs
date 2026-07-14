@@ -51,8 +51,8 @@ pub fn generate_strategy(
                 reason = "MA5/MA10 金叉，支撑位附近放量".to_string();
                 ma_signals.push("MA5上穿MA10".to_string());
                 entry_price = Some(current_price);
-                stop_loss = sr.nearest_support.map(|s| s * Decimal::from(98u64) / Decimal::from(100u64));
-                take_profit = sr.nearest_resistance;
+                stop_loss = sr.nearest_support.map(|s| Decimal::from_f64_retain(s * 0.98).unwrap_or_default());
+                take_profit = sr.nearest_resistance.map(|r| Decimal::from_f64_retain(r).unwrap_or_default());
             } else if prev_ma5 >= prev_ma10 && ma5 < ma10 {
                 action = SignalAction::Sell;
                 confidence = 0.68;

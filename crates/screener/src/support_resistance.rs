@@ -1,4 +1,5 @@
 use domain::{Quote, SupportResistance};
+use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 
 /// 基于近期高点/低点的聚类支撑/压力计算
@@ -49,13 +50,13 @@ pub fn calculate_sr(quotes: &[Quote], stock_id: &str, lookback: usize) -> Suppor
     let supports_by_proximity = sort_by_proximity(&supports, current_price);
     let resistances_by_proximity = sort_by_proximity(&resistances, current_price);
 
-    let nearest_support = supports_by_proximity.first().cloned();
-    let nearest_resistance = resistances_by_proximity.first().cloned();
+    let nearest_support = supports_by_proximity.first().map(|s| s.to_f64().unwrap_or(0.0));
+    let nearest_resistance = resistances_by_proximity.first().map(|r| r.to_f64().unwrap_or(0.0));
 
     SupportResistance {
         stock_id: stock_id.into(),
-        supports: supports_by_proximity,
-        resistances: resistances_by_proximity,
+        supports: supports_by_proximity.into_iter().map(|s| s.to_f64().unwrap_or(0.0)).collect(),
+        resistances: resistances_by_proximity.into_iter().map(|r| r.to_f64().unwrap_or(0.0)).collect(),
         nearest_support,
         nearest_resistance,
     }

@@ -1422,10 +1422,10 @@ pub fn mock_moving_averages(stock_id: &str) -> Vec<MovingAverage> {
 pub fn mock_support_resistance(stock_id: &str) -> SupportResistance {
     SupportResistance {
         stock_id: stock_id.into(),
-        supports: vec![Decimal::new(16500, 2), Decimal::new(16000, 2)],
-        resistances: vec![Decimal::new(18000, 2), Decimal::new(19000, 2)],
-        nearest_support: Some(Decimal::new(16500, 2)),
-        nearest_resistance: Some(Decimal::new(18000, 2)),
+        supports: vec![165.0, 160.0],
+        resistances: vec![180.0, 190.0],
+        nearest_support: Some(165.0),
+        nearest_resistance: Some(180.0),
     }
 }
 

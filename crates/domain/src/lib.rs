@@ -279,10 +279,10 @@ impl Default for MovingAverage {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct SupportResistance {
     pub stock_id: String,
-    pub supports: Vec<Decimal>,
-    pub resistances: Vec<Decimal>,
-    pub nearest_support: Option<Decimal>,
-    pub nearest_resistance: Option<Decimal>,
+    pub supports: Vec<f64>,
+    pub resistances: Vec<f64>,
+    pub nearest_support: Option<f64>,
+    pub nearest_resistance: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
