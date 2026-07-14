@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2, Star } from 'lucide-react';
 import { useSearchStocks, useWatchlistAdd } from '@/hooks/useTauriQuery';
 import { useQueryClient } from '@tanstack/react-query';
@@ -144,12 +143,7 @@ export default function SearchPage() {
   }, []);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="flex flex-col items-center h-full pt-16 px-4"
-    >
+    <div className="flex flex-col items-center h-full pt-16 px-4">
       {/* Title */}
       <div className="mb-8 text-center">
         <h1 className="text-4xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
@@ -184,13 +178,9 @@ export default function SearchPage() {
 
       {/* Results */}
       <div className="w-full max-w-xl">
-        <AnimatePresence mode="wait">
+
           {showResults && error && (
-            <motion.div
-              key="error"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
               className="p-4"
               style={{
                 color: 'hsl(var(--risk-danger))',
@@ -200,58 +190,42 @@ export default function SearchPage() {
               }}
             >
               搜索失败: {error.message}
-            </motion.div>
+            </div>
           )}
 
           {showResults && isLoading && (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+            <div
               className="flex items-center justify-center py-8 text-sm"
               style={{ color: 'hsl(var(--text-secondary))' }}
             >
               <Search size={16} className="animate-pulse mr-2" />
               搜索中...
-            </motion.div>
+            </div>
           )}
 
           {showResults && !isLoading && debouncedQuery && results && results.length === 0 && (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
+            <div
               className="flex flex-col items-center py-12"
               style={{ color: 'hsl(var(--text-secondary))' }}
             >
               <BarChart3 size={40} className="opacity-30 mb-3" />
               <p className="text-base font-bold" style={{ color: 'hsl(var(--text-primary))' }}>未找到该股票</p>
               <p className="text-xs mt-1 opacity-50">请输入完整代码或关键字</p>
-            </motion.div>
+            </div>
           )}
 
           {showResults && !isLoading && results && results.length > 0 && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
+            <div
               className="space-y-1"
             >
               <p className="text-xs font-medium px-2 mb-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
                 搜索结果 {results.length} 条
               </p>
-              {results.map((stock, i) => {
+              {results.map((stock) => {
                 const badge = getTypeBadge(stock.stock_type);
                 const BadgeIcon = badge.icon;
                 return (
-                  <motion.button
-                    key={stock.id}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.03 }}
+                  <button
                     onClick={() => handleSelect(stock)}
                     className="hover-surface w-full flex items-center gap-4 p-3 text-left group"
                     style={{ borderRadius: 'var(--radius-lg)' }}
@@ -306,12 +280,11 @@ export default function SearchPage() {
                     </button>
 
                     <ChevronRight size={18} className="shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} />
-                  </motion.button>
+                  </button>
                 );
               })}
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
 
         {/* Search history when no query */}
         {!debouncedQuery && (
@@ -377,6 +350,6 @@ export default function SearchPage() {
           </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
