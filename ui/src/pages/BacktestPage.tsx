@@ -415,7 +415,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
     if (!containerRef.current) return;
     try {
       const chart = createChart(containerRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: 'hsl(var(--text-tertiary))' },
+        layout: { background: { color: 'transparent' }, textColor: '#9e9a92' },
         grid: { vertLines: { color: 'rgba(255,255,255,0.05)' }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
         crosshair: { mode: 1 },
         rightPriceScale: { borderColor: 'rgba(255,255,255,0.05)' },
@@ -455,7 +455,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
         time: t.date as any,
         position: t.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
         shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
-        color: t.type === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
+        color: t.type === 'buy' ? '#c1272d' : '#3b82f6',
         text: t.type === 'buy' ? 'B' : 'S',
         size: 1,
       }));
