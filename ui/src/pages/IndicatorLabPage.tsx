@@ -195,17 +195,17 @@ export default function IndicatorLabPage() {
   useEffect(() => {
     if (!mainRef.current) return;
     const c = createChart(mainRef.current, {
-      layout: { background: { color: 'transparent' }, textColor: 'hsl(var(--text-tertiary))' },
-      grid: { vertLines: { color: 'hsla(var(--text-tertiary), 0.1)' }, horzLines: { color: 'hsla(var(--text-tertiary), 0.1)' } },
+      layout: { background: { color: 'transparent' }, textColor: '#9e9a92' },
+      grid: { vertLines: { color: '#9e9a921a' }, horzLines: { color: '#9e9a921a' } },
       autoSize: true, crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: 'hsla(var(--text-tertiary), 0.2)' },
-      timeScale: { borderColor: 'hsla(var(--text-tertiary), 0.2)', timeVisible: true },
+      rightPriceScale: { borderColor: '#9e9a9233' },
+      timeScale: { borderColor: '#9e9a9233', timeVisible: true },
     });
     c.timeScale().applyOptions({ minBarSpacing: 4, fixLeftEdge: true, fixRightEdge: true });
     const candle = c.addCandlestickSeries({
-      upColor: 'hsl(var(--risk-danger))', downColor: 'hsl(var(--price-down))',
-      borderUpColor: 'hsl(var(--risk-danger))', borderDownColor: 'hsl(var(--price-down))',
-      wickUpColor: 'hsl(var(--risk-danger))', wickDownColor: 'hsl(var(--price-down))',
+      upColor: '#c1272d', downColor: '#3b82f6',
+      borderUpColor: '#c1272d', borderDownColor: '#3b82f6',
+      wickUpColor: '#c1272d', wickDownColor: '#3b82f6',
     });
     storeRef.current = { chart: c, candle, maLine: null, dasLine: null };
     return () => { try { c.remove() } catch (_) { } storeRef.current = null; }
