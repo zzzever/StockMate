@@ -234,6 +234,63 @@
 }
 
 /* ═══════════════════════════════════════════════════════
+   Theme: Morandi — 莫兰迪低饱和治愈系
+   柔和、低饱和、治愈系色调，灵感来自 Giorgio Morandi 的画作
+   ═══════════════════════════════════════════════════════ */
+.theme-morandi {
+  --swiss-accent: 340 25% 55%;           /* 莫兰迪粉 — 低饱和玫瑰 */
+  --swiss-accent-ghost: 340 25% 55% / 0.12;
+  --swiss-accent-subtle: 340 25% 55% / 0.2;
+  --swiss-accent-strong: 340 25% 55% / 0.85;
+  --accent-orange: 25 25% 60%;           /* 暖灰橙 */
+  --accent-gold: 45 20% 65%;             /* 哑光金 */
+  --accent-purple: 270 20% 60%;          /* 柔和紫 */
+  --accent-cyan: 190 15% 60%;            /* 雾蓝 */
+  --price-up: 340 30% 50%;
+  --price-down: 145 20% 50%;
+  --price-up-bg: 340 30% 94%;
+  --price-down-bg: 145 20% 93%;
+  --bg-root: #f5f2ed;
+  --bg-sidebar: #efeae3;
+  --bg-topbar: #f5f2ed;
+  --bg-card: #faf7f2;
+  --bg-input: #eae5de;
+  --bg-hover: #e2ddd4;
+  --text-primary: #2e2822;
+  --text-secondary: #7a7268;
+  --text-tertiary: #a39b90;
+  --border-default: #d4cec4;
+  --border-subtle: #e0d9d0;
+  --border-strong: #2e2822;
+  --shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --chart-grid: #e0d9d0;
+  --risk-warning: 35 25% 55%;
+  --risk-danger: 340 30% 50%;
+}
+.theme-morandi.dark {
+  --swiss-accent: 340 25% 60%;
+  --swiss-accent-ghost: 340 25% 60% / 0.12;
+  --swiss-accent-subtle: 340 25% 60% / 0.2;
+  --swiss-accent-strong: 340 25% 60% / 0.85;
+  --price-up: 340 25% 58%;
+  --price-down: 145 20% 50%;
+  --price-up-bg: 340 25% 12%;
+  --price-down-bg: 145 20% 10%;
+  --bg-root: #1e1a16;
+  --bg-sidebar: #1e1a16;
+  --bg-topbar: #26221e;
+  --bg-card: #26221e;
+  --bg-input: #322e28;
+  --bg-hover: #2a2620;
+  --text-primary: #ece4da;
+  --text-secondary: #8a8278;
+  --text-tertiary: #6a6258;
+  --border-default: #3a342e;
+  --border-subtle: #2a241e;
+  --chart-grid: #2a241e;
+}
+
+/* ═══════════════════════════════════════════════════════
    Theme: Swiss — 原始瑞士风格
    ═══════════════════════════════════════════════════════ */
 .theme-swiss {

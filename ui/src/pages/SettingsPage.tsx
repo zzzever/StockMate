@@ -371,6 +371,7 @@ const THEME_SCHEMES: { key: ThemeName; label: string; desc: string; colors: stri
   { key: 'jp', label: '日式TV', desc: '鲜艳绯红 · 暖色调默认', colors: ['hsl(0 75% 48%)', 'hsl(25 95% 50%)', 'hsl(45 95% 50%)'] },
   { key: 'ghibli', label: '吉卜力', desc: '温暖琥珀 · 柔和梦幻', colors: ['hsl(30 60% 50%)', 'hsl(40 80% 55%)', 'hsl(180 40% 55%)'] },
   { key: 'bloomberg', label: 'Bloomberg', desc: '冷静蓝调 · 金融专业', colors: ['hsl(220 60% 50%)', 'hsl(30 90% 50%)', 'hsl(120 55% 40%)'] },
+  { key: 'morandi', label: '莫兰迪', desc: '低饱和 · 治愈系', colors: ['hsl(340 25% 55%)', 'hsl(25 25% 60%)', 'hsl(190 15% 60%)'] },
   { key: 'swiss', label: '瑞士风格', desc: '经典蓝 · 简约清晰', colors: ['hsl(221 83% 53%)', 'hsl(25 95% 50%)', 'hsl(350 75% 38%)'] },
 ];
 
