@@ -234,19 +234,18 @@ h1, h2, h3 {
 .btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
 
 /* ── Typography scale (日本/台湾风格 — 大力、震撼) ── */
-.text-display { font-size: 2rem; font-weight: 900; letter-spacing: -0.02em; line-height: 1.15; }
-.text-heading { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.01em; line-height: 1.25; }
-.text-heading-sm { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.005em; line-height: 1.3; }
+.text-display { font-size: 2rem; font-weight: 900; letter-spacing: -0.025em; line-height: 1.1; }
+.text-heading { font-size: 1.375rem; font-weight: 800; letter-spacing: -0.015em; line-height: 1.2; }
+.text-heading-sm { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; }
 .text-body { font-size: 0.9375rem; font-weight: 400; line-height: 1.6; }
 .text-data-sm { font-size: 0.8125rem; font-weight: 500; line-height: 1.4; }
 .text-data-xs { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1.2; }
 
 /* ── Text gradient (多彩大标题) ── */
 .text-gradient {
-  background: linear-gradient(135deg, hsl(var(--swiss-accent)), hsl(var(--accent-orange)), hsl(var(--accent-gold)));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: hsl(var(--swiss-accent));
+  font-weight: 900;
+  letter-spacing: -0.025em;
 }
 
 /* ── Stat number (情绪看板统计数字) ── */
