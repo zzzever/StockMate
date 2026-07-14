@@ -371,6 +371,14 @@ export default function StockDetailPage() {
   const code = searchParams.get('code') || '';
   const stockId = code;
   const [period, setPeriod] = useState<string>('day');
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+  };
+
   const handleSetPeriod = (p: string) => { setPeriod(p); if (p === 'minute') setCrosshair(null); };
   const [indicator, setIndicator] = useState<IndicatorType>('none');
   const [showBOLL, setShowBOLL] = useState(false);
@@ -500,7 +508,7 @@ export default function StockDetailPage() {
             <button onClick={() => { (window as any).__klineFitContent?.(); }}
               className="px-1.5 py-0.5 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="恢复默认比例">↺</button>
           </div>
-          <div className="flex items-center gap-3 shrink-0"><CrosshairTooltip data={crosshair} allData={chartData} /><button onClick={() => { if (period === 'minute') { refetchIntraday(); } else { refetchHistory(); } queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime', effectiveCode] }); }} className="text-[11px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={(period === 'minute' ? intradayFetching : historyFetching) ? 'animate-spin' : ''} /></button></div>
+          <div className="flex items-center gap-3 shrink-0"><CrosshairTooltip data={crosshair} allData={chartData} /><button onClick={() => { if (period === 'minute') { refetchIntraday(); } else { refetchHistory(); } queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime', effectiveCode] }); }} className="text-[11px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={(period === 'minute' ? intradayFetching : historyFetching) ? 'animate-spin' : ''} /></button><button onClick={toggleFullscreen} className="px-1.5 py-0.5 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0" style={{ color: document.fullscreenElement ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))' }} title="全屏">⛶</button></div>
         </div>
         {/* MA values bar */}
         {drawMode && (
