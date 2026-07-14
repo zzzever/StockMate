@@ -148,7 +148,7 @@ function SectorRow({ sector, rank }: { sector: HotSector; rank: number }) {
 
       {/* 领涨股 */}
       <td
-        className="py-2 px-3 text-data-sm truncate max-w-[120px]"
+        className="py-2 px-3 text-sm truncate max-w-[180px]"
         style={{ color: 'var(--text-primary)' }}
       >
         <span className="flex items-center gap-1.5">
@@ -291,13 +291,13 @@ export default function SectorStockRankPage() {
           {/* 上涨 */}
           <div className="flex items-center gap-2 min-w-0">
             <TrendingUp size={14} className="price-up shrink-0" />
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>上涨</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>上涨</span>
             <span className="text-display price-up font-bold">{stats.up}</span>
           </div>
           {/* 最强 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>最强</span>
-            <span className="text-data-sm font-medium truncate max-w-[120px]" style={{ color: 'var(--text-primary)' }}>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>最强</span>
+            <span className="text-sm font-medium truncate max-w-[180px]" style={{ color: 'var(--text-primary)' }}>
               {extremes.strongest?.name ?? '--'}
             </span>
             <span className="text-data-sm font-mono-nums font-semibold shrink-0" style={{ color: 'hsl(var(--price-up))' }}>
@@ -308,12 +308,12 @@ export default function SectorStockRankPage() {
           {/* 下跌 */}
           <div className="flex items-center gap-2 min-w-0">
             <TrendingDown size={14} className="price-down shrink-0" />
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>下跌</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>下跌</span>
             <span className="text-display price-down font-bold">{stats.down}</span>
           </div>
           {/* 最弱 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>最弱</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>最弱</span>
             <span className="text-data-sm font-medium truncate max-w-[120px]" style={{ color: 'var(--text-primary)' }}>
               {extremes.weakest?.name ?? '--'}
             </span>
@@ -324,16 +324,16 @@ export default function SectorStockRankPage() {
 
           {/* 平盘 */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>平盘</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>平盘</span>
             <span className="text-display font-bold" style={{ color: 'var(--text-primary)' }}>{stats.flat}</span>
           </div>
           {/* 资金流入/流出 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>资金流入</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>资金流入</span>
             <span className="text-data-sm font-mono-nums font-semibold price-up">{stats.positiveFlow}</span>
             <span className="text-data-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>/</span>
             <span className="text-data-sm font-mono-nums font-semibold price-down">{stats.negativeFlow}</span>
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>流出</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>流出</span>
           </div>
 
           {/* Divider */}
@@ -341,14 +341,14 @@ export default function SectorStockRankPage() {
 
           {/* 总成交 */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>总成交</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>总成交</span>
             <span className="text-data-sm font-mono-nums font-semibold" style={{ color: 'var(--text-primary)' }}>
               {fmtTurnover(stats.totalTurnover)}
             </span>
           </div>
           {/* 主力净流入 */}
           <div className="flex items-center gap-2 min-w-0 justify-end">
-            <span className="text-data-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>主力净流入</span>
+            <span className="text-sm whitespace-nowrap" style={{ color: 'hsl(var(--text-secondary))' }}>主力净流入</span>
             <span className={`text-data-sm font-mono-nums font-semibold ${stats.totalFundFlow >= 0 ? 'price-up' : 'price-down'}`}>
               {fmtFundFlow(stats.totalFundFlow)}
             </span>
@@ -473,7 +473,7 @@ export default function SectorStockRankPage() {
                 >
                   资金流 {sortIndicator('fund_flow')}
                 </th>
-                <th className="py-2 px-3 text-left w-28">
+                <th className="py-2 px-3 text-left w-36">
                   领涨股
                 </th>
               </tr>
