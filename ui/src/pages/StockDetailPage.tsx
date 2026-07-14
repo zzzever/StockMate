@@ -313,7 +313,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
   }, [data, maData, T, IND, indData, updateOverlays, showBOLL]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ position: 'relative' }}>
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden kline-fullscreen-target" style={{ position: 'relative', background: 'var(--bg-root)' }}>
       <div ref={mainRef} className="flex-1 min-h-0" />
       <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 10 }}>
         {overlays.map((o, i) => (<span key={i} className="absolute text-[9px] font-bold leading-none" style={{ left: o.x - 6, top: o.y, color: o.color, textShadow: '0 0 2px hsl(var(--bg-card)), 0 0 2px hsl(var(--bg-card))' }}>{o.label}</span>))}
@@ -372,10 +372,12 @@ export default function StockDetailPage() {
   const stockId = code;
   const [period, setPeriod] = useState<string>('day');
   const toggleFullscreen = () => {
+    const el = document.querySelector('.kline-fullscreen-target') as HTMLElement;
+    if (!el) return;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else {
-      document.documentElement.requestFullscreen().catch(() => {});
+      el.requestFullscreen().catch(() => {});
     }
   };
 
