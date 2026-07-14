@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Star, Search, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
+import { Star, Search, RefreshCw } from 'lucide-react';
 import { useWatchlist, useWatchlistRemove, useWatchlistWithRealtime } from '@/hooks/useTauriQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import { fmtPrice, fmtPct, fmtVolume } from '@/lib/format';
@@ -10,6 +9,12 @@ function getChangeColor(value: number): string {
   if (value > 0) return 'text-[hsl(var(--price-up))]';
   if (value < 0) return 'text-[hsl(var(--price-down))]';
   return 'text-[hsl(var(--text-secondary))]';
+}
+
+function chgStyle(up: boolean, down: boolean): React.CSSProperties {
+  if (up) return { color: 'hsl(var(--price-up))' };
+  if (down) return { color: 'hsl(var(--price-down))' };
+  return {};
 }
 
 export default function WatchlistPage() {
@@ -43,39 +48,20 @@ export default function WatchlistPage() {
   }, [refetch]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="flex flex-col h-full pt-6 px-4"
-    >
+    <div className="flex flex-col h-full pt-6 px-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-3xl font-bold" style={{ color: 'hsl(var(--text-primary))' }}>
-            自選股
-          </h1>
-          <p className="text-xs font-bold mt-1" style={{ color: 'hsl(var(--text-tertiary))' }}>
-            <Star size={12} className="inline mr-1" />
-            实时行情 · 自动刷新
+          <h1 className="text-display">自選股</h1>
+          <p className="text-data-sm mt-1" style={{ color: 'hsl(var(--text-secondary))' }}>
+            {watchlist?.length ?? 0} 只股票 · 实时更新
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate('/search')}
-            aria-label="搜索添加股票"
-            className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-bold border transition-colors focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
-            style={{ color: 'hsl(var(--text-secondary))', borderColor: 'hsl(var(--border-default))' }}
-          >
-            <Search size={14} /> 搜索添加
+          <button onClick={() => navigate('/search')} className="btn-ghost text-data-sm">
+            <Search size={14} /> 搜索
           </button>
-          <button
-            onClick={handleRefresh}
-            aria-label="刷新自选列表"
-            disabled={isLoading}
-            className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-bold border transition-colors focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
-            style={{ color: 'hsl(var(--text-secondary))', borderColor: 'hsl(var(--border-default))' }}
-          >
+          <button onClick={handleRefresh} disabled={isLoading} className="btn-ghost text-data-sm">
             <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> 刷新
           </button>
         </div>
@@ -83,8 +69,8 @@ export default function WatchlistPage() {
 
       {/* Error state */}
       {error && (
-        <div className="p-4 mb-4 rounded-lg" style={{ borderColor: 'hsl(var(--color-danger)/0.5)', background: 'hsl(var(--color-danger)/0.1)' }}>
-          <p className="text-sm font-medium" style={{ color: 'hsl(var(--color-danger))' }}>
+        <div className="p-4 mb-4 rounded-lg" style={{ borderColor: 'hsl(var(--risk-danger) / 0.3)', background: 'hsl(var(--risk-danger) / 0.08)' }}>
+          <p className="text-sm font-medium" style={{ color: 'hsl(var(--risk-danger))' }}>
             加载失败: {error.message}
           </p>
         </div>
@@ -92,9 +78,9 @@ export default function WatchlistPage() {
 
       {/* Loading state */}
       {isLoading && (
-        <div className="flex flex-col items-center justify-center flex-1 gap-3" style={{ color: 'hsl(var(--text-secondary))' }}>
-          <RefreshCw size={24} className="animate-spin" />
-          <p className="text-sm font-medium">加载自选股...</p>
+        <div className="flex flex-col items-center justify-center flex-1 gap-3" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          <RefreshCw size={20} className="animate-spin" />
+          <span className="text-data-sm">加载自选股...</span>
         </div>
       )}
 
@@ -106,12 +92,7 @@ export default function WatchlistPage() {
           </div>
           <p className="text-base font-bold" style={{ color: 'hsl(var(--text-primary))' }}>还没有自选股</p>
           <p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>搜索股票代码或名称，添加到自选列表</p>
-          <button
-            onClick={() => navigate('/search')}
-            aria-label="前往搜索页添加自选股"
-            className="mt-2 flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold transition-colors focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
-            style={{ color: 'hsl(var(--text-primary))', background: 'hsl(var(--accent-subtle))', borderColor: 'hsl(var(--accent-muted))' }}
-          >
+          <button onClick={() => navigate('/search')} className="btn-primary">
             <Search size={16} /> 去搜索
           </button>
         </div>
@@ -119,81 +100,65 @@ export default function WatchlistPage() {
 
       {/* Watchlist items */}
       {!isLoading && mergedWatchlist && mergedWatchlist.length > 0 && (
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-          {mergedWatchlist.map((item, i) => {
-            const up = item.change >= 0;
-            const chgColor = getChangeColor(item.change_percent);
+        <div className="flex-1 overflow-y-auto pr-1">
+          {mergedWatchlist.map((item) => {
+            const up = item.change > 0;
+            const down = item.change < 0;
             return (
-              <motion.div
+              <div
                 key={item.stock_code}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
                 role="button"
                 tabIndex={0}
                 onClick={() => handleNavigate(item.stock_id)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNavigate(item.stock_id); } }}
-                className="flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer group transition-all focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:outline-none"
-                style={{ background: 'hsl(var(--bg-card))', borderColor: 'hsl(var(--border-default))' }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleNavigate(item.stock_id); }}
+                className="flex items-start gap-3 py-2.5 px-3 border-b hover-surface cursor-pointer transition-colors"
+                style={{ borderColor: 'var(--border-subtle)' }}
               >
                 {/* Star button */}
                 <button
-                  onClick={(e) => handleRemove(e, item.stock_code)}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-500/15 text-amber-500 hover:bg-amber-200 dark:hover:bg-amber-500/25 transition-colors focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:outline-none"
+                  onClick={(e) => { e.stopPropagation(); handleRemove(e, item.stock_code); }}
+                  className="shrink-0 mt-0.5 text-amber-500 hover:text-amber-600 transition-colors"
                   title="取消自选"
-                  aria-label={`取消自选 ${item.stock_name}`}
                 >
-                  <Star size={16} fill="currentColor" />
+                  <Star size={14} fill="currentColor" />
                 </button>
 
-                {/* Stock info */}
+                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold truncate" style={{ color: 'hsl(var(--text-primary))' }}>
+                    <span className="text-data-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
                       {item.stock_name}
                     </span>
-                    <span className="text-xs font-mono font-medium text-gray-500 dark:text-zinc-500 bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded shrink-0">
-                      {item.stock_code}
-                    </span>
-                    <span className="text-xs font-medium text-gray-400 dark:text-zinc-500 shrink-0">
-                      {item.exchange}
+                    <span className="text-data-xs font-mono shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                      {item.stock_code}.{item.exchange}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-zinc-500 mt-0.5">
-                    添加于 {item.added_at}
+                  <div className="flex items-center gap-3 text-data-xs font-mono-nums mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
+                    <span>量 {fmtVolume(item.volume)}</span>
+                    <span>换 {item.turnover_rate != null ? item.turnover_rate.toFixed(2) + '%' : '--'}</span>
+                    <span>高 {item.high > 0 ? fmtPrice(item.high) : '--'}</span>
+                    <span>低 {item.low > 0 ? fmtPrice(item.low) : '--'}</span>
                   </div>
                 </div>
 
-                {/* Price info */}
+                {/* Price */}
                 <div className="text-right shrink-0">
-                  <div className={`text-base font-semibold font-mono-nums ${chgColor}`}>
+                  <div className={`text-data-sm font-semibold font-mono-nums ${getChangeColor(item.change_percent)}`}
+                    style={chgStyle(up, down)}>
                     ¥{fmtPrice(item.price || 0)}
                   </div>
-                  <div className={`flex items-center justify-end gap-1 text-sm font-mono-nums font-semibold ${chgColor}`}>
+                  <div className={`text-data-xs font-mono-nums font-medium ${getChangeColor(item.change_percent)}`}
+                    style={chgStyle(up, down)}>
                     {item.price > 0 ? (
-                      <>
-                        {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                        <span>{up ? '+' : ''}{fmtPrice(item.change)}</span>
-                        <span>({up ? '+' : ''}{fmtPct(item.change_percent)}%)</span>
-                      </>
-                    ) : (
-                      <span className="text-gray-400 dark:text-zinc-500">--</span>
-                    )}
+                      <>{item.change > 0 ? '+' : ''}{fmtPrice(item.change)} ({item.change > 0 ? '+' : ''}{fmtPct(item.change_percent)}%)</>
+                    ) : '--'}
                   </div>
                 </div>
-
-                {/* Volume & Turnover */}
-                <div className="hidden sm:block text-right shrink-0 min-w-[80px]">
-                  <div className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>成交量</div>
-                  <div className="text-sm font-mono-nums font-medium" style={{ color: 'hsl(var(--text-primary))' }}>
-                    {item.volume > 0 ? fmtVolume(item.volume / 100) : '--'}
-                  </div>
-                </div>
-              </motion.div>
+              </div>
             );
           })}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
