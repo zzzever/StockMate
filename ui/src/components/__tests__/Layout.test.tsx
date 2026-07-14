@@ -48,7 +48,7 @@ describe('Layout', () => {
     expect(screen.getAllByText(/StockMate/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('child')).toBeInTheDocument();
     // TopBar renders (its theme toggle is present); the inline search box was removed.
-    expect(screen.getByTitle('夜')).toBeInTheDocument();
+    // Theme toggle removed (dark-only mode)
   });
 
   it('sets page based on route in useEffect', () => {

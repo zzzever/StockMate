@@ -97,18 +97,15 @@ export const useAppStore = create<AppState>((set) => ({
   setPage: (page) => set({ currentPage: page }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setSelectedStock: (stock) => set({ selectedStock: stock }),
-  setTheme: (theme) => {
-    applyTheme(theme);
+  setTheme: (_theme) => {
+    applyTheme('dark');
     applyAccent(useAppStore.getState().accent);
-    const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    set({ theme, darkMode: isDark });
+    set({ theme: 'dark', darkMode: true });
   },
   toggleDarkMode: () => set((s) => {
-    const next = s.theme === 'light' ? 'dark' : s.theme === 'dark' ? 'system' : 'light';
-    applyTheme(next);
+    applyTheme('dark');
     applyAccent(s.accent);
-    const isDark = next === 'dark' || (next === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    return { theme: next, darkMode: isDark };
+    return { theme: 'dark', darkMode: true };
   }),
   toggleDebug: () => set((s) => ({ debugOpen: !s.debugOpen })),
   setAccent: (accent) => { applyAccent(accent); set({ accent }); },

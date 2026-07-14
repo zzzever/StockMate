@@ -1,10 +1,8 @@
-import { useAppStore, type ThemeMode } from '@/store/useAppStore';
-import { Sun, Moon, Monitor, Search } from 'lucide-react';
+import { useAppStore } from '@/store/useAppStore';
+import { Search } from 'lucide-react';
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const themeIcon: Record<ThemeMode, React.ComponentType<any>> = { light: Sun, dark: Moon, system: Monitor };
-const themeLabel: Record<ThemeMode, string> = { light: '昼', dark: '夜', system: '自' };
 
 const pageBreadcrumb: Record<string, { group: string; label: string }> = {
   watchlist: { group: '市場', label: '自選' },
@@ -60,13 +58,9 @@ function useMarketStatus(): { status: 'pre' | 'open' | 'after'; label: string; c
 }
 
 export default function TopBar() {
-  const theme = useAppStore((s) => s.theme);
-  const toggleDarkMode = useAppStore((s) => s.toggleDarkMode);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const navigate = useNavigate();
   const location = useLocation();
-  const ThemeIcon = themeIcon[theme];
-
   const currentPageId = pageIdFromPath[location.pathname] || 'watchlist';
   const breadcrumb = pageBreadcrumb[currentPageId];
 
@@ -166,13 +160,7 @@ export default function TopBar() {
           </kbd>
         </button>
 
-        {/* Theme toggle */}
-        <button onClick={toggleDarkMode} title={`${themeLabel[theme]}`}
-          className="flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors duration-[var(--transition-fast)] hover:bg-[var(--bg-hover)]"
-          style={{ color: 'hsl(var(--text-secondary))', border: '1px solid hsl(var(--border-subtle))' }}>
-          <ThemeIcon size={14} />
-          <span className="hidden sm:inline">{themeLabel[theme]}</span>
-        </button>
+
       </div>
     </div>
     <style>{`

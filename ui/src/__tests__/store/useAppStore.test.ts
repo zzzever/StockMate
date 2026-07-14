@@ -65,20 +65,13 @@ describe('useAppStore', () => {
     expect(useAppStore.getState().selectedStock).toBe('600519');
   });
 
-  it('toggleDarkMode toggles theme and updates document class', () => {
+  it('toggleDarkMode stays dark (dark-only mode)', () => {
     act(() => {
       useAppStore.getState().toggleDarkMode();
     });
-    expect(useAppStore.getState().darkMode).toBe(false);
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
-    expect(document.documentElement.style.colorScheme).toBe('light');
-
-    act(() => {
-      useAppStore.getState().toggleDarkMode();
-    });
+    expect(useAppStore.getState().theme).toBe('dark');
     expect(useAppStore.getState().darkMode).toBe(true);
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(document.documentElement.style.colorScheme).toBe('dark');
+    document.documentElement.className = '';
   });
 
   it('can be used with selectors in components', () => {

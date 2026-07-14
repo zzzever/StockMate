@@ -13,43 +13,43 @@
   --grid-gutter: 16px;
   --grid-margin: 32px;
 
-  /* ── 日本/台湾风格调色板 ── */
-  --swiss-accent: 0 75% 48%;           /* 鲜艳绯红 */
-  --swiss-accent-ghost: 0 75% 48% / 0.08;
-  --swiss-accent-subtle: 0 75% 48% / 0.18;
-  --swiss-accent-strong: 0 75% 48% / 0.85;
-  --accent-orange: 25 95% 50%;          /* 活力橙 */
-  --accent-gold: 45 95% 50%;            /* 金色 */
-  --accent-purple: 270 60% 55%;         /* 紫色 - 用于AI/科技 */
-  --accent-cyan: 190 80% 45%;           /* 青色 - 用于数据 */
-  --price-up: 0 80% 45%;                /* 上涨红 */
-  --price-down: 145 55% 35%;            /* 下跌绿 */
-  --price-up-bg: 0 75% 94%;
-  --price-down-bg: 145 55% 92%;
+  /* ── 暗色调色板 ── */
+  --swiss-accent: 0 75% 52%;
+  --swiss-accent-ghost: 0 75% 52% / 0.12;
+  --swiss-accent-subtle: 0 75% 52% / 0.25;
+  --swiss-accent-strong: 0 75% 52% / 0.85;
+  --accent-orange: 25 95% 50%;
+  --accent-gold: 45 95% 50%;
+  --accent-purple: 270 55% 60%;
+  --accent-cyan: 190 75% 50%;
+  --price-up: 0 75% 55%;
+  --price-down: 145 50% 42%;
+  --price-up-bg: 0 50% 14%;
+  --price-down-bg: 145 40% 12%;
 
-  /* ── 背景 - 暖色调 ── */
-  --bg-root: #fdf8f0;                   /* 暖米色 */
-  --bg-sidebar: #f8f0e4;                /* 更暖的侧边栏 */
-  --bg-topbar: #fdf8f0;
-  --bg-card: #fffcf7;                   /* 暖白卡片 */
-  --bg-input: #f5ede2;
-  --bg-hover: #efe5d6;
+  /* ── 背景 - 深邃暗色 ── */
+  --bg-root: #0a0a0f;
+  --bg-sidebar: #0a0a0f;
+  --bg-topbar: #0a0a0f;
+  --bg-card: #121218;
+  --bg-input: #1a1a22;
+  --bg-hover: #16161e;
 
   /* ── 文字颜色 ── */
-  --text-primary: #1a1206;              /* 深暖黑 */
-  --text-secondary: #6b5c48;            /* 暖灰 */
-  --text-tertiary: #9a8b78;             /* 暖浅灰 */
-  --text-inverse: #ffffff;
+  --text-primary: #e8e8ed;
+  --text-secondary: #8888a0;
+  --text-tertiary: #5a5a72;
+  --text-inverse: #0a0a0f;
 
   /* ── 边框 ── */
-  --border-default: #d4c8b6;
-  --border-subtle: #e3d8c8;
-  --border-strong: #1a1206;
+  --border-default: #2a2a35;
+  --border-subtle: #1e1e28;
+  --border-strong: #8888a0;
 
   /* ── 阴影 ── */
-  --shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06), 0 1px 3px -1px rgb(0 0 0 / 0.08);
-  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.10);
-  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.14);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.4);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.5);
 
   /* ── 圆角 ── */
   --radius-xs: 4px;
@@ -69,59 +69,11 @@
   --transition-slow: 350ms ease;
 
   /* ── 图表颜色 ── */
-  --chart-grid: #e3d8c8;
-  --chart-text: #4a3f32;
-  --chart-border: #d4c8b6;
+  --chart-grid: #1e1e28;
+  --chart-text: #8888a0;
+  --chart-border: #2a2a35;
 
   /* ── 风险等级 ── */
-  --risk-safe: 210 55% 42%;       /* 蓝色 — 安全 */
-  --risk-warning: 35 90% 48%;     /* 琥珀色 — 中等风险 */
-  --risk-danger: 0 75% 48%;       /* 红色 — 高风险 */
-
-  color-scheme: light;
-}
-
-/* ── Dark Mode (暖色调暗色) ── */
-.dark {
-  --swiss-accent: 0 75% 52%;
-  --swiss-accent-ghost: 0 75% 52% / 0.12;
-  --swiss-accent-subtle: 0 75% 52% / 0.25;
-  --swiss-accent-strong: 0 75% 52% / 0.85;
-  --accent-orange: 25 95% 50%;
-  --accent-gold: 45 95% 50%;
-  --accent-purple: 270 55% 60%;
-  --accent-cyan: 190 75% 50%;
-
-  --price-up: 0 75% 55%;
-  --price-down: 145 50% 42%;
-  --price-up-bg: 0 50% 14%;
-  --price-down-bg: 145 40% 12%;
-
-  --bg-root: #1a1510;
-  --bg-sidebar: #18130e;
-  --bg-topbar: #1f1a14;
-  --bg-card: #231e18;
-  --bg-input: #2e2820;
-  --bg-hover: #2a241d;
-
-  --text-primary: #f0e8d8;
-  --text-secondary: #a89880;
-  --text-tertiary: #7a6a58;
-  --text-inverse: #1a1510;
-
-  --border-default: #3d342a;
-  --border-subtle: #2e2820;
-  --border-strong: #a89880;
-
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.4);
-  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.4);
-  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.5);
-
-  --chart-grid: #2e2820;
-  --chart-text: #a89880;
-  --chart-border: #3d342a;
-
-  /* ── Risk level indicators (dark) ── */
   --risk-safe: 210 55% 55%;
   --risk-warning: 35 80% 52%;
   --risk-danger: 0 70% 55%;
@@ -176,19 +128,19 @@
   --price-down: 150 40% 45%;
   --price-up-bg: 0 50% 12%;
   --price-down-bg: 150 40% 10%;
-  --bg-root: #1c1814;
-  --bg-sidebar: #1c1814;
-  --bg-topbar: #24201a;
-  --bg-card: #24201a;
-  --bg-input: #302a22;
-  --bg-hover: #28221c;
-  --text-primary: #f0e8dc;
-  --text-secondary: #8a7a68;
-  --text-tertiary: #6a5a48;
-  --border-default: #3a3228;
-  --border-subtle: #2a2218;
-  --border-strong: #8a7a68;
-  --chart-grid: #2a2218;
+  --bg-root: #08080c;
+  --bg-sidebar: #08080c;
+  --bg-topbar: #0d0d12;
+  --bg-card: #101014;
+  --bg-input: #181820;
+  --bg-hover: #14141c;
+  --text-primary: #e8e8ed;
+  --text-secondary: #8888a0;
+  --text-tertiary: #5a5a72;
+  --border-default: #2a2a35;
+  --border-subtle: #1e1e28;
+  --border-strong: #8888a0;
+  --chart-grid: #1e1e28;
   --risk-warning: 35 75% 55%;
   --risk-danger: 0 65% 55%;
 }
@@ -230,7 +182,19 @@
   color-scheme: dark;
 }
 .theme-bloomberg.dark {
-  /* Bloomberg is always dark — same as the light block above */
+  --bg-root: #08080c;
+  --bg-sidebar: #08080c;
+  --bg-topbar: #0d0d12;
+  --bg-card: #101014;
+  --bg-input: #181820;
+  --bg-hover: #14141c;
+  --text-primary: #e8e8ed;
+  --text-secondary: #8888a0;
+  --text-tertiary: #5a5a72;
+  --border-default: #2a2a35;
+  --border-subtle: #1e1e28;
+  --border-strong: #8888a0;
+  --chart-grid: #1e1e28;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -276,18 +240,18 @@
   --price-down: 145 20% 50%;
   --price-up-bg: 340 25% 12%;
   --price-down-bg: 145 20% 10%;
-  --bg-root: #1e1a16;
-  --bg-sidebar: #1e1a16;
-  --bg-topbar: #26221e;
-  --bg-card: #26221e;
-  --bg-input: #322e28;
-  --bg-hover: #2a2620;
-  --text-primary: #ece4da;
-  --text-secondary: #8a8278;
-  --text-tertiary: #6a6258;
-  --border-default: #3a342e;
-  --border-subtle: #2a241e;
-  --chart-grid: #2a241e;
+  --bg-root: #08080c;
+  --bg-sidebar: #08080c;
+  --bg-topbar: #0d0d12;
+  --bg-card: #101014;
+  --bg-input: #181820;
+  --bg-hover: #14141c;
+  --text-primary: #e8e8ed;
+  --text-secondary: #8888a0;
+  --text-tertiary: #5a5a72;
+  --border-default: #2a2a35;
+  --border-subtle: #1e1e28;
+  --chart-grid: #1e1e28;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -337,21 +301,21 @@
   --price-down: 145 50% 40%;
   --price-up-bg: 350 50% 14%;
   --price-down-bg: 145 40% 12%;
-  --bg-root: #161b22;
-  --bg-sidebar: #0d1117;
-  --bg-topbar: #161b22;
-  --bg-card: #161b22;
-  --bg-input: #21262d;
-  --bg-hover: #1c2128;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-tertiary: #6e7681;
-  --text-inverse: #0d1117;
-  --border-default: #30363d;
-  --border-subtle: #21262d;
-  --border-strong: #8b949e;
+  --bg-root: #08080c;
+  --bg-sidebar: #08080c;
+  --bg-topbar: #0d0d12;
+  --bg-card: #101014;
+  --bg-input: #181820;
+  --bg-hover: #14141c;
+  --text-primary: #e8e8ed;
+  --text-secondary: #8888a0;
+  --text-tertiary: #5a5a72;
+  --text-inverse: #08080c;
+  --border-default: #2a2a35;
+  --border-subtle: #1e1e28;
+  --border-strong: #8888a0;
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3);
-  --chart-grid: #21262d;
+  --chart-grid: #1e1e28;
   --risk-warning: 35 80% 52%;
   --risk-danger: 0 70% 55%;
 }

@@ -260,7 +260,7 @@ export default function SettingsPage() {
             {/* Theme selector */}
             <div>
               <span className="text-xs font-medium mb-2 block" style={{ color: 'hsl(var(--text-secondary))' }}>主题模式</span>
-              <ThemeSelector />
+              <div className="text-sm font-medium" style={{ color: 'hsl(var(--text-primary))' }}>暗色</div>
             </div>
             {/* Accent color */}
             <div>
@@ -274,37 +274,7 @@ export default function SettingsPage() {
   );
 }
 
-// ── Theme mode selector (light / dark / system) ──
-const THEME_OPTIONS = [
-  { value: 'light' as const, label: '浅色', icon: '☀️', desc: '始终使用浅色外观' },
-  { value: 'dark' as const, label: '深色', icon: '🌙', desc: '始终使用深色外观' },
-  { value: 'system' as const, label: '自动', icon: '🖥️', desc: '跟随系统外观设置' },
-];
 
-function ThemeSelector() {
-  const theme = useAppStore((s) => s.theme);
-  const setTheme = useAppStore((s) => s.setTheme);
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {THEME_OPTIONS.map((opt) => (
-        <button key={opt.value} onClick={() => setTheme(opt.value)}
-          className={`flex flex-col items-center gap-1 p-3 rounded-xl border transition-all ${
-            theme === opt.value
-              ? '' : 'hover:border-slate-300 dark:hover:border-zinc-600'
-          }`}
-          style={{
-            borderColor: theme === opt.value ? 'hsl(var(--swiss-accent) / 0.5)' : 'var(--border-default)',
-            background: theme === opt.value ? 'hsl(var(--swiss-accent-ghost))' : undefined
-          }}
-        >
-          <span className="text-lg">{opt.icon}</span>
-          <span className="text-xs font-medium" style={{ color: 'hsl(var(--text-primary))' }}>{opt.label}</span>
-          <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>{opt.desc}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ── Accent color picker ──
 const ACCENT_COLORS: { name: string; key: import('@/store/useAppStore').AccentColor }[] = [

@@ -41,11 +41,10 @@ describe('TopBar', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
-  it('renders the theme toggle and calls toggleDarkMode when clicked', () => {
+  it('renders without theme toggle (dark-only mode)', () => {
     renderTopBar();
-    const themeBtn = screen.getByTitle('夜');
-    fireEvent.click(themeBtn);
-    expect(toggleDarkMode).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTitle('夜')).toBeNull();
+    // no toggle button in dark-only mode
   });
 
   it('navigates to the search page on Ctrl+K', () => {
