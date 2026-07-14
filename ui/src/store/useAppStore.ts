@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { type Page } from '@/types';
 import { type ChartStyle, defaultChartStyle } from '@/config/chartThemes';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -83,8 +84,10 @@ interface AppState {
   toggleDeepseek: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  currentPage: 'search',
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      currentPage: 'search',
   sidebarOpen: true,
   selectedStock: null,
   theme: 'system',
@@ -111,4 +114,4 @@ export const useAppStore = create<AppState>((set) => ({
   setAccent: (accent) => { applyAccent(accent); set({ accent }); },
   setChartStyle: (style) => set({ chartStyle: style }),
   toggleDeepseek: () => set((s) => ({ deepseekEnabled: !s.deepseekEnabled })),
-}));
+}), { name: 'stockmate-app' }));
