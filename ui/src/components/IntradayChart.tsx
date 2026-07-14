@@ -12,8 +12,8 @@ const HALF_HOURS = new Set(['09:30', '10:00', '10:30', '11:00', '11:30', '13:00'
 function buildSlots() {
   const s: { time: string; ts: number }[] = [];
   const d = '2024-01-01';
-  for (let m = 0; m < 24; m++) { const t = 9 * 60 + 30 + m * 5; s.push({ time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`, ts: Math.floor(new Date(`${d}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00+08:00`).getTime() / 1000) }); }
-  for (let m = 0; m < 24; m++) { const t = 13 * 60 + m * 5; s.push({ time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`, ts: Math.floor(new Date(`${d}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00+08:00`).getTime() / 1000) }); }
+  for (let m = 0; m < 120; m++) { const t = 9 * 60 + 30 + m; s.push({ time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`, ts: Math.floor(new Date(`${d}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00+08:00`).getTime() / 1000) }); }
+  for (let m = 0; m < 120; m++) { const t = 13 * 60 + m; s.push({ time: `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`, ts: Math.floor(new Date(`${d}T${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}:00+08:00`).getTime() / 1000) }); }
   return s;
 }
 const ALL_SLOTS = buildSlots();
@@ -113,7 +113,7 @@ export function IntradayChart({ data, prevClose, loading = false, className, cha
       }
     }
     s.volume.setData(volData); // always set — empty array clears stale bars on stock switch
-    if (ALL_SLOTS.length > 0) s.chart.timeScale().setVisibleRange({ from: ALL_SLOTS[0].ts as Time, to: ALL_SLOTS[47].ts as Time });
+    if (ALL_SLOTS.length > 0) s.chart.timeScale().setVisibleRange({ from: ALL_SLOTS[0].ts as Time, to: ALL_SLOTS[239].ts as Time });
   }, [priceLine, baselineData, volMap, theme]);
 
   // Re-apply chrome colors (grid / crosshair / axis text / borders) when theme or light-dark mode changes
@@ -139,7 +139,7 @@ export function IntradayChart({ data, prevClose, loading = false, className, cha
       <div className="flex items-center justify-between px-1 py-2 border-b shrink-0" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold tracking-wide" style={{ color: 'hsl(var(--text-secondary))' }}>分时走势</span>
-          <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>{barCount}/48</span>
+          <span className="text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>{barCount}/240</span>
         </div>
         <div className="flex items-center gap-3">
           {lastPrice !== null && <span className="text-sm font-mono-nums font-bold" style={{ color: 'hsl(var(--text-primary))' }}>¥{fmtPrice(lastPrice)}</span>}
