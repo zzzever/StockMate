@@ -222,6 +222,8 @@ h1, h2, h3 {
 
 .price-up { color: hsl(var(--price-up)); }
 .price-down { color: hsl(var(--price-down)); }
+.price-up-strong { color: hsl(var(--price-up)); font-weight: 700; }
+.price-down-strong { color: hsl(var(--price-down)); font-weight: 700; }
 
 /* ═══════════════════════════════════════════════════════
    Utilities
