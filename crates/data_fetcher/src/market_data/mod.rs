@@ -94,7 +94,7 @@ pub async fn fetch_realtime_batch(tickers: &[&str]) -> Vec<PriceData> {
     tencent::fetch_realtime_batch(tickers).await
 }
 
-/// Intraday (5-min K-line): routed through Provider selection.
+/// Intraday (1-min K-line): routed through Provider selection.
 ///
 /// - A-shares (.SH/.SZ/.BJ) -> EastMoney
 /// - US stocks / others    -> Yahoo (returns empty; intraday unavailable via Yahoo API)

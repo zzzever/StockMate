@@ -64,7 +64,7 @@ struct KlineResponse {
     data: Option<serde_json::Value>,
 }
 
-/// Fetch intraday 5-min K-line — uses Tencent mkline endpoint (NOT fqkline)
+/// Fetch intraday 1-min K-line — uses Tencent mkline endpoint (NOT fqkline)
 pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
     let code = match to_tencent_code(ticker) {
         Some(c) => c,
@@ -80,7 +80,7 @@ pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
             return vec![]
         }
     };
-    let url = format!("https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={},m5,,,48", code);
+    let url = format!("https://ifzq.gtimg.cn/appstock/app/kline/mkline?param={},m1,,,240", code);
     tracing::info!("[fetch_intraday] Requesting: {}", url);
     let resp = match client.get(&url).send().await {
         Ok(r) => r,
