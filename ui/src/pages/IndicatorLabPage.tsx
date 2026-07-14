@@ -150,7 +150,7 @@ export default function IndicatorLabPage() {
   const mainRef = useRef<HTMLDivElement>(null);
   const storeRef = useRef<{ chart: IChartApi; candle: ISeriesApi<'Candlestick'>; maLine: ISeriesApi<'Line'> | null; dasLine: ISeriesApi<'Line'> | null } | null>(null);
 
-  const [maPeriod, setMaPeriod] = useState(60);
+  const [maPeriod, setMaPeriod] = useState(20);
   const [showMA, setShowMA] = useState(true);
   const [showDAS, setShowDAS] = useState(true);
   const [psychology, setPsychology] = useState(50);
