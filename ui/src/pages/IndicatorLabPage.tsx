@@ -195,7 +195,7 @@ export default function IndicatorLabPage() {
   useEffect(() => {
     if (!mainRef.current) return;
     const c = createChart(mainRef.current, {
-      layout: { background: { color: 'transparent' }, textColor: '#9e9a92' },
+      layout: { background: { color: 'transparent' }, textColor: '#9e9a92', attributionLogo: false },
       grid: { vertLines: { color: '#9e9a921a' }, horzLines: { color: '#9e9a921a' } },
       autoSize: true, crosshair: { mode: 1 },
       rightPriceScale: { borderColor: '#9e9a9233' },

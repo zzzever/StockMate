@@ -67,7 +67,7 @@ export function IntradayChart({ data, prevClose, loading = false, className, cha
     const el = elRef.current; if (!el) return;
     const t = theme;
     const chart = createChart(el, {
-      layout: { background: { color: 'transparent' }, textColor: t.textColor },
+      layout: { background: { color: 'transparent' }, textColor: t.textColor, attributionLogo: false },
       grid: { vertLines: { color: t.gridVertColor, style: 2 }, horzLines: { color: t.gridHorzColor, style: 2 } },
       crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: t.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: t.crosshairColor, style: 2 } },
       rightPriceScale: { borderColor: t.borderColor, scaleMargins: { top: 0.08, bottom: 0.3 }, autoScale: true, entireTextOnly: true },

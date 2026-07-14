@@ -415,7 +415,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
     if (!containerRef.current) return;
     try {
       const chart = createChart(containerRef.current, {
-        layout: { background: { color: 'transparent' }, textColor: '#9e9a92' },
+        layout: { background: { color: 'transparent' }, textColor: '#9e9a92', attributionLogo: false },
         grid: { vertLines: { color: 'rgba(255,255,255,0.05)' }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
         crosshair: { mode: 1 },
         rightPriceScale: { borderColor: 'rgba(255,255,255,0.05)' },
