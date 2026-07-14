@@ -117,12 +117,14 @@ pub async fn fetch_intraday(ticker: &str) -> Vec<HistoryQuote> {
             return vec![]
         }
     };
-    let arr = json.get("data").and_then(|d| d.get(&code)).and_then(|d| d.get("m5")).and_then(|d| d.as_array());
+    let arr = json.get("data").and_then(|d| d.get(&code)).and_then(|d| d.get("m1")).or_else(|| {
+        json.get("data").and_then(|d| d.get(&code)).and_then(|d| d.get("m5"))
+    }).and_then(|d| d.as_array());
     let arr = match arr {
         Some(a) => a,
         None => {
             // Normal: no intraday data available yet (weekend, pre-open, or after-hours)
-            tracing::warn!("[fetch_intraday] No m5 data for {} (code={}) — market may be closed or data not yet published", ticker, code);
+            tracing::warn!("[fetch_intraday] No m1/m5 data for {} (code={}) — market may be closed or data not yet published", ticker, code);
             return vec![]
         }
     };
