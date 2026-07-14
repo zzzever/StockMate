@@ -18,7 +18,6 @@ const SectorStockRankPage = lazy(() => import('@/pages/SectorStockRankPage'));
 const BacktestPage = lazy(() => import('@/pages/BacktestPage'));
 const PredictPage = lazy(() => import('@/pages/PredictPage'));
 const RulesPage = lazy(() => import('@/pages/RulesPage'));
-const IndicatorLabPage = lazy(() => import('@/pages/IndicatorLabPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 
 const queryClient = new QueryClient({
