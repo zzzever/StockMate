@@ -228,7 +228,7 @@ export default function IndicatorLabPage() {
     if (showMA) {
       if (!s.maLine) {
         s.maLine = s.chart.addLineSeries({
-          color: 'hsl(var(--risk-warning))', lineWidth: 1, lineStyle: 0,
+          color: '#d97706', lineWidth: 1, lineStyle: 0,
           priceLineVisible: false, lastValueVisible: true,
         });
       }
@@ -242,7 +242,7 @@ export default function IndicatorLabPage() {
     if (showDAS) {
       if (!s.dasLine) {
         s.dasLine = s.chart.addLineSeries({
-          color: 'hsl(var(--price-up))', lineWidth: 2, lineStyle: 2,
+          color: '#c1272d', lineWidth: 2, lineStyle: 2,
           priceLineVisible: false, lastValueVisible: true,
         });
       }
