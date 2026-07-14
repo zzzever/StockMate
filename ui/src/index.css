@@ -13,44 +13,44 @@
   --grid-gutter: 16px;
   --grid-margin: 32px;
 
-  /* ── Swiss palette: 8 colors ── */
-  --swiss-black: #0d1117;
+  /* ── Japanese TV Media palette ── */
+  --swiss-black: #1a1d23;
   --swiss-white: #ffffff;
-  --swiss-gray-100: #f5f5f5;
-  --swiss-gray-300: #d4d4d4;
-  --swiss-gray-700: #737373;
-  --swiss-accent: 221 83% 53%;        /* blue #2563eb */
-  --swiss-accent-ghost: 221 83% 53% / 0.08;
-  --swiss-accent-subtle: 221 83% 53% / 0.15;
-  --swiss-accent-strong: 221 83% 53% / 0.85;
-  --price-up: 350 75% 38%;            /* Chinese convention: red = up */
-  --price-down: 145 55% 30%;          /* Chinese convention: green = down */
+  --swiss-gray-100: #f0ece6;
+  --swiss-gray-300: #d1ccc4;
+  --swiss-gray-700: #7a756e;
+  --swiss-accent: 0 70% 45%;        /* crimson red #c1272d */
+  --swiss-accent-ghost: 0 70% 45% / 0.08;
+  --swiss-accent-subtle: 0 70% 45% / 0.15;
+  --swiss-accent-strong: 0 70% 45% / 0.85;
+  --price-up: 350 75% 38%;            /* red = up */
+  --price-down: 210 55% 38%;          /* blue = down (Japanese convention) */
   --price-up-bg: 350 75% 95%;
-  --price-down-bg: 145 55% 94%;
+  --price-down-bg: 210 55% 94%;
 
-  /* ── Backgrounds ── */
-  --bg-root: #ffffff;
-  --bg-sidebar: #fafafa;
-  --bg-topbar: #ffffff;
-  --bg-card: #ffffff;
-  --bg-input: #f5f5f5;
-  --bg-hover: #f0f0f0;
+  /* ── Backgrounds (warm cream) ── */
+  --bg-root: #f8f6f1;
+  --bg-sidebar: #f3f0ea;
+  --bg-topbar: #f8f6f1;
+  --bg-card: #fdfbf8;
+  --bg-input: #edebe6;
+  --bg-hover: #e8e5df;
 
   /* ── Text ── */
-  --text-primary: #0d1117;
-  --text-secondary: #737373;
-  --text-tertiary: #a3a3a3;
+  --text-primary: #1a1d23;
+  --text-secondary: #6e6a63;
+  --text-tertiary: #9e9a92;
   --text-inverse: #ffffff;
 
   /* ── Borders ── */
-  --border-default: #d4d4d4;
-  --border-subtle: #e5e5e5;
-  --border-strong: #0d1117;
+  --border-default: #d1ccc4;
+  --border-subtle: #e0dcd4;
+  --border-strong: #1a1d23;
 
   /* ── Shadows ── */
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.08);
-  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.12);
+  --shadow-card: 0 2px 6px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.10);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.14);
 
   /* ── Radius scale ── */
   --radius-xs: 4px;
@@ -70,57 +70,57 @@
   --transition-slow: 350ms ease;
 
   /* ── Chart colors ── */
-  --chart-grid: #e5e5e5;
+  --chart-grid: #e0dcd4;
   --chart-text: #404040;
-  --chart-border: #d4d4d4;
+  --chart-border: #d1ccc4;
 
   /* ── Risk level indicators ── */
-  --risk-safe: 145 55% 35%;       /* green — safe/low-risk */
+  --risk-safe: 210 55% 38%;       /* blue — safe */
   --risk-warning: 35 85% 48%;     /* amber — moderate risk */
   --risk-danger: 0 75% 45%;       /* red — high risk */
 
   color-scheme: light;
 }
 
-/* ── Dark Mode ── */
+/* ── Dark Mode (Japanese TV warm-dark) ── */
 .dark {
-  --swiss-white: #161b22;
-  --swiss-black: #f0f6fc;
-  --swiss-gray-100: #21262d;
-  --swiss-gray-300: #30363d;
-  --swiss-gray-700: #8b949e;
+  --swiss-white: #1e1e24;
+  --swiss-black: #f0ece6;
+  --swiss-gray-100: #2a2a30;
+  --swiss-gray-300: #3a3a42;
+  --swiss-gray-700: #8a867e;
 
   --price-up: 350 70% 55%;
-  --price-down: 145 50% 45%;
+  --price-down: 210 55% 55%;
   --price-up-bg: 350 50% 12%;
-  --price-down-bg: 145 50% 10%;
+  --price-down-bg: 210 50% 12%;
 
-  --bg-root: #0d1117;
-  --bg-sidebar: #0d1117;
-  --bg-topbar: #161b22;
-  --bg-card: #161b22;
-  --bg-input: #21262d;
-  --bg-hover: #1c2128;
+  --bg-root: #141418;
+  --bg-sidebar: #141418;
+  --bg-topbar: #1e1e24;
+  --bg-card: #1e1e24;
+  --bg-input: #2a2a30;
+  --bg-hover: #24242a;
 
-  --text-primary: #f0f6fc;
-  --text-secondary: #8b949e;
-  --text-tertiary: #6e7681;
-  --text-inverse: #0d1117;
+  --text-primary: #f0ece6;
+  --text-secondary: #8a867e;
+  --text-tertiary: #6a665e;
+  --text-inverse: #141418;
 
-  --border-default: #30363d;
-  --border-subtle: #21262d;
-  --border-strong: #8b949e;
+  --border-default: #3a3a42;
+  --border-subtle: #2a2a30;
+  --border-strong: #8a867e;
 
-  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.3);
-  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.3);
-  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.4);
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.4);
+  --shadow-dropdown: 0 4px 16px 0 rgb(0 0 0 / 0.4);
+  --shadow-modal: 0 8px 32px 0 rgb(0 0 0 / 0.5);
 
-  --chart-grid: #21262d;
-  --chart-text: #8b949e;
-  --chart-border: #30363d;
+  --chart-grid: #2a2a30;
+  --chart-text: #8a867e;
+  --chart-border: #3a3a42;
 
   /* ── Risk level indicators (dark) ── */
-  --risk-safe: 145 50% 45%;
+  --risk-safe: 210 55% 55%;
   --risk-warning: 35 80% 52%;
   --risk-danger: 0 70% 55%;
 
@@ -232,9 +232,9 @@ h1, h2, h3 {
 .btn-compact { @apply px-3 py-2 text-sm transition-all duration-150; }
 
 /* ── Typography scale ── */
-.text-display { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.3; }
-.text-heading { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.4; }
-.text-heading-sm { font-size: 0.875rem; font-weight: 600; letter-spacing: -0.005em; line-height: 1.4; }
+.text-display { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+.text-heading { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.015em; line-height: 1.3; }
+.text-heading-sm { font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
 .text-body { font-size: 0.8125rem; font-weight: 400; line-height: 1.5; }
 .text-data-sm { font-size: 0.75rem; font-weight: 500; line-height: 1.4; }
 .text-data-xs { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; line-height: 1.3; }
