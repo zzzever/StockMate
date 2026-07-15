@@ -6,13 +6,14 @@ import {
  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
  ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
 } from 'recharts';
+import { invoke } from '@tauri-apps/api/core';
 
 function safeToFixed(v: unknown, digits: number): string {
  const n = Number(v);
  return Number.isFinite(n) ? n.toFixed(digits) : '--';
 }
 import {
- ArrowLeft, TrendingUp, Activity, Gauge, CircleDashed, GitBranch,
+ ArrowLeft, TrendingUp, Activity, Gauge, CircleDashed, GitBranch, Code,
  Play, ChevronDown, ChevronRight, Save, BarChart3, Target,
  Shield, Hash, Zap, RotateCcw, RefreshCw, X, Layers
 } from 'lucide-react';
@@ -89,6 +90,7 @@ const STRATEGIES: StrategyDef[] = [
  { id: 'rsi', name: 'RSI策略', description: 'RSI < 30 买入，> 70 卖出', icon: Gauge },
  { id: 'bollinger', name: '布林带', description: '触及下轨买入，触及上轨卖出', icon: CircleDashed },
  { id: 'dual_ma', name: '双均线', description: 'MA10/MA30 趋势跟踪', icon: GitBranch },
+ { id: 'sslang_rule', name: 'SSLang 规则', description: '使用交易规则页编写的自定义规则', icon: Code },
 ];
 
 const DEFAULT_PARAMS: Record<string, StrategyParams> = {
@@ -915,6 +917,25 @@ const [error, setError] = useState<string | null>(null);
 const [stopLoss, setStopLoss] = useState(5);
 const [takeProfit, setTakeProfit] = useState(10);
 const [maxHolding, setMaxHolding] = useState(0); // 0 = unlimited
+
+// Load SSLang rules from RulesPage's localStorage
+useEffect(() => {
+  const load = () => {
+    try {
+      const raw = localStorage.getItem('stockmate_trading_rules_v2');
+      if (raw) {
+        const rules = JSON.parse(raw).filter((r: any) => r.enabled && r.code && r.kind === 'code');
+        setAvailableRules(rules);
+        if (rules.length > 0 && !rules.find((r: any) => r.id === selectedRuleId)) {
+          setSelectedRuleId(rules[0].id);
+        }
+      }
+    } catch {}
+  };
+  load();
+  window.addEventListener('stockmate:rules-changed', load);
+  return () => window.removeEventListener('stockmate:rules-changed', load);
+}, []);
 const [startDate, setStartDate] = useState('');
 const [endDate, setEndDate] = useState('');
  const runTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -944,7 +965,41 @@ const [endDate, setEndDate] = useState('');
  runTimeoutRef.current = setTimeout(() => {
  try {
  runTimeoutRef.current = null;
- const res = runMockBacktest(quotes, selectedStrategy, params);
+ if (selectedStrategy === 'sslang_rule') {
+          const rule = availableRules.find(r => r.id === selectedRuleId);
+          if (!rule?.code) { setRunning(false); return; }
+          invoke('backtest_strategy', {
+            stockId: stockId,
+            strategyCode: rule.code,
+            days: 250,
+            period: 'day',
+          }).then((result: any) => {
+            setResult({
+              total_return: result.total_return || 0,
+              annual_return: result.total_return || 0,
+              max_drawdown: result.max_drawdown || 0,
+              sharpe_ratio: result.sharpe_ratio || 0,
+              win_rate: result.win_rate || 0,
+              trade_count: result.trades?.length || 0,
+              profit_trades: result.trades?.filter((t: any) => t.pnl > 0).length || 0,
+              loss_trades: result.trades?.filter((t: any) => t.pnl <= 0).length || 0,
+              trades: (result.trades || []).map((t: any, i: number) => ({
+                index: i, date: t.exit_date || t.entry_date,
+                type: t.side === 'buy' ? '买入' : '卖出',
+                price: t.exit_price || t.entry_price,
+                shares: 0, profit: t.pnl_pct,
+              })),
+              monthly_returns: [],
+              equity_curve: (result.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: val })),
+            });
+            setRunning(false);
+          }).catch((e: any) => {
+            console.error('Backtest failed:', e);
+            setRunning(false);
+          });
+          return;
+        }
+        const res = runMockBacktest(quotes, selectedStrategy, params);
  console.log('[BacktestPage] strategy run complete:', {
  total_return: res.total_return.toFixed(2) + '%',
  annual_return: res.annual_return.toFixed(2) + '%',
@@ -1137,7 +1192,26 @@ const [endDate, setEndDate] = useState('');
  )}
  </div>
 
- {/* 通用参数 */}
+           {selectedStrategy === 'sslang_rule' && availableRules.length > 0 && (
+            <div className="space-y-2 mt-3">
+              <label className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>选择 SSLang 规则</label>
+              <select
+                value={selectedRuleId ?? ''}
+                onChange={e => setSelectedRuleId(e.target.value)}
+                className="select w-full"
+              >
+                {availableRules.map(r => (
+                  <option key={r.id} value={r.id}>{r.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {selectedStrategy === 'sslang_rule' && availableRules.length === 0 && (
+            <p className="text-data-xs mt-3" style={{ color: 'var(--text-tertiary)' }}>
+              未找到启用的 SSLang 规则，请先前往「交易规则」页创建
+            </p>
+          )}
+          {/* 通用参数 */}
  <div className="border-t border-slate-100 dark:border-slate-100 dark:border-white/5 pt-5 mb-5">
  <div className="text-xs font-bold mb-3">通用参数</div>
  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
