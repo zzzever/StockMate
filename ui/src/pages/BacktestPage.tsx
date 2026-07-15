@@ -21,6 +21,17 @@ import { useStockList, useStockHistory } from '@/hooks/useTauriQuery';
 import type { Quote, TradingRule } from '@/types';
 
 // ───────────────────────────────────────────────
+// 工具函数 — SSLang 自动包装
+// ───────────────────────────────────────────────
+
+function wrapSSLangRule(rule: TradingRule): string {
+  // If code already contains RULE blocks, use as-is
+  if (rule.code?.toUpperCase().includes('RULE')) return rule.code;
+  // Otherwise wrap as a single rule
+  return `RULE "${rule.name || '策略'}"\n  SIGNAL ${rule.signal || 'buy'}\n  WHEN ${rule.code}\n`;
+}
+
+// ───────────────────────────────────────────────
 // 类型定义
 // ───────────────────────────────────────────────
 
@@ -1091,7 +1102,7 @@ const [endDate, setEndDate] = useState('');
           if (!rule?.code) { setRunning(false); return; }
           invoke('backtest_strategy', {
             stockId: stockId,
-            strategyCode: rule.code,
+            strategyCode: wrapSSLangRule(rule),
             days: 250,
             period: 'day',
           }).then((result: any) => {
@@ -1321,25 +1332,35 @@ const [endDate, setEndDate] = useState('');
  )}
  </div>
 
-           {selectedStrategy === 'sslang_rule' && availableRules.length > 0 && (
-            <div className="space-y-2 mt-3">
-              <label className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>选择 SSLang 规则</label>
-              <select
-                value={selectedRuleId ?? ''}
-                onChange={e => setSelectedRuleId(e.target.value)}
-                className="select w-full"
+           {/* 分隔线 */}
+          <div className="col-span-full border-t my-2" style={{ borderColor: 'var(--border-subtle)' }} />
+          <div className="col-span-full">
+            <div className="text-data-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>我的规则</div>
+            {availableRules.length > 0 ? availableRules.map(rule => (
+              <button
+                key={rule.id}
+                onClick={() => { setSelectedStrategy('sslang_rule'); setSelectedRuleId(rule.id); }}
+                className={`w-full text-left p-3 rounded-xl border transition-all duration-200 mb-1 ${
+                  selectedStrategy === 'sslang_rule' && selectedRuleId === rule.id
+                    ? 'bg-violet-500/10 border-violet-500/50 border-l-2 border-l-violet-400'
+                    : 'dark:border-white/10 hover:bg-white/[0.07] hover:border-white/15'
+                }`}
               >
-                {availableRules.map(r => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {selectedStrategy === 'sslang_rule' && availableRules.length === 0 && (
-            <p className="text-data-xs mt-3" style={{ color: 'var(--text-tertiary)' }}>
-              未找到启用的 SSLang 规则，请先前往「交易规则」页创建
-            </p>
-          )}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{rule.name}</span>
+                  <span className="text-data-xs px-1.5 py-0.5 rounded-sm" style={{
+                    background: rule.signal === 'buy' ? 'hsl(var(--price-up-bg))' : 'hsl(var(--price-down-bg))',
+                    color: rule.signal === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
+                  }}>{rule.signal?.toUpperCase()}</span>
+                </div>
+                {rule.explanation && <div className="text-data-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{rule.explanation}</div>}
+              </button>
+            )) : (
+              <div className="text-data-xs py-3 px-3 rounded-xl border" style={{ color: 'var(--text-tertiary)', borderColor: 'var(--border-subtle)' }}>
+                暂无启用的规则，请先前往「交易规则」页创建
+              </div>
+            )}
+          </div>
           {/* 通用参数 */}
  <div className="border-t border-slate-100 dark:border-slate-100 dark:border-white/5 pt-5 mb-5">
  <div className="text-xs font-bold mb-3">通用参数</div>

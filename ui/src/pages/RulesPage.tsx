@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
 import type { TradingRule } from '@/types';
+import { validateStrategyCode } from '@/utils/strategyRuntime';
 import InlineAiParsePanel from '@/components/InlineAiParsePanel';
 import CodeViewerModal from '@/components/CodeViewerModal';
 import SSLangEditor from '@/components/SSLangEditor';
@@ -16,6 +17,29 @@ function loadRules(): TradingRule[] {
   try { const raw = localStorage.getItem(STORAGE_KEY_RULES); if (raw) { const parsed = JSON.parse(raw); return parsed.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex ?? i + 1, color: ruleColor(r.markerIndex ?? i) })); } return RULE_TEMPLATES; } catch (e) { console.warn('Failed to load rules:', e); return RULE_TEMPLATES; }
 }
 function saveRules(rules: TradingRule[]) { try { localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(rules)); window.dispatchEvent(new Event('stockmate:rules-changed')); } catch (e) { console.warn('Failed to save rules:', e); } }
+
+/** Status indicator for a rule based on code validity and backtest results. */
+function getRuleStatus(rule: TradingRule, stat?: RuleBacktest): { icon: string; label: string; color: string } {
+  if (!rule.code || rule.code.trim() === '') {
+    return { icon: '✗', label: '代码为空', color: 'hsl(var(--risk-danger))' };
+  }
+  try {
+    const result = validateStrategyCode(rule.code);
+    if (!result.valid) {
+      return { icon: '✗', label: '语法错误: ' + (result.error || ''), color: 'hsl(var(--risk-danger))' };
+    }
+    // Use backtest stats to differentiate 就绪/无信号
+    if (stat) {
+      if (stat.signals > 0) {
+        return { icon: '◎', label: '就绪 · 命中 ' + stat.signals, color: 'hsl(var(--price-up))' };
+      }
+      return { icon: '○', label: '无信号', color: 'hsl(var(--text-tertiary))' };
+    }
+    return { icon: '◎', label: '就绪', color: 'hsl(var(--price-up))' };
+  } catch {
+    return { icon: '⚠', label: '校验异常', color: 'hsl(var(--risk-warning))' };
+  }
+}
 
 /** Compact per-rule backtest badge: hit count + win-rate, with a low-sample warning. */
 function BacktestBadge({ stat }: { stat: RuleBacktest | undefined }) {
@@ -151,6 +175,7 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
   const [rules, setRules] = useState<TradingRule[]>(loadRules);
   const [batchMode, setBatchMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Reload when rules change elsewhere (AI panel import, other tabs)
@@ -162,6 +187,18 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
   }, []);
 
   const stats = useMemo(() => { const m = new Map<string, RuleBacktest>(); if (bars?.length) for (const r of rules) m.set(r.id, backtestRule(r, bars)); return m; }, [rules, bars]);
+
+  const filteredRules = useMemo(() => {
+    if (statusFilter === 'all') return rules;
+    return rules.filter(r => {
+      const s = getRuleStatus(r, stats.get(r.id));
+      if (statusFilter === 'ready') return s.icon === '◎';
+      if (statusFilter === 'no-signal') return s.icon === '○';
+      if (statusFilter === 'unusable') return s.icon === '✗';
+      if (statusFilter === 'warning') return s.icon === '⚠';
+      return true;
+    });
+  }, [rules, stats, statusFilter]);
 
   const persist = useCallback((updated: TradingRule[]) => { setRules(updated); saveRules(updated); }, []);
   const toggleRule = useCallback((id: string) => persist(rules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r)), [rules, persist]);
@@ -211,26 +248,56 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
         </div>
       </div>
 
+      {/* Status filter bar */}
+      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+        {[
+          { key: 'all', label: '全部', color: 'hsl(var(--text-secondary))' },
+          { key: 'ready', label: '◎ 就绪', color: 'hsl(var(--price-up))' },
+          { key: 'no-signal', label: '○ 无信号', color: 'hsl(var(--text-tertiary))' },
+          { key: 'warning', label: '⚠ 需检查', color: 'hsl(var(--risk-warning))' },
+          { key: 'unusable', label: '✗ 不可用', color: 'hsl(var(--risk-danger))' },
+        ].map(f => (
+          <button key={f.key} onClick={() => setStatusFilter(f.key)}
+            className="px-2 py-1 text-[10px] font-medium rounded transition-colors"
+            style={{
+              color: statusFilter === f.key ? f.color : 'hsl(var(--text-tertiary))',
+              background: statusFilter === f.key ? 'hsl(var(--bg-card))' : 'transparent',
+              border: '1px solid',
+              borderColor: statusFilter === f.key ? 'hsl(var(--border-default))' : 'transparent',
+            }}>
+            {f.label}
+          </button>
+        ))}
+        <span className="text-[10px] ml-auto" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          {filteredRules.length}/{rules.length} 条
+        </span>
+      </div>
+
       {batchMode && (
         <div className="flex items-center gap-2 px-2 py-1.5 rounded text-[11px] font-bold" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>
           <span style={{ color: 'hsl(var(--text-tertiary))' }}>已选 {selected.size}</span>
-          <button onClick={() => setSelected(new Set(rules.map(r => r.id)))} style={{ color: 'hsl(var(--text-secondary))' }}>全选</button>
+          <button onClick={() => setSelected(new Set(filteredRules.map(r => r.id)))} style={{ color: 'hsl(var(--text-secondary))' }}>全选</button>
           <button onClick={() => batchSet(true)} style={{ color: 'hsl(var(--price-up))' }}>批量启用</button>
           <button onClick={() => batchSet(false)} style={{ color: 'hsl(var(--text-tertiary))' }}>批量禁用</button>
           <button onClick={batchDelete} className="ml-auto" style={{ color: 'hsl(var(--price-down))' }}>删除选中</button>
         </div>
       )}
 
-      {rules.length === 0 ? (
-        <div className="py-8 text-center text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>暂无规则，请从下方模板添加或用 AI 提炼</div>
+      {filteredRules.length === 0 ? (
+        <div className="py-8 text-center text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          {statusFilter === 'all' ? '暂无规则，请从下方模板添加或用 AI 提炼' : '没有符合当前筛选条件的规则'}
+        </div>
       ) : (
-        rules.map(rule => (
+        filteredRules.map(rule => {
+          const status = getRuleStatus(rule, stats.get(rule.id));
+          return (
           <div key={rule.id} className="flex items-center justify-between py-2 px-2 rounded" style={{ background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>
             <div className="flex items-center gap-2 min-w-0">
               {batchMode && (
                 <input type="checkbox" checked={selected.has(rule.id)} onChange={() => toggleSelect(rule.id)} className="shrink-0" aria-label={`选择 ${rule.name}`} />
               )}
               <span className="flex items-center justify-center w-5 h-5 rounded-full shrink-0 text-[10px] font-bold text-white" style={{ backgroundColor: rule.color, opacity: rule.enabled ? 1 : 0.35 }}>{rule.markerIndex}</span>
+              <span className="text-[11px] shrink-0" title={status.label} style={{ color: status.color }}>{status.icon}</span>
               <span className="text-[11px] font-bold truncate" style={{ color: rule.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))' }}>{rule.name}</span>
               {rule.kind === 'code' && (
                 <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'hsl(var(--text-tertiary) / 0.15)', color: 'hsl(var(--text-tertiary))' }}>code</span>
@@ -258,7 +325,8 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
                 className="px-1.5 py-0.5 text-[10px] font-bold rounded hover:opacity-70" style={{ color: 'hsl(var(--text-tertiary))' }} title="删除">✕</button>
             </div>
           </div>
-        ))
+          );
+        })
       )}
     </div>
   );
