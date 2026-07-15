@@ -244,11 +244,9 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const signal = signals[i];
 
  if (signal === 'buy' && shares === 0 && capital > 0) {
- // Trade next day at ~10:00 (estimate from OHLC: open + 30% of morning range)
+ // Trade at next day's open (9:30) — the only exact price we have in daily data
  const execIdx = Math.min(i + 1, quotes.length - 1);
- const next = quotes[execIdx];
- const est10am = Number(next.open) + (Number(next.high) - Number(next.low)) * 0.2;
- const execPrice = est10am * (1 + params.slippage);
+ const execPrice = Number(quotes[execIdx].open) * (1 + params.slippage);
  const buyAmount = capital * (1 - params.commissionRate);
  const buyShares = Math.floor(buyAmount / execPrice);
  if (buyShares > 0) {
@@ -258,9 +256,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  }
  } else if (signal === 'sell' && shares > 0) {
  const execIdx = Math.min(i + 1, quotes.length - 1);
- const next = quotes[execIdx];
- const est10am = Number(next.open) + (Number(next.high) - Number(next.low)) * 0.2;
- const execPrice = est10am * (1 - params.slippage);
+ const execPrice = Number(quotes[execIdx].open) * (1 - params.slippage);
  const gross = shares * execPrice;
  const net = gross * (1 - params.commissionRate);
  const lastBuy = [...trades].reverse().find(t => t.type === 'buy');
