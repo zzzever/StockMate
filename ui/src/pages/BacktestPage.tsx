@@ -263,7 +263,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  capital = buyAmount - buyShares * execPrice;
  shares = buyShares;
  lastBuyDay = i;
- const buyExecIdx = execIdx;
+ buyExecIdx = execIdx;
  avgCost = execPrice;
  trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0 });
  }
