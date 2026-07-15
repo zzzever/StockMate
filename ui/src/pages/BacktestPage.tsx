@@ -1545,57 +1545,33 @@ const [endDate, setEndDate] = useState('');
  {/* 收益曲线图 (with benchmark comparison & trade markers) */}
  <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
 
- {/* 买卖信号分布图 */}
- {result && result.trades.length > 0 && (
-   <div className="glass-card p-4 mt-3">
-     <h3 className="text-data-sm font-bold mb-2">买卖信号分布</h3>
-     <div className="h-40 relative">
-       {(() => {
-         const minP = Math.min(...result.equity_curve.map(e => e.value));
-         const maxP = Math.max(...result.equity_curve.map(e => e.value));
-         const range = maxP - minP || 1;
-         return (
-           <svg className="w-full h-full" viewBox="0 0 100 40" preserveAspectRatio="none">
-             {/* Price line */}
-             <polyline
-               fill="none" stroke="hsl(var(--text-secondary))" strokeWidth="0.5"
-               points={result.equity_curve.map((e, i) =>
-                 `${(i / (result.equity_curve.length - 1)) * 100},${(1 - (e.value - minP) / range) * 38 + 1}`
-               ).join(' ')}
-             />
-             {/* Buy/Sell markers */}
-             {result.trades.map((t, i) => {
-               const idx = result.equity_curve.findIndex(e => e.date === t.date);
-               if (idx < 0) return null;
-               const x = (idx / (result.equity_curve.length - 1)) * 100;
-               const y = (1 - (t.type === 'buy' ? 1 : 0)) * 10 + 15;
-               return (
-                 <g key={i}>
-                   <line x1={x} y1="0" x2={x} y2="40" stroke="hsl(var(--border-subtle))" strokeWidth="0.3" />
-                   <polygon
-                     points={t.type === 'buy'
-                       ? `${x},${y+4} ${x-3},${y} ${x+3},${y}`
-                       : `${x},${y-4} ${x-3},${y} ${x+3},${y}`}
-                     fill={t.type === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'}
-                   />
-                 </g>
-               );
-             })}
-           </svg>
-         );
-       })()}
-     </div>
-     <div className="flex items-center gap-4 mt-2 text-data-xs">
-       <span className="flex items-center gap-1">
-         <span className="w-2 h-2 rounded-full" style={{ background: 'hsl(var(--price-up))' }} /> 买入
-       </span>
-       <span className="flex items-center gap-1">
-         <span className="w-2 h-2 rounded-full" style={{ background: 'hsl(var(--price-down))' }} /> 卖出
-       </span>
-       <span>共 {result.trades.length} 笔交易</span>
-     </div>
-   </div>
- )}
+ {/* 买卖信号列表 */}
+  {result && result.trades.length > 0 && (
+    <details className="glass-card p-3 mt-3" open>
+      <summary className="text-data-sm font-bold cursor-pointer select-none" style={{ color: 'var(--text-secondary)' }}>
+        买卖记录 ({result.trades.length} 笔)
+      </summary>
+      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+        {result.trades.slice(-20).map((t, i) => (
+          <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded-sm hover-surface text-data-xs">
+            <span className="w-4 text-center shrink-0">
+              {t.type === 'buy' ? <span style={{ color: 'hsl(var(--price-up))' }}>▲</span> : <span style={{ color: 'hsl(var(--price-down))' }}>▼</span>}
+            </span>
+            <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--text-tertiary)' }}>{t.date}</span>
+            <span className="w-12 shrink-0 font-mono-nums font-medium" style={{ color: t.type === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>
+              {t.type === 'buy' ? 'B' : 'S'}
+            </span>
+            <span className="w-16 shrink-0 font-mono-nums text-right" style={{ color: 'var(--text-primary)' }}>{safeToFixed(t.price, 2)}</span>
+            {t.type === 'sell' && (
+              <span className={'w-14 shrink-0 font-mono-nums text-right ' + (t.profit >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]')}>
+                {t.profit >= 0 ? '+' : ''}{safeToFixed(t.profit, 1)}%
+              </span>
+            )}
+          </div>
+        )).reverse()}
+      </div>
+    </details>
+  )}
 
  {/* 月度热力图 + 交易记录 */}
  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
