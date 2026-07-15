@@ -940,14 +940,6 @@ const [startDate, setStartDate] = useState('');
 const [endDate, setEndDate] = useState('');
 
 // Calculate days needed based on startDate
-const backtestDays = useMemo(() => {
-  if (startDate) {
-    const from = new Date(startDate);
-    const now = new Date();
-    return Math.ceil((now.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 30;
-  }
-  return 360;
-}, [startDate]);
  const runTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
  // 当策略切换时重置参数和结果
