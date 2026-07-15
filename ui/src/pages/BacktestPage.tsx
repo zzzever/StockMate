@@ -295,14 +295,15 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  riskSell = true;
  }
  if (riskSell) {
- const price = close * (1 - params.slippage);
+ const execIdx = Math.min(i + 1, quotes.length - 1);
+ const price = Number(quotes[execIdx].open) * (1 - params.slippage);
  const gross = shares * price;
  const net = gross * (1 - params.commissionRate);
  const cost = avgCost * shares;
  const profit = net - cost;
  const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
  capital = net;
- trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price, shares, profit: profitPct });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price, shares, profit: profitPct });
  shares = 0;
  }
  }
