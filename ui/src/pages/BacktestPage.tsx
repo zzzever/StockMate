@@ -27,8 +27,14 @@ import type { Quote, TradingRule } from '@/types';
 function wrapSSLangRule(rule: TradingRule): string {
   // If code already contains RULE blocks, use as-is
   if (rule.code?.toUpperCase().includes('RULE')) return rule.code;
+  const code = rule.code || '';
+  // If the explanation mentions sell/exit AND signal is buy, generate two RULE blocks
+  const hasSell = rule.explanation?.includes('卖出') || rule.explanation?.toLowerCase().includes('sell');
+  if (hasSell && rule.signal === 'buy') {
+    return `RULE "${rule.name}"\n  SIGNAL buy\n  WHEN ${code}\n\nRULE "${rule.name}·卖出"\n  SIGNAL sell\n  WHEN ${code}\n`;
+  }
   // Otherwise wrap as a single rule
-  return `RULE "${rule.name || '策略'}"\n  SIGNAL ${rule.signal || 'buy'}\n  WHEN ${rule.code}\n`;
+  return `RULE "${rule.name || '策略'}"\n  SIGNAL ${rule.signal || 'buy'}\n  WHEN ${code}\n`;
 }
 
 // ───────────────────────────────────────────────

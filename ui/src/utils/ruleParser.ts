@@ -114,12 +114,12 @@ function parseBaseLine(line: string): TradingRule | null {
   }
 
   // 2. Golden / death cross (MA or MACD)
-  if (/死叉/.test(line)) {
+  if (/死叉|下穿/.test(line)) {
     return hasMacd
       ? mkRule('MACD死叉卖出', [{ type: 'macd_signal', params: { fast: 12, slow: 26, signal: 9, direction: 'below' } }], 'sell')
       : mkRule('均线死叉卖出', [{ type: 'ma_cross', params: { fastPeriod: 5, slowPeriod: 10, direction: 'below' } }], 'sell');
   }
-  if (/金叉/.test(line)) {
+  if (/金叉|上穿/.test(line)) {
     return hasMacd
       ? mkRule('MACD金叉买入', [{ type: 'macd_signal', params: { fast: 12, slow: 26, signal: 9, direction: 'above' } }], 'buy')
       : mkRule('均线金叉买入', [{ type: 'ma_cross', params: { fastPeriod: 5, slowPeriod: 10, direction: 'above' } }], 'buy');
