@@ -27,7 +27,7 @@ export class StrategyCodeError extends Error {}
 type Tok = { t: 'num' | 'str' | 'id' | 'op'; v: string };
 
 const MULTI_OPS = ['&&', '||', '==', '!=', '<=', '>='];
-const SINGLE_OPS = ['+', '-', '*', '/', '%', '!', '<', '>', '(', ')', '[', ']', ',', '?', ':'];
+const SINGLE_OPS = ['+', '-', '*', '/', '%', '!', '<', '>', '=', '(', ')', '[', ']', ',', '?', ':'];
 
 function tokenize(src: string): Tok[] {
   const toks: Tok[] = [];

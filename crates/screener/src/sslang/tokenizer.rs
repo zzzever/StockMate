@@ -24,7 +24,7 @@ impl Token {
 }
 
 const MULTI_OPS: &[&str] = &["&&", "||", "==", "!=", "<=", ">="];
-const SINGLE_OPS: &[char] = &['+', '-', '*', '/', '%', '!', '<', '>', '(', ')', '[', ']', ',', '?', ':'];
+const SINGLE_OPS: &[char] = &['+', '-', '*', '/', '%', '!', '<', '>', '=', '(', ')', '[', ']', ',', '?', ':'];
 
 /// Tokenize an SSLang source string into tokens.
 ///
