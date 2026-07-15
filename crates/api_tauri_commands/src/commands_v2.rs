@@ -420,8 +420,8 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
     // (e.g. "600519" → "600519.SH") so the Tencent API can parse them.
     let codes: Vec<String> = items.iter().map(|i| {
         let code = &i.stock_code;
-        let suffix = if code.starts_with('6') || code.starts_with('9') { ".SH" }
-            else if code.starts_with('0') || code.starts_with('3') || code.starts_with('2') { ".SZ" }
+        let suffix = if code.starts_with('6') || code.starts_with('5') || code.starts_with('9') { ".SH" }
+            else if code.starts_with('0') || code.starts_with('1') || code.starts_with('2') || code.starts_with('3') { ".SZ" }
             else if code.starts_with('4') || code.starts_with('8') { ".BJ" }
             else { "" };
         format!("{}{}", code, suffix)
@@ -448,8 +448,8 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
             stock_name: item.stock_name.clone(),
             exchange: {
                 let c = item.stock_code.as_str();
-                if c.starts_with('6') || c.starts_with('9') { "SH" }
-                else if c.starts_with('0') || c.starts_with('3') || c.starts_with('2') { "SZ" }
+                if c.starts_with('6') || c.starts_with('5') || c.starts_with('9') { "SH" }
+                else if c.starts_with('0') || c.starts_with('1') || c.starts_with('2') || c.starts_with('3') { "SZ" }
                 else if c.starts_with('4') || c.starts_with('8') { "BJ" }
                 else { "" }
             }.to_string(),
