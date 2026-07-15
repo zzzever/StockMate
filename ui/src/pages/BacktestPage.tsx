@@ -244,23 +244,26 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const signal = signals[i];
 
  if (signal === 'buy' && shares === 0 && capital > 0) {
- const price = close * (1 + params.slippage);
+ // Trade at next bar's open (signal triggers after close, execute next day at ~10:00)
+ const execIdx = Math.min(i + 1, quotes.length - 1);
+ const execPrice = Number(quotes[execIdx].open) * (1 + params.slippage);
  const buyAmount = capital * (1 - params.commissionRate);
- const buyShares = Math.floor(buyAmount / price);
+ const buyShares = Math.floor(buyAmount / execPrice);
  if (buyShares > 0) {
- capital = buyAmount - buyShares * price;
+ capital = buyAmount - buyShares * execPrice;
  shares = buyShares;
- trades.push({ index: trades.length + 1, date: day.date, type: 'buy', price, shares, profit: 0 });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0 });
  }
  } else if (signal === 'sell' && shares > 0) {
- const price = close * (1 - params.slippage);
- const gross = shares * price;
+ const execIdx = Math.min(i + 1, quotes.length - 1);
+ const execPrice = Number(quotes[execIdx].open) * (1 - params.slippage);
+ const gross = shares * execPrice;
  const net = gross * (1 - params.commissionRate);
  const lastBuy = [...trades].reverse().find(t => t.type === 'buy');
  const cost = lastBuy ? lastBuy.price * shares : 0;
  const profit = net - cost;
  capital = net;
- trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price, shares, profit });
+ trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price: execPrice, shares, profit });
  shares = 0;
  }
 
