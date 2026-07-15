@@ -1056,7 +1056,7 @@ useEffect(() => {
     try {
       const raw = localStorage.getItem('stockmate_trading_rules_v2');
       if (raw) {
-        const rules = JSON.parse(raw).filter((r: any) => r.enabled && r.code && r.kind === 'code');
+        const rules = JSON.parse(raw).filter((r: any) => r.enabled && r.code && (r.kind === 'code' || !r.kind));
         setAvailableRules(rules);
         if (rules.length > 0 && !rules.find((r: any) => r.id === selectedRuleId)) {
           setSelectedRuleId(rules[0].id);
@@ -1351,7 +1351,7 @@ const [endDate, setEndDate] = useState('');
                   className="select w-full"
                 >
                   <option value="">-- 不使用买入规则 --</option>
-                  {availableRules.filter(r => r.direction !== 'sell').map(rule => (
+                  {availableRules.filter(r => (r.direction || 'both') !== 'sell').map(rule => (
                     <option key={rule.id} value={rule.id}>
                       {rule.name} {rule.direction === 'both' ? '(买卖)' : ''}
                     </option>
@@ -1366,7 +1366,7 @@ const [endDate, setEndDate] = useState('');
                   className="select w-full"
                 >
                   <option value="">-- 不使用卖出规则 --</option>
-                  {availableRules.filter(r => r.direction !== 'buy').map(rule => (
+                  {availableRules.filter(r => (r.direction || 'both') !== 'buy').map(rule => (
                     <option key={rule.id} value={rule.id}>
                       {rule.name} {rule.direction === 'both' ? '(买卖)' : ''}
                     </option>
