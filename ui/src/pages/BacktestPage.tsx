@@ -994,8 +994,9 @@ const [endDate, setEndDate] = useState('');
             });
             setRunning(false);
           }).catch((e: any) => {
-            console.error('Backtest failed:', e);
+            console.error('Backtest failed:', e?.message || e);
             setRunning(false);
+            setError(e?.message || '回测执行失败');
           });
           return;
         }
