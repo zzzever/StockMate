@@ -438,7 +438,11 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
     let prices = if codes_refs.is_empty() {
         vec![]
     } else {
-        data_fetcher::market_data::fetch_realtime_batch(&codes_refs).await
+        let mut prices = data_fetcher::market_data::fetch_realtime_batch(&codes_refs).await;
+        if prices.is_empty() {
+            prices = data_fetcher::market_data::eastmoney::fetch_realtime_batch(&codes_refs).await;
+        }
+        prices
     };
 
     let price_map: std::collections::HashMap<String, &data_fetcher::market_data::PriceData> =
