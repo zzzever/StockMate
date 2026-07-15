@@ -401,28 +401,31 @@ export interface DataSourceResult {
 export type RuleConditionType = 'ma_cross' | 'rsi_threshold' | 'price_breakout' | 'volume_surge' | 'macd_signal' | 'consecutive_days';
 
 export interface RuleCondition {
-  type: RuleConditionType;
-  params: Record<string, number | string>;
+  id?: string;
+  type: string;
+  params: Record<string, any>;
+  direction?: 'buy' | 'sell';
 }
+
+export type RuleDirection = 'buy' | 'sell' | 'both' | 'alert';
 
 export interface TradingRule {
   id: string;
   name: string;
   conditions: RuleCondition[];
   signal: 'buy' | 'sell' | 'alert';
+  direction?: 'buy' | 'sell' | 'both' | 'alert';
   enabled: boolean;
   color: string;
   markerIndex: number;
   createdAt: string;
-  // ── v0.7: AI/locally generated runnable strategy code (all optional → backward compatible) ──
-  /** 'code' rules run via the sandboxed strategyRuntime; default/undefined = 'condition' */
   kind?: 'condition' | 'code';
-  /** Per-bar boolean expression executed by strategyRuntime (viewable in the code viewer) */
   code?: string;
-  /** Natural-language explanation of the rule/code */
+  /** For 'both' rules: separate buy SSLang code */
+  buyCode?: string;
+  /** For 'both' rules: separate sell SSLang code */
+  sellCode?: string;
   explanation?: string;
-  /** 'buy' = 仅买入 | 'sell' = 仅卖出 | 'both' = 同时定义买卖 */
-  direction?: 'buy' | 'sell' | 'both';
 }
 
 export interface RuleSignal {

@@ -58,20 +58,23 @@ function BacktestBadge({ stat }: { stat: RuleBacktest | undefined }) {
 
 // ── Inline Code Editor Modal ──
 function CodeRuleEditor({ rule, onSave, onClose }: {
-  rule: { name: string; code: string; signal: string; explanation?: string; direction?: string } | null;
-  onSave: (name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string, direction: string) => void;
+  rule: { name: string; code: string; signal: string; explanation?: string; direction?: string; sellCode?: string } | null;
+  onSave: (name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string, direction: string, codeSell?: string) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(rule?.name ?? '');
   const [code, setCode] = useState(rule?.code ?? '');
+  const [codeSell, setCodeSell] = useState(rule?.sellCode ?? '');
   const [signal, setSignal] = useState<'buy' | 'sell' | 'alert'>((rule?.signal as any) ?? 'buy');
   const [explanation, setExplanation] = useState(rule?.explanation ?? '');
   const [direction, setLocalDirection] = useState(rule?.direction ?? 'buy');
-  const [valid, setValid] = useState(true);
+  const [validBuy, setValidBuy] = useState(true);
+  const [validSell, setValidSell] = useState(true);
 
   const handleSave = () => {
     if (!name.trim() || !code.trim()) return;
-    onSave(name.trim(), code, signal, explanation.trim(), direction);
+    if (direction === 'both' && !codeSell.trim()) return;
+    onSave(name.trim(), code, signal, explanation.trim(), direction, direction === 'both' ? codeSell.trim() : undefined);
   };
 
   return (
@@ -121,29 +124,40 @@ function CodeRuleEditor({ rule, onSave, onClose }: {
           </div>
           <div>
             <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>方向</label>
-            <select
-              value={direction}
-              onChange={(e) => setLocalDirection(e.target.value as 'buy' | 'sell' | 'both')}
+            <select value={direction} onChange={e => setLocalDirection(e.target.value)}
               className="px-3 py-1.5 text-sm rounded border outline-none"
-              style={{ background: 'hsl(var(--bg-canvas))', borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-primary))' }}
-            >
+              style={{ background: 'hsl(var(--bg-canvas))', borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-primary))' }}>
               <option value="buy">仅买入</option>
               <option value="sell">仅卖出</option>
-              <option value="both">买卖都有</option>
+              <option value="both">买入+卖出</option>
+              <option value="alert">关注</option>
             </select>
           </div>
         </div>
 
         <div>
-          <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>SSLang 代码</label>
+          <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>{direction === 'both' ? '买入条件（SSLang 代码）' : 'SSLang 代码'}</label>
           <SSLangEditor
             value={code}
             onChange={setCode}
-            onValidate={setValid}
+            onValidate={setValidBuy}
             minHeight="180px"
             maxHeight="350px"
           />
         </div>
+
+        {direction === 'both' && (
+        <div>
+          <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>卖出条件（SSLang 代码）</label>
+          <SSLangEditor
+            value={codeSell}
+            onChange={setCodeSell}
+            onValidate={setValidSell}
+            minHeight="180px"
+            maxHeight="350px"
+          />
+        </div>
+        )}
 
         <div>
           <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>策略说明（可选）</label>
@@ -167,7 +181,7 @@ function CodeRuleEditor({ rule, onSave, onClose }: {
           </button>
           <button
             onClick={handleSave}
-            disabled={!name.trim() || !code.trim() || !valid}
+            disabled={!name.trim() || !code.trim() || !validBuy || (direction === 'both' && (!codeSell.trim() || !validSell))}
             className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded border transition-colors disabled:opacity-40"
             style={{ borderColor: 'hsl(var(--price-up) / 0.3)', color: 'hsl(var(--price-up))' }}
           >
@@ -315,10 +329,10 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
               <span className="text-[11px] font-bold truncate" style={{ color: rule.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))' }}>{rule.name}</span>
               {rule.direction && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm ml-2" style={{
-                  background: rule.direction === 'sell' ? 'hsl(var(--price-down-bg))' : rule.direction === 'both' ? 'hsl(var(--swiss-accent-ghost))' : 'hsl(var(--price-up-bg))',
-                  color: rule.direction === 'sell' ? 'hsl(var(--price-down))' : rule.direction === 'both' ? 'hsl(var(--swiss-accent))' : 'hsl(var(--price-up))',
+                  background: rule.direction === 'sell' ? 'hsl(var(--price-down-bg))' : rule.direction === 'both' ? 'hsl(var(--swiss-accent-ghost))' : rule.direction === 'alert' ? 'hsl(var(--risk-warning) / 0.15)' : 'hsl(var(--price-up-bg))',
+                  color: rule.direction === 'sell' ? 'hsl(var(--price-down))' : rule.direction === 'both' ? 'hsl(var(--swiss-accent))' : rule.direction === 'alert' ? 'hsl(var(--risk-warning))' : 'hsl(var(--price-up))',
                 }}>
-                  {rule.direction === 'sell' ? 'SELL' : rule.direction === 'both' ? 'BOTH' : 'BUY'}
+                  {rule.direction === 'sell' ? 'SELL' : rule.direction === 'both' ? 'BOTH' : rule.direction === 'alert' ? 'ALERT' : 'BUY'}
                 </span>
               )}
               {rule.kind === 'code' && (
@@ -392,14 +406,14 @@ export default function RulesPage() {
   }, []);
 
   // Save a new or edited code rule
-  const handleSaveCodeRule = useCallback((name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string, direction: string) => {
+  const handleSaveCodeRule = useCallback((name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string, direction: string, codeSell?: string) => {
     const existing = loadRules();
-    const autoDirection = detectDirection(code, direction);
+    const autoDirection = detectDirection(code, direction) as 'buy' | 'sell' | 'both' | 'alert';
     if (editingRule) {
       // Update existing
       const updated = existing.map(r =>
         r.id === editingRule.id
-          ? { ...r, name, code, signal, explanation, kind: 'code' as const, direction: autoDirection }
+          ? { ...r, name, code, signal, explanation, kind: 'code' as const, direction: direction as any, sellCode: direction === 'both' ? codeSell : undefined }
           : r
       );
       saveRules(updated);
@@ -413,7 +427,8 @@ export default function RulesPage() {
         signal,
         explanation,
         kind: 'code',
-        direction: autoDirection,
+        direction: direction as 'buy' | 'sell' | 'both' | 'alert',
+        sellCode: direction === 'both' ? codeSell : undefined,
         conditions: [],
         enabled: true,
         color: ruleColor(maxIdx + 1),
@@ -469,7 +484,7 @@ export default function RulesPage() {
         {(showNewCodeRule || editingRule) && (
             <CodeRuleEditor
               key={editingRule?.id ?? 'new'}
-              rule={editingRule ? { name: editingRule.name, code: editingRule.code ?? '', signal: editingRule.signal, explanation: editingRule.explanation, direction: editingRule.direction } : null}
+              rule={editingRule ? { name: editingRule.name, code: editingRule.code ?? '', signal: editingRule.signal, explanation: editingRule.explanation, direction: editingRule.direction, sellCode: editingRule.sellCode ?? '' } : null}
               onSave={handleSaveCodeRule}
               onClose={() => { setShowNewCodeRule(false); setEditingRule(null); }}
             />
