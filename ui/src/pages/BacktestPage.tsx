@@ -1051,22 +1051,15 @@ const [stopLoss, setStopLoss] = useState(5);
 const [takeProfit, setTakeProfit] = useState(10);
 const [maxHolding, setMaxHolding] = useState(0); // 0 = unlimited
 
-// Load SSLang rules from RulesPage's localStorage
 useEffect(() => {
   const load = () => {
     try {
       const raw = localStorage.getItem('stockmate_trading_rules_v2');
-      const parsedRules = raw ? JSON.parse(raw) : [];
-      const rules = parsedRules.filter((r: any) => r.code && (!r.kind || r.kind === 'code'));
-      if (rules.length === 0) {
-        const templates = RULE_TEMPLATES.filter((r: any) => r.code && r.kind === 'code');
-        setAvailableRules(templates.map((r: any) => ({ ...r, direction: r.direction || 'both' })));
-      } else {
-        setAvailableRules(rules);
-      }
-      if (rules.length > 0 && !rules.find((r: any) => r.id === selectedRuleId)) {
-        setSelectedRuleId(rules[0].id);
-      }
+      const savedRules = raw ? JSON.parse(raw) : [];
+      const codeRules = savedRules.filter((r: any) => r.code && (!r.kind || r.kind === 'code'));
+      const templates = RULE_TEMPLATES.filter((r: any) => r.code && r.kind === 'code').map((r: any) => ({ ...r, direction: r.direction || 'both' }));
+      const allRules = [...codeRules, ...templates.filter(t => !codeRules.find((s: any) => s.id === t.id))];
+      setAvailableRules(allRules);
     } catch {}
   };
   load();
