@@ -958,7 +958,12 @@ const [endDate, setEndDate] = useState('');
 
  const handleRun = useCallback(() => {
  if (!quotes || quotes.length === 0) return;
- console.log('[BacktestPage] strategy run start:', { strategyId: selectedStrategy, quotesCount: quotes.length, params });
+ // Apply date range filter
+ let filteredQuotes = quotes;
+ if (startDate) filteredQuotes = filteredQuotes.filter(q => q.date >= startDate);
+ if (endDate) filteredQuotes = filteredQuotes.filter(q => q.date <= endDate);
+ if (filteredQuotes.length === 0) { setError('所选日期区间内无数据'); setRunning(false); return; }
+ console.log('[BacktestPage] strategy run start:', { strategyId: selectedStrategy, quotesCount: filteredQuotes.length, params, dateRange: startDate + '~' + endDate });
  setRunning(true);
  setResult(null);
  if (runTimeoutRef.current) clearTimeout(runTimeoutRef.current);
@@ -1000,7 +1005,7 @@ const [endDate, setEndDate] = useState('');
           });
           return;
         }
-        const res = runMockBacktest(quotes, selectedStrategy, params);
+        const res = runMockBacktest(filteredQuotes, selectedStrategy, params);
  console.log('[BacktestPage] strategy run complete:', {
  total_return: res.total_return.toFixed(2) + '%',
  annual_return: res.annual_return.toFixed(2) + '%',
@@ -1016,7 +1021,7 @@ const [endDate, setEndDate] = useState('');
  setRunning(false);
  }
  }, 1200);
- }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, stockId]);
+ }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, stockId, startDate, endDate]);
 
  const handleSave = () => {
  if (!result || !saveName.trim()) return;
