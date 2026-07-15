@@ -652,21 +652,21 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  {trades.map((trade, i) => (
  <tr key={trade.index} className={i % 2 === 0 ? 'bg-white/[0.02]' : ''}>
  <td className="py-2 px-2 font-mono-nums">{trade.index}</td>
- <td className="py-2 px-2 text-slate-700 dark:text-slate-700 dark:text-zinc-300">{trade.date}</td>
+ <td className="py-2 px-2 ">{trade.date}</td>
  <td className="py-2 px-2">
  <span className={`text-xs px-2 py-0.5 rounded-full ${trade.type === 'buy' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-600 dark:text-rose-400'}`}>
  {trade.type === 'buy' ? '买入' : '卖出'}
  </span>
  </td>
- <td className="py-2 px-2 text-right font-mono-nums text-slate-700 dark:text-slate-700 dark:text-zinc-300">{safeToFixed(trade.price, 2)}</td>
- <td className="py-2 px-2 text-right font-mono-nums text-slate-700 dark:text-slate-700 dark:text-zinc-300">{trade.shares}</td>
+ <td className="py-2 px-2 text-right font-mono-nums ">{safeToFixed(trade.price, 2)}</td>
+ <td className="py-2 px-2 text-right font-mono-nums ">{trade.shares}</td>
  <td className="py-2 px-2 text-right font-mono-nums">
  {trade.type === 'sell' ? (
  <span className={trade.profit > 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}>
  {trade.profit > 0 ? '+' : ''}{safeToFixed(trade.profit, 2)}
  </span>
  ) : (
- <span className=" dark: dark:text-zinc-600">—</span>
+ <span className=" ">—</span>
  )}
  </td>
  </tr>
@@ -992,10 +992,10 @@ export default function BacktestPage() {
  if (!code) {
  return (
  <div className="flex flex-col items-center justify-center py-24 space-y-5">
- <BarChart3 size={40} className=" dark:text-zinc-600" />
+ <BarChart3 size={40} className=" " />
  <div className="text-center space-y-1.5">
- <h3 className="text-lg font-bold text-slate-700 dark:text-zinc-300">请先选择股票</h3>
- <p className="text-sm text-slate-500 dark:text-zinc-500">从个股分析页选择股票后进入策略回测</p>
+ <h3 className="text-lg font-bold ">请先选择股票</h3>
+ <p className="text-sm ">从个股分析页选择股票后进入策略回测</p>
  </div>
  <button onClick={() => navigate('/sector')} className="btn-secondary">前往选股</button>
  </div>
@@ -1012,7 +1012,7 @@ export default function BacktestPage() {
  return (
  <div className="flex flex-col items-center justify-center py-24 space-y-4">
  <RefreshCw size={28} className="text-violet-400 animate-spin" />
- <span className="text-sm text-slate-600 dark:text-zinc-400">正在加载数据...</span>
+ <span className="text-sm ">正在加载数据...</span>
  </div>
  );
  }
@@ -1026,7 +1026,7 @@ export default function BacktestPage() {
  <div className="flex items-center gap-3">
  <button
  onClick={() => navigate(code ? `/stock?code=${code}` : '/sector')}
- className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:text-white transition-colors"
+ className="flex items-center gap-1.5 text-sm transition-colors btn-ghost"
  >
  <ArrowLeft size={16} />
  <span>{code ? '返回分析' : '返回板块'}</span>
@@ -1075,7 +1075,7 @@ export default function BacktestPage() {
  >
  <div className="flex items-center gap-2">
  <Icon size={16} className={selected ? 'text-violet-600 dark:text-violet-600 dark:text-violet-400' : ''} />
- <span className={`text-sm font-medium ${selected ? '' : 'text-slate-700 dark:text-slate-700 dark:text-zinc-300'}`}>{s.name}</span>
+ <span className={`text-sm font-medium ${selected ? '' : ''}`}>{s.name}</span>
  </div>
  <div className="text-xs mt-1 ml-6">{s.description}</div>
  </button>
