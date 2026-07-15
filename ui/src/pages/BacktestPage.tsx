@@ -266,6 +266,8 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0 });
  }
  } else if (signal === 'sell' && shares > 0) {
+ // T+1: cannot sell on same day as buy
+ if (lastBuyDay >= 0 && i <= lastBuyDay) continue;
  const execIdx = Math.min(i + 1, quotes.length - 1);
  const execPrice = Number(quotes[execIdx].open) * (1 - params.slippage);
  const gross = shares * execPrice;
