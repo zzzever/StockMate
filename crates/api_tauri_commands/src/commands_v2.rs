@@ -423,7 +423,14 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
             "SH" => ".SH",
             "SZ" => ".SZ",
             "BJ" => ".BJ",
-            _ => "",
+            _ => {
+                // Fallback: determine exchange from stock code prefix
+                let code = i.stock_code.as_str();
+                if code.starts_with('6') || code.starts_with('9') { ".SH" }
+                else if code.starts_with('0') || code.starts_with('3') || code.starts_with('2') { ".SZ" }
+                else if code.starts_with('4') || code.starts_with('8') || code.starts_with("920") { ".BJ" }
+                else { "" }
+            },
         };
         format!("{}{}", i.stock_code, suffix)
     }).collect();
