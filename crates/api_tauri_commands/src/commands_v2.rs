@@ -417,29 +417,14 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
     })?;
 
     // Fetch batch realtime prices — reconstruct exchange-suffixed codes
-    // (e.g. "600519" + "SH" → "600519.SH") so the Tencent API can parse them.
+    // (e.g. "600519" → "600519.SH") so the Tencent API can parse them.
     let codes: Vec<String> = items.iter().map(|i| {
-        let suffix = match i.exchange.as_str() {
-            "SH" => ".SH",
-            "SZ" => ".SZ",
-            "BJ" => ".BJ",
-            _ => {
-                // Convert SSE/SZSE to SH/SZ and fallback to prefix detection
-                let short = match i.exchange.as_str() {
-                    "SSE" => ".SH",
-                    "SZSE" => ".SZ",
-                    _ => "",
-                };
-                if !short.is_empty() { short } else {
-                let code = i.stock_code.as_str();
-                if code.starts_with('6') || code.starts_with('9') { ".SH" }
-                else if code.starts_with('0') || code.starts_with('3') || code.starts_with('2') { ".SZ" }
-                else if code.starts_with('4') || code.starts_with('8') || code.starts_with("920") { ".BJ" }
-                else { "" }
-                }
-            },
-        };
-        format!("{}{}", i.stock_code, suffix)
+        let code = &i.stock_code;
+        let suffix = if code.starts_with('6') || code.starts_with('9') { ".SH" }
+            else if code.starts_with('0') || code.starts_with('3') || code.starts_with('2') { ".SZ" }
+            else if code.starts_with('4') || code.starts_with('8') { ".BJ" }
+            else { "" };
+        format!("{}{}", code, suffix)
     }).collect();
     let codes_refs: Vec<&str> = codes.iter().map(|s| s.as_str()).collect();
     let prices = if codes_refs.is_empty() {
@@ -461,11 +446,13 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
             stock_id: item.stock_id.clone(),
             stock_code: item.stock_code.clone(),
             stock_name: item.stock_name.clone(),
-            exchange: match item.exchange.as_str() {
-                "SSE" => "SH".to_string(),
-                "SZSE" => "SZ".to_string(),
-                other => other.to_string(),
-            },
+            exchange: {
+                let c = item.stock_code.as_str();
+                if c.starts_with('6') || c.starts_with('9') { "SH" }
+                else if c.starts_with('0') || c.starts_with('3') || c.starts_with('2') { "SZ" }
+                else if c.starts_with('4') || c.starts_with('8') { "BJ" }
+                else { "" }
+            }.to_string(),
             added_at: item.added_at.format("%Y-%m-%d").to_string(),
             price: price.map(|p| p.current_price).unwrap_or(0.0),
             change: price.map(|p| p.change).unwrap_or(0.0),
