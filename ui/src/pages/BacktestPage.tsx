@@ -45,6 +45,13 @@ interface BacktestResult {
  equity_curve: { date: string; value: number }[];
  trades: TradeRecord[];
  monthly_returns: { year: number; month: number; return_pct: number }[];
+ signal_count: number;
+ avg_holding_days: number;
+ max_consecutive_wins: number;
+ max_consecutive_losses: number;
+ profit_factor: number;
+ payoff_ratio: number;
+ expectancy: number;
 }
 
 interface StrategyParams {
@@ -231,10 +238,12 @@ function generateSignals(quotes: Quote[], strategyId: string, params: StrategyPa
  return signals;
 }
 
-function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyParams): BacktestResult {
+function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyParams, stopLoss = 0, takeProfit = 0, maxHolding = 0): BacktestResult {
  const signals = generateSignals(quotes, strategyId, params);
  let capital = params.initialCapital;
  let shares = 0;
+ let lastBuyDay = -1;
+ let avgCost = 0;
  const trades: TradeRecord[] = [];
  const equityCurve: { date: string; value: number }[] = [];
 
@@ -252,6 +261,8 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  if (buyShares > 0) {
  capital = buyAmount - buyShares * execPrice;
  shares = buyShares;
+ lastBuyDay = i;
+ avgCost = execPrice;
  trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0 });
  }
  } else if (signal === 'sell' && shares > 0) {
@@ -265,6 +276,30 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  capital = net;
  trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price: execPrice, shares, profit });
  shares = 0;
+ }
+
+ // 风控检查：止损/止盈/最大持仓
+ if (shares > 0 && lastBuyDay >= 0 && i > lastBuyDay) {
+ const holdingDays = i - lastBuyDay;
+ const unrealizedPnl = (close - avgCost) / avgCost;
+ let riskSell = false;
+ if (stopLoss > 0 && unrealizedPnl <= -stopLoss / 100) {
+ riskSell = true;
+ } else if (takeProfit > 0 && unrealizedPnl >= takeProfit / 100) {
+ riskSell = true;
+ } else if (maxHolding > 0 && holdingDays >= maxHolding) {
+ riskSell = true;
+ }
+ if (riskSell) {
+ const price = close * (1 - params.slippage);
+ const gross = shares * price;
+ const net = gross * (1 - params.commissionRate);
+ const cost = avgCost * shares;
+ const profit = net - cost;
+ capital = net;
+ trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price, shares, profit });
+ shares = 0;
+ }
  }
 
  const totalValue = capital + shares * close;
@@ -321,6 +356,69 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  }
  monthly_returns.sort((a, b) => a.year - b.year || a.month - b.month);
 
+ // ---- 新增关键指标 ----
+ const signal_count = signals.filter(s => s !== 'hold').length;
+
+ // 平均持仓天数
+ let totalHoldingDays = 0;
+ let completedTrades = 0;
+ for (let j = 0; j < trades.length; j++) {
+ if (trades[j].type === 'buy') {
+ // find subsequent sell
+ const buyDate = trades[j].date;
+ for (let k = j + 1; k < trades.length; k++) {
+ if (trades[k].type === 'sell') {
+ // find day index difference
+ let buyIdx = -1, sellIdx = -1;
+ for (let di = 0; di < quotes.length; di++) {
+ if (quotes[di].date === buyDate) buyIdx = di;
+ if (quotes[di].date === trades[k].date) sellIdx = di;
+ }
+ if (buyIdx >= 0 && sellIdx >= 0 && sellIdx > buyIdx) {
+ totalHoldingDays += sellIdx - buyIdx;
+ completedTrades++;
+ }
+ break;
+ }
+ }
+ }
+ }
+ const avg_holding_days = completedTrades > 0 ? totalHoldingDays / completedTrades : 0;
+
+ // 最大连续盈利/亏损
+ let maxConsecutiveWins = 0;
+ let maxConsecutiveLosses = 0;
+ let curWins = 0;
+ let curLosses = 0;
+ for (const t of sellTrades) {
+ if (t.profit > 0) {
+ curWins++;
+ curLosses = 0;
+ if (curWins > maxConsecutiveWins) maxConsecutiveWins = curWins;
+ } else {
+ curLosses++;
+ curWins = 0;
+ if (curLosses > maxConsecutiveLosses) maxConsecutiveLosses = curLosses;
+ }
+ }
+
+ // 盈利因子 = 总盈利 / 总亏损
+ const totalProfit = sellTrades.filter(t => t.profit > 0).reduce((s, t) => s + t.profit, 0);
+ const totalLoss = Math.abs(sellTrades.filter(t => t.profit <= 0).reduce((s, t) => s + t.profit, 0));
+ const profit_factor = totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0;
+
+ // 盈亏比 = 平均盈利 / 平均亏损
+ const winTradesList = sellTrades.filter(t => t.profit > 0);
+ const lossTradesList = sellTrades.filter(t => t.profit <= 0);
+ const avgWin = winTradesList.length > 0 ? winTradesList.reduce((s, t) => s + t.profit, 0) / winTradesList.length : 0;
+ const avgLoss = lossTradesList.length > 0 ? Math.abs(lossTradesList.reduce((s, t) => s + t.profit, 0) / lossTradesList.length) : 0;
+ const payoff_ratio = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0;
+
+ // 每笔期望值
+ const expectancy = sellTrades.length > 0
+ ? sellTrades.reduce((s, t) => s + t.profit, 0) / sellTrades.length
+ : 0;
+
  return {
  total_return: totalReturn,
  annual_return: annualReturn,
@@ -333,6 +431,13 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  equity_curve: equityCurve,
  trades,
  monthly_returns: monthly_returns,
+ signal_count,
+ avg_holding_days,
+ max_consecutive_wins: maxConsecutiveWins,
+ max_consecutive_losses: maxConsecutiveLosses,
+ profit_factor,
+ payoff_ratio,
+ expectancy,
  };
 }
 
@@ -1001,6 +1106,13 @@ const [endDate, setEndDate] = useState('');
               })),
               monthly_returns: [],
               equity_curve: (result.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: val })),
+              signal_count: result.trades?.length || 0,
+              avg_holding_days: 0,
+              max_consecutive_wins: 0,
+              max_consecutive_losses: 0,
+              profit_factor: 0,
+              payoff_ratio: 0,
+              expectancy: 0,
             });
             setRunning(false);
           }).catch((e: any) => {
@@ -1010,7 +1122,7 @@ const [endDate, setEndDate] = useState('');
           });
           return;
         }
-        const res = runMockBacktest(filteredQuotes, selectedStrategy, params);
+        const res = runMockBacktest(filteredQuotes, selectedStrategy, params, stopLoss, takeProfit, maxHolding);
  console.log('[BacktestPage] strategy run complete:', {
  total_return: res.total_return.toFixed(2) + '%',
  annual_return: res.annual_return.toFixed(2) + '%',
@@ -1349,6 +1461,46 @@ const [endDate, setEndDate] = useState('');
  <div
  className="space-y-4"
  >
+ {/* 信号结论卡片 */}
+ {result && (
+ <div className="glass-card p-4 mb-4">
+ <div className="flex items-start justify-between">
+ <div>
+ <div className="flex items-center gap-2">
+ <span className="text-lg font-black" style={{
+ color: result.total_return > 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'
+ }}>
+ {result.total_return > 0 ? '📈 买入信号' : '📉 卖出/观望'}
+ </span>
+ <span className="text-data-xs px-2 py-0.5 rounded-sm" style={{
+ background: result.win_rate > 50 ? 'hsl(var(--price-up-bg))' : 'hsl(var(--price-down-bg))',
+ color: result.win_rate > 50 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
+ }}>
+ 可信度 {result.win_rate.toFixed(0)}%
+ </span>
+ </div>
+ <p className="text-data-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+ 累计收益 {result.total_return >= 0 ? '+' : ''}{result.total_return.toFixed(2)}% ·
+ 最大回撤 {result.max_drawdown.toFixed(2)}% ·
+ 夏普 {result.sharpe_ratio.toFixed(2)} ·
+ 胜率 {result.win_rate.toFixed(1)}%
+ </p>
+ </div>
+ <div className="text-right text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+ 共 {result.trade_count} 笔交易
+ </div>
+ </div>
+ <div className="flex items-center gap-4 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)' }}>
+ <span>期望值 <b className="font-mono-nums" style={{ color: (result as any).expectancy >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{(result as any).expectancy?.toFixed(2) ?? '--'}</b></span>
+ <span>盈亏比 <b className="font-mono-nums">{(result as any).payoff_ratio?.toFixed(2) ?? '--'}</b></span>
+ <span>盈利因子 <b className="font-mono-nums">{(result as any).profit_factor?.toFixed(2) ?? '--'}</b></span>
+ <span>平均持仓 <b className="font-mono-nums">{(result as any).avg_holding_days?.toFixed(0) ?? '--'} 天</b></span>
+ <span>最大连盈 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{(result as any).max_consecutive_wins ?? '--'}</b></span>
+ <span>最大连亏 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{(result as any).max_consecutive_losses ?? '--'}</b></span>
+ </div>
+ </div>
+ )}
+
  {/* 收益指标卡片 */}
  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
  <MetricCard
@@ -1392,6 +1544,58 @@ const [endDate, setEndDate] = useState('');
 
  {/* 收益曲线图 (with benchmark comparison & trade markers) */}
  <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
+
+ {/* 买卖信号分布图 */}
+ {result && result.trades.length > 0 && (
+   <div className="glass-card p-4 mt-3">
+     <h3 className="text-data-sm font-bold mb-2">买卖信号分布</h3>
+     <div className="h-40 relative">
+       {(() => {
+         const minP = Math.min(...result.equity_curve.map(e => e.value));
+         const maxP = Math.max(...result.equity_curve.map(e => e.value));
+         const range = maxP - minP || 1;
+         return (
+           <svg className="w-full h-full" viewBox="0 0 100 40" preserveAspectRatio="none">
+             {/* Price line */}
+             <polyline
+               fill="none" stroke="hsl(var(--text-secondary))" strokeWidth="0.5"
+               points={result.equity_curve.map((e, i) =>
+                 `${(i / (result.equity_curve.length - 1)) * 100},${(1 - (e.value - minP) / range) * 38 + 1}`
+               ).join(' ')}
+             />
+             {/* Buy/Sell markers */}
+             {result.trades.map((t, i) => {
+               const idx = result.equity_curve.findIndex(e => e.date === t.date);
+               if (idx < 0) return null;
+               const x = (idx / (result.equity_curve.length - 1)) * 100;
+               const y = (1 - (t.type === 'buy' ? 1 : 0)) * 10 + 15;
+               return (
+                 <g key={i}>
+                   <line x1={x} y1="0" x2={x} y2="40" stroke="hsl(var(--border-subtle))" strokeWidth="0.3" />
+                   <polygon
+                     points={t.type === 'buy'
+                       ? `${x},${y+4} ${x-3},${y} ${x+3},${y}`
+                       : `${x},${y-4} ${x-3},${y} ${x+3},${y}`}
+                     fill={t.type === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'}
+                   />
+                 </g>
+               );
+             })}
+           </svg>
+         );
+       })()}
+     </div>
+     <div className="flex items-center gap-4 mt-2 text-data-xs">
+       <span className="flex items-center gap-1">
+         <span className="w-2 h-2 rounded-full" style={{ background: 'hsl(var(--price-up))' }} /> 买入
+       </span>
+       <span className="flex items-center gap-1">
+         <span className="w-2 h-2 rounded-full" style={{ background: 'hsl(var(--price-down))' }} /> 卖出
+       </span>
+       <span>共 {result.trades.length} 笔交易</span>
+     </div>
+   </div>
+ )}
 
  {/* 月度热力图 + 交易记录 */}
  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
