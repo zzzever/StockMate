@@ -243,6 +243,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  let capital = params.initialCapital;
  let shares = 0;
  let lastBuyDay = -1;
+ let buyExecIdx = -1;
  let avgCost = 0;
  const trades: TradeRecord[] = [];
  const equityCurve: { date: string; value: number }[] = [];
@@ -262,21 +263,24 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  capital = buyAmount - buyShares * execPrice;
  shares = buyShares;
  lastBuyDay = i;
+ const buyExecIdx = execIdx;
  avgCost = execPrice;
  trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0 });
  }
  } else if (signal === 'sell' && shares > 0) {
- // T+1: cannot sell on same day as buy
- if (lastBuyDay >= 0 && i <= lastBuyDay) continue;
- const execIdx = Math.min(i + 1, quotes.length - 1);
+ // T+1: cannot sell on same day as buy (use execution indices)
+ const sellExecIdx = Math.min(i + 1, quotes.length - 1);
+ if (lastBuyDay >= 0 && sellExecIdx <= buyExecIdx) continue;
+ const execIdx = sellExecIdx;
  const execPrice = Number(quotes[execIdx].open) * (1 - params.slippage);
  const gross = shares * execPrice;
  const net = gross * (1 - params.commissionRate);
  const lastBuy = [...trades].reverse().find(t => t.type === 'buy');
  const cost = lastBuy ? lastBuy.price * shares : 0;
  const profit = net - cost;
+ const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
  capital = net;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit: profitPct });
  shares = 0;
  }
 
