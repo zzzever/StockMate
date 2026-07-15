@@ -1044,6 +1044,7 @@ export default function BacktestPage() {
  const [showSaveInput, setShowSaveInput] = useState(false);
 const [availableRules, setAvailableRules] = useState<TradingRule[]>([]);
 const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+const [selectedSellRuleId, setSelectedSellRuleId] = useState<string | null>(null);
 const [error, setError] = useState<string | null>(null);
 const [stopLoss, setStopLoss] = useState(5);
 const [takeProfit, setTakeProfit] = useState(10);
@@ -1341,27 +1342,55 @@ const [endDate, setEndDate] = useState('');
            {/* 分隔线 */}
           <div className="col-span-full border-t my-2" style={{ borderColor: 'var(--border-subtle)' }} />
           <div className="col-span-full">
-            <div className="text-data-xs font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>我的规则</div>
-            {availableRules.length > 0 ? availableRules.map(rule => (
-              <button
-                key={rule.id}
-                onClick={() => { setSelectedStrategy('sslang_rule'); setSelectedRuleId(rule.id); }}
-                className={`w-full text-left p-3 rounded-xl border transition-all duration-200 mb-1 ${
-                  selectedStrategy === 'sslang_rule' && selectedRuleId === rule.id
-                    ? 'bg-violet-500/10 border-violet-500/50 border-l-2 border-l-violet-400'
-                    : 'dark:border-white/10 hover:bg-white/[0.07] hover:border-white/15'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">{rule.name}</span>
-                  <span className="text-data-xs px-1.5 py-0.5 rounded-sm" style={{
-                    background: rule.signal === 'buy' ? 'hsl(var(--price-up-bg))' : 'hsl(var(--price-down-bg))',
-                    color: rule.signal === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
-                  }}>{rule.signal?.toUpperCase()}</span>
-                </div>
-                {rule.explanation && <div className="text-data-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{rule.explanation}</div>}
-              </button>
-            )) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-data-xs font-medium mb-2" style={{ color: 'hsl(var(--price-up))' }}>▲ 买入规则</div>
+                {availableRules.filter(r => r.direction !== 'sell').length > 0 ? availableRules.filter(r => r.direction !== 'sell').map(rule => (
+                  <button
+                    key={rule.id}
+                    onClick={() => { setSelectedStrategy('sslang_rule'); setSelectedRuleId(rule.id); }}
+                    className={`w-full text-left p-2.5 rounded-xl border transition-all duration-200 mb-1 ${
+                      selectedStrategy === 'sslang_rule' && selectedRuleId === rule.id
+                        ? 'bg-violet-500/10 border-violet-500/50 border-l-2 border-l-violet-400'
+                        : 'dark:border-white/10 hover:bg-white/[0.07] hover:border-white/15'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{rule.name}</span>
+                      <span className="text-[10px] font-bold px-1 py-0.5 rounded-sm" style={{
+                        background: rule.direction === 'both' ? 'hsl(var(--swiss-accent-ghost))' : 'hsl(var(--price-up-bg))',
+                        color: rule.direction === 'both' ? 'hsl(var(--swiss-accent))' : 'hsl(var(--price-up))',
+                      }}>{rule.direction === 'both' ? 'BOTH' : rule.direction === 'sell' ? 'SELL' : 'BUY'}</span>
+                    </div>
+                    {rule.explanation && <div className="text-data-xs mt-0.5 truncate" style={{ color: 'var(--text-tertiary)' }}>{rule.explanation}</div>}
+                  </button>
+                )) : <div className="text-data-xs py-2" style={{ color: 'var(--text-tertiary)' }}>无可用的买入规则</div>}
+              </div>
+              <div>
+                <div className="text-data-xs font-medium mb-2" style={{ color: 'hsl(var(--price-down))' }}>▼ 卖出规则</div>
+                {availableRules.filter(r => r.direction !== 'buy').length > 0 ? availableRules.filter(r => r.direction !== 'buy').map(rule => (
+                  <button
+                    key={rule.id}
+                    onClick={() => { setSelectedStrategy('sslang_rule'); setSelectedSellRuleId(rule.id); }}
+                    className={`w-full text-left p-2.5 rounded-xl border transition-all duration-200 mb-1 ${
+                      selectedStrategy === 'sslang_rule' && selectedSellRuleId === rule.id
+                        ? 'bg-violet-500/10 border-violet-500/50 border-l-2 border-l-violet-400'
+                        : 'dark:border-white/10 hover:bg-white/[0.07] hover:border-white/15'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{rule.name}</span>
+                      <span className="text-[10px] font-bold px-1 py-0.5 rounded-sm" style={{
+                        background: rule.direction === 'both' ? 'hsl(var(--swiss-accent-ghost))' : 'hsl(var(--price-down-bg))',
+                        color: rule.direction === 'both' ? 'hsl(var(--swiss-accent))' : 'hsl(var(--price-down))',
+                      }}>{rule.direction === 'both' ? 'BOTH' : rule.direction === 'sell' ? 'SELL' : 'BUY'}</span>
+                    </div>
+                    {rule.explanation && <div className="text-data-xs mt-0.5 truncate" style={{ color: 'var(--text-tertiary)' }}>{rule.explanation}</div>}
+                  </button>
+                )) : <div className="text-data-xs py-2" style={{ color: 'var(--text-tertiary)' }}>无可用的卖出规则</div>}
+              </div>
+            </div>
+            {availableRules.length === 0 && (
               <div className="text-data-xs py-3 px-3 rounded-xl border" style={{ color: 'var(--text-tertiary)', borderColor: 'var(--border-subtle)' }}>
                 暂无启用的规则，请先前往「交易规则」页创建
               </div>

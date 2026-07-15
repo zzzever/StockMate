@@ -421,6 +421,8 @@ export interface TradingRule {
   code?: string;
   /** Natural-language explanation of the rule/code */
   explanation?: string;
+  /** 'buy' = 仅买入 | 'sell' = 仅卖出 | 'both' = 同时定义买卖 */
+  direction?: 'buy' | 'sell' | 'both';
 }
 
 export interface RuleSignal {

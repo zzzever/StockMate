@@ -58,19 +58,20 @@ function BacktestBadge({ stat }: { stat: RuleBacktest | undefined }) {
 
 // ── Inline Code Editor Modal ──
 function CodeRuleEditor({ rule, onSave, onClose }: {
-  rule: { name: string; code: string; signal: string; explanation?: string } | null;
-  onSave: (name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string) => void;
+  rule: { name: string; code: string; signal: string; explanation?: string; direction?: string } | null;
+  onSave: (name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string, direction: string) => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(rule?.name ?? '');
   const [code, setCode] = useState(rule?.code ?? '');
   const [signal, setSignal] = useState<'buy' | 'sell' | 'alert'>((rule?.signal as any) ?? 'buy');
   const [explanation, setExplanation] = useState(rule?.explanation ?? '');
+  const [direction, setLocalDirection] = useState(rule?.direction ?? 'buy');
   const [valid, setValid] = useState(true);
 
   const handleSave = () => {
     if (!name.trim() || !code.trim()) return;
-    onSave(name.trim(), code, signal, explanation.trim());
+    onSave(name.trim(), code, signal, explanation.trim(), direction);
   };
 
   return (
@@ -116,6 +117,19 @@ function CodeRuleEditor({ rule, onSave, onClose }: {
               <option value="buy">看多 (BUY)</option>
               <option value="sell">看空 (SELL)</option>
               <option value="alert">关注 (ALERT)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-secondary))' }}>方向</label>
+            <select
+              value={direction}
+              onChange={(e) => setLocalDirection(e.target.value as 'buy' | 'sell' | 'both')}
+              className="px-3 py-1.5 text-sm rounded border outline-none"
+              style={{ background: 'hsl(var(--bg-canvas))', borderColor: 'hsl(var(--border-default))', color: 'hsl(var(--text-primary))' }}
+            >
+              <option value="buy">仅买入</option>
+              <option value="sell">仅卖出</option>
+              <option value="both">买卖都有</option>
             </select>
           </div>
         </div>
@@ -299,6 +313,14 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
               <span className="flex items-center justify-center w-5 h-5 rounded-full shrink-0 text-[10px] font-bold text-white" style={{ backgroundColor: rule.color, opacity: rule.enabled ? 1 : 0.35 }}>{rule.markerIndex}</span>
               <span className="text-[11px] shrink-0" title={status.label} style={{ color: status.color }}>{status.icon}</span>
               <span className="text-[11px] font-bold truncate" style={{ color: rule.enabled ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))' }}>{rule.name}</span>
+              {rule.direction && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm ml-2" style={{
+                  background: rule.direction === 'sell' ? 'hsl(var(--price-down-bg))' : rule.direction === 'both' ? 'hsl(var(--swiss-accent-ghost))' : 'hsl(var(--price-up-bg))',
+                  color: rule.direction === 'sell' ? 'hsl(var(--price-down))' : rule.direction === 'both' ? 'hsl(var(--swiss-accent))' : 'hsl(var(--price-up))',
+                }}>
+                  {rule.direction === 'sell' ? 'SELL' : rule.direction === 'both' ? 'BOTH' : 'BUY'}
+                </span>
+              )}
               {rule.kind === 'code' && (
                 <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: 'hsl(var(--text-tertiary) / 0.15)', color: 'hsl(var(--text-tertiary))' }}>code</span>
               )}
@@ -357,14 +379,27 @@ export default function RulesPage() {
 
   const handleRulesAdded = useCallback(() => { setRefreshKey(k => k + 1); setAiParseAutoOpen(false); }, []);
 
+  // Auto-detect direction from SSLang code
+  const detectDirection = useCallback((code: string, userDirection: string | undefined): 'buy' | 'sell' | 'both' => {
+    if (!code) return 'buy';
+    const hasBuy = /SIGNAL\s+BUY/i.test(code);
+    const hasSell = /SIGNAL\s+SELL/i.test(code);
+    if (hasBuy && hasSell) return 'both';
+    if (hasSell) return 'sell';
+    if (hasBuy) return 'buy';
+    // Fall back to user-provided direction
+    return (userDirection as 'buy' | 'sell' | 'both') || 'buy';
+  }, []);
+
   // Save a new or edited code rule
-  const handleSaveCodeRule = useCallback((name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string) => {
+  const handleSaveCodeRule = useCallback((name: string, code: string, signal: 'buy' | 'sell' | 'alert', explanation: string, direction: string) => {
     const existing = loadRules();
+    const autoDirection = detectDirection(code, direction);
     if (editingRule) {
       // Update existing
       const updated = existing.map(r =>
         r.id === editingRule.id
-          ? { ...r, name, code, signal, explanation, kind: 'code' as const }
+          ? { ...r, name, code, signal, explanation, kind: 'code' as const, direction: autoDirection }
           : r
       );
       saveRules(updated);
@@ -378,6 +413,7 @@ export default function RulesPage() {
         signal,
         explanation,
         kind: 'code',
+        direction: autoDirection,
         conditions: [],
         enabled: true,
         color: ruleColor(maxIdx + 1),
@@ -389,7 +425,7 @@ export default function RulesPage() {
     setEditingRule(null);
     setShowNewCodeRule(false);
     setRefreshKey(k => k + 1);
-  }, [editingRule]);
+  }, [editingRule, detectDirection]);
 
   const handleEditRule = useCallback((rule: TradingRule) => {
     if (rule.code) {
@@ -433,7 +469,7 @@ export default function RulesPage() {
         {(showNewCodeRule || editingRule) && (
             <CodeRuleEditor
               key={editingRule?.id ?? 'new'}
-              rule={editingRule ? { name: editingRule.name, code: editingRule.code ?? '', signal: editingRule.signal, explanation: editingRule.explanation } : null}
+              rule={editingRule ? { name: editingRule.name, code: editingRule.code ?? '', signal: editingRule.signal, explanation: editingRule.explanation, direction: editingRule.direction } : null}
               onSave={handleSaveCodeRule}
               onClose={() => { setShowNewCodeRule(false); setEditingRule(null); }}
             />
