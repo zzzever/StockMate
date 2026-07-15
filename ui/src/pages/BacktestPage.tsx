@@ -45,13 +45,13 @@ interface BacktestResult {
  equity_curve: { date: string; value: number }[];
  trades: TradeRecord[];
  monthly_returns: { year: number; month: number; return_pct: number }[];
- signal_count: number;
- avg_holding_days: number;
- max_consecutive_wins: number;
- max_consecutive_losses: number;
- profit_factor: number;
- payoff_ratio: number;
- expectancy: number;
+ signal_count?: number;
+ avg_holding_days?: number | null;
+ max_consecutive_wins?: number | null;
+ max_consecutive_losses?: number | null;
+ profit_factor?: number | null;
+ payoff_ratio?: number | null;
+ expectancy?: number | null;
 }
 
 interface StrategyParams {
@@ -274,7 +274,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const cost = lastBuy ? lastBuy.price * shares : 0;
  const profit = net - cost;
  capital = net;
- trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price: execPrice, shares, profit });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit });
  shares = 0;
  }
 
@@ -1091,7 +1091,7 @@ const [endDate, setEndDate] = useState('');
           }).then((result: any) => {
             setResult({
               total_return: result.total_return || 0,
-              annual_return: result.total_return || 0,
+              annual_return: result.annual_return || result.total_return || 0,
               max_drawdown: result.max_drawdown || 0,
               sharpe_ratio: result.sharpe_ratio || 0,
               win_rate: result.win_rate || 0,
@@ -1100,19 +1100,19 @@ const [endDate, setEndDate] = useState('');
               loss_trades: result.trades?.filter((t: any) => t.pnl <= 0).length || 0,
               trades: (result.trades || []).map((t: any, i: number) => ({
                 index: i, date: t.exit_date || t.entry_date,
-                type: t.side === 'buy' ? '买入' : '卖出',
+                type: t.side,
                 price: t.exit_price || t.entry_price,
                 shares: 0, profit: t.pnl_pct,
               })),
-              monthly_returns: [],
+              monthly_returns: result.monthly_returns || [],
               equity_curve: (result.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: val })),
-              signal_count: result.trades?.length || 0,
-              avg_holding_days: 0,
-              max_consecutive_wins: 0,
-              max_consecutive_losses: 0,
-              profit_factor: 0,
-              payoff_ratio: 0,
-              expectancy: 0,
+              signal_count: result.signal_count ?? result.trades?.length ?? 0,
+              avg_holding_days: result.avg_holding_days ?? null,
+              max_consecutive_wins: result.max_consecutive_wins ?? null,
+              max_consecutive_losses: result.max_consecutive_losses ?? null,
+              profit_factor: result.profit_factor ?? null,
+              payoff_ratio: result.payoff_ratio ?? null,
+              expectancy: result.expectancy ?? null,
             });
             setRunning(false);
           }).catch((e: any) => {
