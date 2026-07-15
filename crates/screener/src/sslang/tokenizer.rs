@@ -117,7 +117,16 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, SSLangError> {
             }
             let s = std::str::from_utf8(&src[start..i])
                 .map_err(|_| SSLangError::new("非法标识符编码"))?;
-            tokens.push(Token::Id(s.to_string()));
+            // Treat AND/OR as logical operators (case-insensitive)
+            let upper = s.to_uppercase();
+            if upper == "AND" {
+                tokens.push(Token::Op("&&".to_string()));
+            } else if upper == "OR" {
+                tokens.push(Token::Op("||".to_string()));
+            } else {
+                tokens.push(Token::Id(s.to_string()));
+            }
+            
             continue;
         }
 
