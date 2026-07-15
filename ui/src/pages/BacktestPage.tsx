@@ -1551,34 +1551,6 @@ const [endDate, setEndDate] = useState('');
  {/* 收益曲线图 (with benchmark comparison & trade markers) */}
  <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
 
- {/* 买卖信号列表 */}
-  {result && result.trades.length > 0 && (
-    <details className="glass-card p-3 mt-3" open>
-      <summary className="text-data-sm font-bold cursor-pointer select-none" style={{ color: 'var(--text-secondary)' }}>
-        买卖记录 ({result.trades.length} 笔)
-      </summary>
-      <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
-        {result.trades.slice(-20).map((t, i) => (
-          <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded-sm hover-surface text-data-xs">
-            <span className="w-4 text-center shrink-0">
-              {t.type === 'buy' ? <span style={{ color: 'hsl(var(--price-up))' }}>▲</span> : <span style={{ color: 'hsl(var(--price-down))' }}>▼</span>}
-            </span>
-            <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--text-tertiary)' }}>{t.date}</span>
-            <span className="w-12 shrink-0 font-mono-nums font-medium" style={{ color: t.type === 'buy' ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>
-              {t.type === 'buy' ? 'B' : 'S'}
-            </span>
-            <span className="w-16 shrink-0 font-mono-nums text-right" style={{ color: 'var(--text-primary)' }}>{safeToFixed(t.price, 2)}</span>
-            {t.type === 'sell' && (
-              <span className={'w-14 shrink-0 font-mono-nums text-right ' + (t.profit >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]')}>
-                {t.profit >= 0 ? '+' : ''}{safeToFixed(t.profit, 1)}%
-              </span>
-            )}
-          </div>
-        )).reverse()}
-      </div>
-    </details>
-  )}
-
  {/* 月度热力图 + 交易记录 */}
  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
  <MonthlyHeatmap data={result.monthly_returns} />
