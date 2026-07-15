@@ -275,10 +275,8 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const execPrice = Number(quotes[execIdx].open) * (1 - params.slippage);
  const gross = shares * execPrice;
  const net = gross * (1 - params.commissionRate);
- const lastBuy = [...trades].reverse().find(t => t.type === 'buy');
- const cost = lastBuy ? lastBuy.price * shares : 0;
- const profit = net - cost;
- const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
+ const profit = net - (avgCost * shares);
+ const profitPct = avgCost > 0 ? (execPrice - avgCost) / avgCost * 100 : 0;
  capital = net;
  trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit: profitPct });
  shares = 0;
@@ -302,8 +300,9 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const net = gross * (1 - params.commissionRate);
  const cost = avgCost * shares;
  const profit = net - cost;
+ const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
  capital = net;
- trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price, shares, profit });
+ trades.push({ index: trades.length + 1, date: day.date, type: 'sell', price, shares, profit: profitPct });
  shares = 0;
  }
  }
