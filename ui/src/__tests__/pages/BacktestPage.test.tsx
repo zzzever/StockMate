@@ -90,4 +90,40 @@ describe('BacktestPage', () => {
     expect(screen.getByText('选择策略')).toBeInTheDocument();
     expect(screen.getByText('均线交叉')).toBeInTheDocument();
   });
+
+  it('shows empty state when no stock code is provided', () => {
+    // 不传 code 参数时，应显示空状态提示
+    vi.mocked(useStockList).mockReturnValue({ data: [], isLoading: false } as any);
+    vi.mocked(useStockHistory).mockReturnValue({ data: [], isLoading: false } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/backtest']}>
+        <BacktestPage />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('请先选择股票')).toBeInTheDocument();
+    expect(screen.getByText('从个股分析页选择股票后进入策略回测')).toBeInTheDocument();
+    expect(screen.getByText('前往选股')).toBeInTheDocument();
+  });
+
+  it('renders strategy configuration section', () => {
+    vi.mocked(useStockList).mockReturnValue({ data: [{ id: '1', ticker: '600519', name: '贵州茅台', exchange: 'SH', currency: 'CNY' }], isLoading: false } as any);
+    vi.mocked(useStockHistory).mockReturnValue({ data: mockQuotes, isLoading: false } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/backtest?code=600519']}>
+        <BacktestPage />
+      </MemoryRouter>
+    );
+    // 策略配置区域应包含参数配置标题
+    expect(screen.getByText('参数配置')).toBeInTheDocument();
+    // 默认策略（ma_cross）应显示对应的参数
+    expect(screen.getByText('短期均线周期')).toBeInTheDocument();
+    expect(screen.getByText('长期均线周期')).toBeInTheDocument();
+    // 通用参数
+    expect(screen.getByText('通用参数')).toBeInTheDocument();
+    expect(screen.getByText('初始资金')).toBeInTheDocument();
+    expect(screen.getByText('手续费率')).toBeInTheDocument();
+    expect(screen.getByText('滑点')).toBeInTheDocument();
+  });
 });
