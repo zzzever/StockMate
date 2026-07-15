@@ -28,7 +28,6 @@ const navGroups = [
     items: [
       { id: 'backtest' as const, label: '回測', icon: TrendingUp, path: '/backtest' },
       { id: 'predict' as const, label: '預測', icon: BrainCircuit, path: '/predict' },
-      { id: 'indicatorLab' as const, label: '支撐線', icon: FlaskConical, path: '/indicator-lab' },
       { id: 'rules' as const, label: '規則', icon: ScrollText, path: '/rules' },
     ],
   },
