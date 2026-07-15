@@ -1015,7 +1015,7 @@ const [endDate, setEndDate] = useState('');
  setRunning(false);
  }
  }, 1200);
- }, [quotes, selectedStrategy, params]);
+ }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, stockId]);
 
  const handleSave = () => {
  if (!result || !saveName.trim()) return;
