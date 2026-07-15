@@ -310,7 +310,8 @@ async fn diagnose_eastmoney() -> DataSourceResult {
 async fn diagnose_sina() -> DataSourceResult {
     let name = "新浪行情".to_string();
     let endpoint = "https://suggest3.sinajs.cn/suggest".to_string();
-    let url = format!("{}?type=11,12&key=贵州茅台", endpoint);
+    let encoded_key = url::form_urlencoded::byte_serialize("贵州茅台".as_bytes()).collect::<String>();
+    let url = format!("{}?type=11,12&key={}", endpoint, encoded_key);
     let start = std::time::Instant::now();
 
     let client = match reqwest::Client::builder()
