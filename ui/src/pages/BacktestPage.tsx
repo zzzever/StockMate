@@ -17,7 +17,7 @@ import {
  Shield, Hash, Zap, RotateCcw, RefreshCw, X, Layers
 } from 'lucide-react';
 import { useStockList, useStockHistory } from '@/hooks/useTauriQuery';
-import type { Quote } from '@/types';
+import type { Quote, TradingRule } from '@/types';
 
 // ───────────────────────────────────────────────
 // 类型定义
@@ -909,6 +909,14 @@ export default function BacktestPage() {
  const [savedResults, setSavedResults] = useState<SavedResult[]>([]);
  const [saveName, setSaveName] = useState('');
  const [showSaveInput, setShowSaveInput] = useState(false);
+const [availableRules, setAvailableRules] = useState<TradingRule[]>([]);
+const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+const [error, setError] = useState<string | null>(null);
+const [stopLoss, setStopLoss] = useState(5);
+const [takeProfit, setTakeProfit] = useState(10);
+const [maxHolding, setMaxHolding] = useState(0); // 0 = unlimited
+const [startDate, setStartDate] = useState('');
+const [endDate, setEndDate] = useState('');
  const runTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
  // 当策略切换时重置参数和结果
@@ -1150,7 +1158,46 @@ export default function BacktestPage() {
  </div>
  </div>
 
- {/* 开始回测按钮 */}
+{/* Risk control */}
+<details className="mt-2">
+  <summary className="text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-secondary)' }}>
+    风控设置 ▾
+  </summary>
+  <div className="space-y-2 mt-2">
+    <div>
+      <label className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>止损比例 (%)</label>
+      <input type="range" min="0" max="20" step="1" value={stopLoss}
+        onChange={e => setStopLoss(+e.target.value)}
+        className="w-full" />
+      <span className="text-data-xs font-mono-nums">{stopLoss}%</span>
+    </div>
+    <div>
+      <label className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>止盈比例 (%)</label>
+      <input type="range" min="0" max="50" step="1" value={takeProfit}
+        onChange={e => setTakeProfit(+e.target.value)}
+        className="w-full" />
+      <span className="text-data-xs font-mono-nums">{takeProfit}%</span>
+    </div>
+    <div>
+      <label className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最大持仓天数 (0=不限)</label>
+      <input type="number" min="0" max="365" value={maxHolding}
+        onChange={e => setMaxHolding(+e.target.value)}
+        className="input w-24" />
+    </div>
+  </div>
+</details>
+
+{/* Date range */}
+<div className="mt-2">
+  <label className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>回测区间</label>
+  <div className="flex items-center gap-2 mt-1">
+    <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="input flex-1" />
+    <span className="text-data-xs">~</span>
+    <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="input flex-1" />
+  </div>
+</div>
+
+{/* 开始回测按钮 */}
  <div className="flex items-center gap-3">
  <button
  onClick={handleRun}
