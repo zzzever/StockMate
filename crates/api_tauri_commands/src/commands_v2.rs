@@ -424,12 +424,19 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
             "SZ" => ".SZ",
             "BJ" => ".BJ",
             _ => {
-                // Fallback: determine exchange from stock code prefix
+                // Convert SSE/SZSE to SH/SZ and fallback to prefix detection
+                let short = match i.exchange.as_str() {
+                    "SSE" => ".SH",
+                    "SZSE" => ".SZ",
+                    _ => "",
+                };
+                if !short.is_empty() { short } else {
                 let code = i.stock_code.as_str();
                 if code.starts_with('6') || code.starts_with('9') { ".SH" }
                 else if code.starts_with('0') || code.starts_with('3') || code.starts_with('2') { ".SZ" }
                 else if code.starts_with('4') || code.starts_with('8') || code.starts_with("920") { ".BJ" }
                 else { "" }
+                }
             },
         };
         format!("{}{}", i.stock_code, suffix)
@@ -454,7 +461,11 @@ pub async fn watchlist_list(state: State<'_, AppState>) -> Result<Vec<WatchlistQ
             stock_id: item.stock_id.clone(),
             stock_code: item.stock_code.clone(),
             stock_name: item.stock_name.clone(),
-            exchange: item.exchange.clone(),
+            exchange: match item.exchange.as_str() {
+                "SSE" => "SH".to_string(),
+                "SZSE" => "SZ".to_string(),
+                other => other.to_string(),
+            },
             added_at: item.added_at.format("%Y-%m-%d").to_string(),
             price: price.map(|p| p.current_price).unwrap_or(0.0),
             change: price.map(|p| p.change).unwrap_or(0.0),
