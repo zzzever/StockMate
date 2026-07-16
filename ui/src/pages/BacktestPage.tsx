@@ -1576,7 +1576,7 @@ useEffect(() => {
    {/* 3. 收益曲线 */}
    <div className="glass-card p-3">
      <div className="text-data-sm font-bold mb-2">收益曲线</div>
-     <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
+     <EquityCurveChart key={result?.trade_count ?? 0} result={result} initialCapital={params.initialCapital} quotes={quotes} />
    </div>
 
    {/* 4. 交易记录（折叠） */}
