@@ -1092,7 +1092,14 @@ const [endDate, setEndDate] = useState('');
  if (!quotes || quotes.length === 0) return;
  // Apply date range filter
  let filteredQuotes = quotes;
- if (startDate) filteredQuotes = filteredQuotes.filter(q => q.date >= startDate);
+ if (startDate) {
+   if (quotes[0]?.date > startDate) {
+     setError('数据最早从 ' + quotes[0].date + ' 开始，所选区间之前无数据');
+     setRunning(false);
+     return;
+   }
+   filteredQuotes = filteredQuotes.filter(q => q.date >= startDate);
+ }
  if (endDate) filteredQuotes = filteredQuotes.filter(q => q.date <= endDate);
  if (filteredQuotes.length === 0) { setError('所选日期区间内无数据'); setRunning(false); return; }
  console.log('[BacktestPage] strategy run start:', { strategyId: selectedStrategy, quotesCount: filteredQuotes.length, params, dateRange: startDate + '~' + endDate });
