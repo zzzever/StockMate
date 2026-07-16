@@ -594,9 +594,15 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  text: t.type === 'buy' ? 'B' : 'S',
  size: 1.5,
  }));
+ try {
  strategySeriesRef.current.setMarkers(markers);
+ } catch (e) {
+ console.warn('setMarkers failed:', e);
+ }
  } else {
+ try {
  strategySeriesRef.current.setMarkers([]);
+ } catch (_) {}
  }
 
  chartRef.current.timeScale().fitContent();
