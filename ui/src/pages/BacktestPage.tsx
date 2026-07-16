@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
-import { createChart, type IChartApi, type ISeriesApi, LineStyle } from 'lightweight-charts';
+import { createChart, type IChartApi, type ISeriesApi, LineStyle, CrosshairMode, ColorType } from 'lightweight-charts';
 import {
  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
  ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
@@ -551,25 +551,69 @@ function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result:
  if (!containerRef.current) return;
  try {
  const chart = createChart(containerRef.current, {
- layout: { background: { color: 'transparent' }, textColor: '#8b8b8b', attributionLogo: false },
- grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
- crosshair: { mode: 1 },
- rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.1, bottom: 0.15 }, mode: 1 },
- timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true },
+ layout: {
+ background: { type: ColorType.Solid, color: 'transparent' },
+ textColor: '#9ca3af',
+ attributionLogo: false,
+ },
+ grid: {
+ vertLines: { color: 'rgba(255,255,255,0.03)' },
+ horzLines: { color: 'rgba(255,255,255,0.05)' },
+ },
+ crosshair: {
+ mode: CrosshairMode.Normal,
+ vertLine: { width: 1, color: 'rgba(255,255,255,0.1)' },
+ },
+ rightPriceScale: {
+ borderColor: 'rgba(255,255,255,0.05)',
+ scaleMargins: { top: 0.1, bottom: 0.15 },
+ },
+ timeScale: {
+ borderColor: 'rgba(255,255,255,0.05)',
+ timeVisible: false,
+ },
  autoSize: true,
  });
  chartRef.current = chart;
- strategySeriesRef.current = chart.addAreaSeries({ topColor: 'rgba(193,39,45,0.3)', bottomColor: 'rgba(193,39,45,0.02)', lineColor: '#c1272d', lineWidth: 3 });
- benchmarkSeriesRef.current = chart.addLineSeries({ color: 'rgba(255,255,255,0.25)', lineWidth: 2, lineStyle: LineStyle.Dashed });
+
+ // Strategy series — default colors, refreshed dynamically in Effect 2
+ const series = chart.addAreaSeries({
+ topColor: 'rgba(193,39,45,0.3)',
+ bottomColor: 'rgba(193,39,45,0.02)',
+ lineColor: '#c1272d',
+ lineWidth: 2,
+ });
+ strategySeriesRef.current = series;
+
+ // Reference lines at key percentages
+ [0, 5, -5, 10, -10, 15, -15, 20, -20].forEach(price => {
+ series.createPriceLine({
+ price,
+ color: price === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)',
+ lineStyle: LineStyle.Dotted,
+ lineWidth: 1,
+ axisLabelVisible: true,
+ });
+ });
+
+ benchmarkSeriesRef.current = chart.addLineSeries({
+ color: 'rgba(255,255,255,0.25)',
+ lineWidth: 2,
+ lineStyle: LineStyle.Dashed,
+ });
  } catch (e) { console.error('EquityCurveChart creation failed:', e); }
  return () => { isMounted.current = false; try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
  // eslint-disable-next-line react-hooks/exhaustive-deps
  }, []);
 
- // EFFECT 2: Update data — percentage returns
+ // EFFECT 2: Update data + dynamically adjust colors
  useEffect(() => {
  if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
- if (!result?.equity_curve?.length) { strategySeriesRef.current.setData([]); benchmarkSeriesRef.current.setData([]); return; }
+ if (!result?.equity_curve?.length) {
+ strategySeriesRef.current.setData([]);
+ benchmarkSeriesRef.current.setData([]);
+ return;
+ }
 
  // Equity curve — show P&L as percentage change from initial capital.
  // This makes changes visible even when equity is mostly flat (cash periods).
@@ -583,6 +627,15 @@ function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result:
  strategySeriesRef.current.setData(
  eqNum.map(p => ({ time: p.time, value: Number(((p.value - base) / base * 100).toFixed(2)) }))
  );
+
+ // Dynamic colors: red for positive (中国红涨), green for negative (中国绿跌)
+ const isPositive = result.total_return >= 0;
+ strategySeriesRef.current.applyOptions({
+ topColor: isPositive ? 'rgba(193,39,45,0.3)' : 'rgba(22,163,74,0.3)',
+ bottomColor: isPositive ? 'rgba(193,39,45,0.02)' : 'rgba(22,163,74,0.02)',
+ lineColor: isPositive ? '#c1272d' : '#16a34a',
+ });
+
  // No benchmark — user explicitly asked to remove stock price comparison
  benchmarkSeriesRef.current.setData([]);
  // Trade markers
@@ -626,8 +679,13 @@ function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result:
  <BarChart3 size={14} className="text-violet-400" />
  <span className="text-sm font-bold text-white">收益曲线</span>
  <span className="flex items-center gap-1 text-xs ml-auto">
- <span className="w-3 h-0.5 rounded-full" style={{ background: "#c1272d" }} />
- <span style={{ color: "var(--text-tertiary)" }}>策略P&amp;L %</span>
+ <span
+ className="w-3 h-0.5 rounded-full"
+ style={{
+ background: result && result.total_return >= 0 ? '#c1272d' : '#16a34a',
+ }}
+ />
+ <span style={{ color: 'var(--text-tertiary)' }}>策略P&amp;L %</span>
  </span>
  <span className="flex items-center gap-1 text-xs">
  <span className="w-2 h-2 rounded-full bg-emerald-500" />
