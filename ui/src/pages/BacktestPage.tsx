@@ -635,15 +635,17 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  // DEBUG: find Sep 30 and log surrounding equity curve data
  const sep30 = eqNum.findIndex(p => String(p.time).includes("2024-09-30"));
  if (sep30 >= 0) {
-   console.log("[EQ DEBUG] equity data around 2024-09-30:");
    const start = Math.max(0, sep30 - 3);
    const end = Math.min(eqNum.length - 1, sep30 + 3);
    const b0 = eqNum[0]?.value || 100000;
+   let logLines = "[EQ DEBUG] equity data around 2024-09-30:\\n";
    for (let d = start; d <= end; d++) {
      const pct = ((eqNum[d].value - b0) / b0 * 100).toFixed(4);
-     console.log("  [" + d + "] " + eqNum[d].time + " val=" + eqNum[d].value + " pct=" + pct + "%");
+     logLines += "  [" + d + "] " + eqNum[d].time + " val=" + eqNum[d].value + " pct=" + pct + "%\\n";
    }
-   console.log("[EQ DEBUG] total_return=", result.total_return);
+   logLines += "[EQ DEBUG] total_return=" + result.total_return + "\\n";
+   logLines += "[EQ DEBUG] initialCapital=" + initialCapital + "\\n";
+   localStorage.setItem("stockmate_eq_debug", logLines);
  }
  const firstVal = eqNum.length > 0 ? eqNum[0].value : initialCapital;
  const base = firstVal > 0 ? firstVal : 1;
