@@ -554,7 +554,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  layout: { background: { color: 'transparent' }, textColor: '#8b8b8b', attributionLogo: false },
  grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
  crosshair: { mode: 1 },
- rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.1, bottom: 0.15 } },
+ rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.1, bottom: 0.15 }, mode: 1 },
  timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true },
  autoSize: true,
  });
@@ -571,27 +571,24 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
  if (!result?.equity_curve?.length) { strategySeriesRef.current.setData([]); benchmarkSeriesRef.current.setData([]); return; }
 
- // Strategy: normalize to percentage (base 100)
- const firstEq = result.equity_curve[0]?.value ?? initialCapital;
- const factor = firstEq > 0 ? 100 / firstEq : 1;
- strategySeriesRef.current.setData(
- result.equity_curve.map(p => ({ time: p.date as any, value: Number((p.value * factor).toFixed(2)) }))
- );
+ // Equity curve — display absolute values with benchmark normalization
+ const numEq = result.equity_curve.map(p => ({ time: p.date as any, value: Number(p.value) }));
+ strategySeriesRef.current.setData(numEq);
 
- // Benchmark buy-and-hold: percentage from first close
+ // Benchmark buy-and-hold on same absolute scale
  const firstPrice = Number(quotes?.[0]?.close ?? 0);
- if (quotes && quotes.length > 0 && firstPrice > 0) {
+ const firstEqVal = Number(result.equity_curve[0]?.value ?? initialCapital);
+ const shares = firstPrice > 0 && firstEqVal > 0 ? firstEqVal / firstPrice : 0;
+ if (shares > 0 && quotes && quotes.length > 0) {
  benchmarkSeriesRef.current.setData(
  result.equity_curve.map((p, i) => {
  const q = quotes[i];
- const pct = q ? ((Number(q.close) - firstPrice) / firstPrice) * 100 : 0;
- return { time: p.date as any, value: Number((100 + pct).toFixed(2)) };
+ return { time: p.date as any, value: shares * Number(q.close) };
  })
  );
  } else {
- benchmarkSeriesRef.current.setData(result.equity_curve.map(p => ({ time: p.date as any, value: 100 })));
+ benchmarkSeriesRef.current.setData(numEq);
  }
-
  // Trade markers
  if (result.trades?.length) {
  const markers = result.trades.filter(t => t.date && t.type).map(t => ({
