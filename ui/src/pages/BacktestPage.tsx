@@ -50,6 +50,7 @@ interface TradeRecord {
  price: number;
  shares: number;
  profit: number;
+ capital?: number;
 }
 
 interface BacktestResult {
@@ -284,7 +285,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  lastBuyDay = i;
  buyExecIdx = execIdx;
  avgCost = execPrice;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0 });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0, capital: Number((buyAmount).toFixed(2)) });
  }
  } else if (signal === 'sell' && shares > 0) {
  // T+1 check
@@ -297,7 +298,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const profit = net - (avgCost * shares);
  const profitPct = avgCost > 0 ? (execPrice - avgCost) / avgCost * 100 : 0;
  capital = net;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit: profitPct });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit: profitPct, capital: Number(net.toFixed(2)) });
  shares = 0;
  }
 
@@ -322,7 +323,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const profit = net - cost;
  const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
  capital = net;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price, shares, profit: profitPct });
+ trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price, shares, profit: profitPct, capital: Number(net.toFixed(2)) });
  shares = 0;
  }
  }
@@ -864,6 +865,7 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  <th className="text-right py-2 px-2">价格</th>
  <th className="text-right py-2 px-2">数量</th>
  <th className="text-right py-2 px-2">盈亏</th>
+<th className="text-right py-2 px-2">资金</th>
  </tr>
  </thead>
  <tbody>
@@ -886,6 +888,9 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  ) : (
  <span className=" ">—</span>
  )}
+ </td>
+ <td className="text-right py-2 px-2 font-mono-nums text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+ {trade.capital != null ? `¥${Number(trade.capital).toLocaleString()}` : '—'}
  </td>
  </tr>
  ))}
@@ -1215,9 +1220,10 @@ useEffect(() => {
             days: backtestDays,
             period: 'day',
           }).then((result: any) => {
+          const eqMap = new Map<string, number>((result.equity_curve || []).map(([date, val]: [string, number]) => [date, Number(val)]));
           const ts = (result.trades || []).flatMap((t: any, i: number) => [
-            { index: i*2, date: t.entry_date||t.exit_date, type: 'buy' as const, price: Number(t.entry_price||0), shares: 100, profit: 0 },
-            { index: i*2+1, date: t.exit_date||t.entry_date, type: 'sell' as const, price: Number(t.exit_price||t.entry_price||0), shares: 100, profit: t.pnl_pct??(t.pnl!=null?Number(t.pnl)*100:null) },
+            { index: i*2, date: t.entry_date||t.exit_date, type: 'buy' as const, price: Number(t.entry_price||0), shares: 100, profit: 0, capital: eqMap.get(t.entry_date||t.exit_date) },
+            { index: i*2+1, date: t.exit_date||t.entry_date, type: 'sell' as const, price: Number(t.exit_price||t.entry_price||0), shares: 100, profit: t.pnl_pct??(t.pnl!=null?Number(t.pnl)*100:null), capital: eqMap.get(t.exit_date||t.entry_date) },
           ]);
           const sellT = ts.filter((t: any) => t.type === 'sell');
           const wins = sellT.filter((t: any) => t.profit > 0);
@@ -1240,7 +1246,7 @@ useEffect(() => {
             loss_trades: result.trades?.filter((t: any) => t.pnl <= 0).length || 0,
             trades: ts,
               monthly_returns: result.monthly_returns || [],
-              equity_curve: (result.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: val })),
+              equity_curve: (result.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: Number(val) })),
               signal_count: result.trades?.length || 0,
               avg_holding_days: (() => {
                 try {
