@@ -862,9 +862,9 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  </tr>
  </thead>
  <tbody>
- {trades.map((trade, i) => (
+ {trades.slice().reverse().map((trade, i) => (
  <tr key={trade.index} className={i % 2 === 0 ? 'bg-white/[0.02]' : ''}>
- <td className="py-2 px-2 font-mono-nums">{trade.index}</td>
+ <td className="py-2 px-2 font-mono-nums">{trades.length - i}</td>
  <td className="py-2 px-2 ">{trade.date}</td>
  <td className="py-2 px-2">
  <span className={`text-xs px-2 py-0.5 rounded-full ${trade.type === 'buy' ? 'bg-emerald-500/20 text-[hsl(var(--price-up))]' : 'bg-rose-500/20 text-[hsl(var(--price-down))]'}`}>
