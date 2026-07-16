@@ -578,7 +578,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  },
  rightPriceScale: {
  borderColor: 'rgba(255,255,255,0.05)',
- scaleMargins: { top: 0.1, bottom: 0.15 },
+ scaleMargins: { top: 0.03, bottom: 0.05 },
  },
  timeScale: {
  borderColor: 'rgba(255,255,255,0.05)',
@@ -600,18 +600,8 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  });
  strategySeriesRef.current = series;
 
- // Reference lines at key percentages
- [0, 5, -5, 10, -10, 15, -15, 20, -20].forEach(price => {
- series.createPriceLine({
- price,
- color: price === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.06)',
- lineStyle: LineStyle.Dotted,
- lineWidth: 1,
- axisLabelVisible: true,
- });
- });
 
- benchmarkSeriesRef.current = chart.addLineSeries({
+benchmarkSeriesRef.current = chart.addLineSeries({
  color: 'rgba(255,255,255,0.25)',
  lineWidth: 2,
  lineStyle: LineStyle.Dashed,
