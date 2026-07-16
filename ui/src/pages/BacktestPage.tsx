@@ -605,11 +605,9 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
 
  // Stock price overlay
  stockSeriesRef.current = chart.addLineSeries({
- priceScaleId: 'stock',
  color: 'rgba(59,130,246,0.4)',
  lineWidth: 1,
  });
- try { chart.priceScale('stock').applyOptions({ scaleMargins: { top: 0.4, bottom: 0.15 }, borderColor: 'rgba(59,130,246,0.15)' }); } catch (_) {}
  } catch (e) { console.error('EquityCurveChart creation failed:', e); }
  return () => { isMounted.current = false; try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
  // eslint-disable-next-line react-hooks/exhaustive-deps
