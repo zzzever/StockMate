@@ -572,6 +572,9 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  timeScale: {
  borderColor: 'rgba(255,255,255,0.05)',
  timeVisible: false,
+ fixLeftEdge: true,
+ fixRightEdge: true,
+ barSpacing: 6,
  },
  autoSize: true,
  });
