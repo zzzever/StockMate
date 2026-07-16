@@ -632,6 +632,19 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  time: p.date as any,
  value: Number(p.value),
  }));
+ // DEBUG: find Sep 30 and log surrounding equity curve data
+ const sep30 = eqNum.findIndex(p => String(p.time).includes("2024-09-30"));
+ if (sep30 >= 0) {
+   console.log("[EQ DEBUG] equity data around 2024-09-30:");
+   const start = Math.max(0, sep30 - 3);
+   const end = Math.min(eqNum.length - 1, sep30 + 3);
+   const b0 = eqNum[0]?.value || 100000;
+   for (let d = start; d <= end; d++) {
+     const pct = ((eqNum[d].value - b0) / b0 * 100).toFixed(4);
+     console.log("  [" + d + "] " + eqNum[d].time + " val=" + eqNum[d].value + " pct=" + pct + "%");
+   }
+   console.log("[EQ DEBUG] total_return=", result.total_return);
+ }
  const firstVal = eqNum.length > 0 ? eqNum[0].value : initialCapital;
  const base = firstVal > 0 ? firstVal : 1;
  // Strategy: percentage P&L (0 = starting capital, +10 = 10% profit)
