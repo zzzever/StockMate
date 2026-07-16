@@ -587,11 +587,11 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  if (result.trades?.length) {
  const markers = result.trades.map(t => ({
  time: t.date as any,
- position: t.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
+ position: 'inBar' as const,
  shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
  color: t.type === 'buy' ? '#c1272d' : '#3b82f6',
  text: t.type === 'buy' ? 'B' : 'S',
- size: 1,
+ size: 1.5,
  }));
  strategySeriesRef.current.setMarkers(markers);
  } else {
