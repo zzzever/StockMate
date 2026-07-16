@@ -547,8 +547,12 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
 
  // EFFECT 1: Create chart ONCE on mount, NEVER recreate
  useEffect(() => {
+ console.log('[EF1] mount');
  isMounted.current = true;
- if (!containerRef.current) return;
+ if (!containerRef.current) {
+ console.log('[EF1] no container');
+ return;
+ }
  try {
  const chart = createChart(containerRef.current, {
  layout: { background: { color: 'transparent' }, textColor: '#9e9a92', attributionLogo: false },
@@ -568,8 +572,18 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
 
  // EFFECT 2: Update data when result changes
  useEffect(() => {
- if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
- if (!result?.equity_curve?.length) { strategySeriesRef.current.setData([]); benchmarkSeriesRef.current.setData([]); return; }
+ console.log('[EF2] triggered, isMounted=', isMounted.current, 'chartRef=', !!chartRef.current);
+ if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) {
+ console.log('[EF2] SKIP - not ready');
+ return;
+ }
+ if (!result?.equity_curve?.length) {
+ console.log('[EF2] no equity_curve');
+ strategySeriesRef.current.setData([]);
+ benchmarkSeriesRef.current.setData([]);
+ return;
+ }
+ console.log('[EF2] equity_curve len=', result.equity_curve.length, 'trades=', result.trades?.length);
  const sd = result.equity_curve.map(p => ({ time: p.date as any, value: p.value }));
  const firstPrice = Number(quotes?.[0]?.close ?? 0);
  let bd: { time: any; value: number }[];
@@ -587,7 +601,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
 
  // Add trade markers to the strategy series
  if (result.trades?.length) {
- const markers = result.trades.map(t => ({
+ const markers = result.trades.filter(t => t.date && t.type).map(t => ({
  time: t.date as any,
  position: t.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
  shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
@@ -595,6 +609,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  text: t.type === 'buy' ? 'B' : 'S',
  size: 1.5,
  }));
+ console.log('[EF2] markers count=', markers.length, 'first=', markers[0]);
  try {
  strategySeriesRef.current.setMarkers(markers);
  } catch (e) {
