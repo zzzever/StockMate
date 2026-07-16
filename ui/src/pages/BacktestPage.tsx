@@ -268,42 +268,57 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const trades: TradeRecord[] = [];
  const equityCurve: { date: string; value: number }[] = [];
 
+ let pendingBuy = { capital: 0, shares: 0, price: 0, date: '' };
+ let pendingSell = { capital: 0, price: 0, date: '', pnl: 0, pnlPct: 0, shares: 0 };
  for (let i = 0; i < quotes.length; i++) {
  const day = quotes[i];
  const close = Number(day.close);
  const signal = signals[i];
 
- if (signal === 'buy' && shares === 0 && capital > 0) {
- // Trade at next day's open (9:30) — the only exact price we have in daily data
- const execIdx = Math.min(i + 1, quotes.length - 1);
- const execPrice = Number(quotes[execIdx].open) * (1 + params.slippage);
- const buyAmount = capital * (1 - params.commissionRate);
- const buyShares = execPrice > 0 ? Math.floor(buyAmount / execPrice) : 0;
- if (buyShares > 0) {
- capital = buyAmount - buyShares * execPrice;
- shares = buyShares;
- lastBuyDay = i;
- buyExecIdx = execIdx;
- avgCost = execPrice;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'buy', price: execPrice, shares, profit: 0, capital: Number((buyAmount).toFixed(2)) });
+ // 1. Apply deferred entry from previous bar
+ if (pendingBuy.shares > 0 && pendingBuy.price > 0) {
+   capital = pendingBuy.capital;
+   shares = pendingBuy.shares;
+   avgCost = pendingBuy.price;
+   trades.push({ index: trades.length + 1, date: pendingBuy.date, type: 'buy', price: pendingBuy.price, shares, profit: 0, capital: Number((pendingBuy.capital + shares * pendingBuy.price).toFixed(2)) });
+   pendingBuy = { capital: 0, shares: 0, price: 0, date: '' };
  }
- } else if (signal === 'sell' && shares > 0) {
- // T+1 check
+
+ // 2. Apply deferred exit from previous bar
+ if (pendingSell.shares > 0 && pendingSell.price > 0) {
+   capital = pendingSell.capital;
+   const exitShares = pendingSell.shares;
+   trades.push({ index: trades.length + 1, date: pendingSell.date, type: 'sell', price: pendingSell.price, shares: exitShares, profit: pendingSell.pnlPct, capital: Number(pendingSell.capital.toFixed(2)) });
+   shares = 0;
+   pendingSell = { capital: 0, price: 0, date: '', pnl: 0, pnlPct: 0, shares: 0 };
+ }
+
+ // 4. Entry checks (signal fires, defer to next bar)
+ if (signal === 'buy' && shares === 0 && capital > 0 && i + 1 < quotes.length) {
+   const execPrice = Number(quotes[i + 1].open) * (1 + params.slippage);
+   if (execPrice > 0) {
+     const buyAmount = capital * (1 - params.commissionRate);
+     const buyShares = Math.floor(buyAmount / execPrice);
+     if (buyShares > 0) {
+       pendingBuy = { capital: buyAmount - buyShares * execPrice, shares: buyShares, price: execPrice, date: quotes[i + 1].date };
+       lastBuyDay = i;
+       buyExecIdx = i + 1;
+     }
+   }
+ } else if (signal === 'sell' && shares > 0 && !pendingSell.shares) {
+ // T+1 check — defer exit to next bar
  const sellExecIdx = Math.min(i + 1, quotes.length - 1);
  if (lastBuyDay < 0 || sellExecIdx <= buyExecIdx) continue;
- const execIdx = sellExecIdx;
- const execPrice = Number(quotes[execIdx].open) * (1 - params.slippage);
+ const execPrice = Number(quotes[sellExecIdx].open) * (1 - params.slippage);
  const gross = shares * execPrice;
  const net = gross * (1 - params.commissionRate);
  const profit = net - (avgCost * shares);
  const profitPct = avgCost > 0 ? (execPrice - avgCost) / avgCost * 100 : 0;
- capital = net;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price: execPrice, shares, profit: profitPct, capital: Number(net.toFixed(2)) });
- shares = 0;
+ pendingSell = { capital: net, price: execPrice, date: quotes[sellExecIdx].date, pnl: profitPct, pnlPct: profitPct, shares: shares };
  }
 
  // 风控检查：止损/止盈/最大持仓
- if (shares > 0 && lastBuyDay >= 0 && i > lastBuyDay) {
+ if (shares > 0 && lastBuyDay >= 0 && i > lastBuyDay && !pendingSell.shares) {
  const holdingDays = i - lastBuyDay;
  const unrealizedPnl = avgCost > 0 ? (close - avgCost) / avgCost : 0;
  let riskSell = false;
@@ -314,17 +329,12 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  } else if (maxHolding > 0 && holdingDays >= maxHolding) {
  riskSell = true;
  }
- if (riskSell) {
+ if (riskSell && !pendingSell.shares) {
  const execIdx = Math.min(i + 1, quotes.length - 1);
  const price = Number(quotes[execIdx].open) * (1 - params.slippage);
  const gross = shares * price;
  const net = gross * (1 - params.commissionRate);
- const cost = avgCost * shares;
- const profit = net - cost;
- const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
- capital = net;
- trades.push({ index: trades.length + 1, date: quotes[execIdx].date, type: 'sell', price, shares, profit: profitPct, capital: Number(net.toFixed(2)) });
- shares = 0;
+ pendingSell = { capital: net, price, date: quotes[execIdx].date, pnl: net - avgCost * shares, pnlPct: avgCost > 0 ? ((price - avgCost) / avgCost * 100) : 0, shares: shares };
  }
  }
 
