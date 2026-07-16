@@ -588,11 +588,11 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  if (result.trades?.length) {
  const markers = result.trades.map(t => ({
  time: t.date as any,
- position: 'inBar' as const,
+ position: t.type === 'buy' ? 'belowBar' as const : 'aboveBar' as const,
  shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
  color: t.type === 'buy' ? '#22c55e' : '#ef4444',
  text: t.type === 'buy' ? 'B' : 'S',
- size: 2,
+ size: 1.5,
  }));
  strategySeriesRef.current.setMarkers(markers);
  } else {
@@ -1132,37 +1132,52 @@ useEffect(() => {
             days: backtestDays,
             period: 'day',
           }).then((result: any) => {
-            setResult({
-              total_return: result.total_return || 0,
-              annual_return: result.annual_return || result.total_return || 0,
-              max_drawdown: result.max_drawdown || 0,
-              sharpe_ratio: result.sharpe_ratio || 0,
-              win_rate: (result.win_rate || 0) * 100,
-              trade_count: result.trades?.length || 0,
-              profit_trades: result.trades?.filter((t: any) => t.pnl > 0).length || 0,
-              loss_trades: result.trades?.filter((t: any) => t.pnl <= 0).length || 0,
-              trades: (result.trades || []).flatMap((t: any, i: number) => [
-                {
-                  index: i * 2, date: t.entry_date || t.exit_date,
-                  type: 'buy' as const,
-                  price: Number(t.entry_price || 0),
-                  shares: 100,
-                  profit: 0,
-                },
-                {
-                  index: i * 2 + 1, date: t.exit_date || t.entry_date,
-                  type: 'sell' as const,
-                  price: Number(t.exit_price || t.entry_price || 0),
-                  shares: 100,
-                  profit: t.pnl_pct ?? (t.pnl != null ? Number(t.pnl) * 100 : null),
-                },
-              ]),
+          const ts = (result.trades || []).flatMap((t: any, i: number) => [
+            { index: i*2, date: t.entry_date||t.exit_date, type: 'buy' as const, price: Number(t.entry_price||0), shares: 100, profit: 0 },
+            { index: i*2+1, date: t.exit_date||t.entry_date, type: 'sell' as const, price: Number(t.exit_price||t.entry_price||0), shares: 100, profit: t.pnl_pct??(t.pnl!=null?Number(t.pnl)*100:null) },
+          ]);
+          const sellT = ts.filter((t: any) => t.type === 'sell');
+          const wins = sellT.filter((t: any) => t.profit > 0);
+          const losses = sellT.filter((t: any) => t.profit <= 0);
+          const totProfit = wins.reduce((s: number, t: any) => s + t.profit, 0);
+          const totLoss = Math.abs(losses.reduce((s: number, t: any) => s + t.profit, 0));
+          let maxWS=0, maxLS=0, cW=0, cL=0;
+          for (const t of sellT) {
+            if (t.profit > 0) { cW++; cL=0; maxWS=Math.max(maxWS,cW); }
+            else if (t.profit <= 0) { cL++; cW=0; maxLS=Math.max(maxLS,cL); }
+          }
+          setResult({
+            total_return: result.total_return || 0,
+            annual_return: result.annual_return || result.total_return || 0,
+            max_drawdown: result.max_drawdown || 0,
+            sharpe_ratio: result.sharpe_ratio || 0,
+            win_rate: (result.win_rate || 0) * 100,
+            trade_count: result.trades?.length || 0,
+            profit_trades: result.trades?.filter((t: any) => t.pnl > 0).length || 0,
+            loss_trades: result.trades?.filter((t: any) => t.pnl <= 0).length || 0,
+            trades: ts,
               monthly_returns: result.monthly_returns || [],
               equity_curve: (result.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: val })),
-              signal_count: result.signal_count ?? result.trades?.length ?? 0,
-              avg_holding_days: result.avg_holding_days ?? null,
-              max_consecutive_wins: result.max_consecutive_wins ?? null,
-              max_consecutive_losses: result.max_consecutive_losses ?? null,
+              signal_count: result.trades?.length || 0,
+              avg_holding_days: (() => {
+                try {
+                  const pairs: any[] = [];
+                  for (let ti = 0; ti < (result.trades || []).length; ti++) {
+                    const t = result.trades[ti];
+                    if (t.entry_date && t.exit_date) {
+                      const d1 = new Date(t.entry_date).getTime();
+                      const d2 = new Date(t.exit_date).getTime();
+                      if (d1 && d2) pairs.push((d2 - d1) / (1000*60*60*24));
+                    }
+                  }
+                  return pairs.length > 0 ? pairs.reduce((a: number, b: number) => a + b, 0) / pairs.length : null;
+                } catch { return null; }
+              })(),
+              max_consecutive_wins: maxWinStreak || null,
+              max_consecutive_losses: maxLossStreak || null,
+              profit_factor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0,
+              payoff_ratio: (() => { const aw = wins.length > 0 ? totalProfit / wins.length : 0; const al = losses.length > 0 ? totalLoss / losses.length : 0; return al > 0 ? aw / al : aw > 0 ? Infinity : 0; })(),
+              expectancy: sellTrades.length > 0 ? (totalProfit - totalLoss) / sellTrades.length : null,
               profit_factor: result.profit_factor ?? null,
               payoff_ratio: result.payoff_ratio ?? null,
               expectancy: result.expectancy ?? null,
