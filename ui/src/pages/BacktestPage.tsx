@@ -94,6 +94,7 @@ interface StrategyDef {
  id: string;
  name: string;
  description: string;
+ code?: string;
  icon: React.ElementType;
 }
 
@@ -112,12 +113,12 @@ interface SavedResult {
 // ───────────────────────────────────────────────
 
 const STRATEGIES: StrategyDef[] = [
- { id: 'ma_cross', name: '均线交叉', description: 'MA5/MA10 金叉买入，死叉卖出', icon: TrendingUp },
- { id: 'macd', name: 'MACD策略', description: 'DIF 上穿 DEA 买入，下穿卖出', icon: Activity },
- { id: 'rsi', name: 'RSI策略', description: 'RSI < 30 买入，> 70 卖出', icon: Gauge },
- { id: 'bollinger', name: '布林带', description: '触及下轨买入，触及上轨卖出', icon: CircleDashed },
- { id: 'dual_ma', name: '双均线', description: 'MA10/MA30 趋势跟踪', icon: GitBranch },
- { id: 'sslang_rule', name: 'SSLang 规则', description: '使用交易规则页编写的自定义规则', icon: Code },
+ { id: 'ma_cross', name: '均线交叉', description: 'MA5/MA10 金叉买入，死叉卖出', code: 'cross(sma(5,i), sma(10,i))', icon: TrendingUp },
+ { id: 'macd', name: 'MACD策略', description: 'DIF 上穿 DEA 买入，下穿卖出', code: 'cross(macddiff(i), macddea(i))', icon: Activity },
+ { id: 'rsi', name: 'RSI策略', description: 'RSI < 30 买入，> 70 卖出', code: 'rsi(14,i) < 30', icon: Gauge },
+ { id: 'bollinger', name: '布林带', description: '触及下轨买入，触及上轨卖出', code: 'close(i) <= boll_lower(20,i)', icon: CircleDashed },
+ { id: 'dual_ma', name: '双均线', description: 'MA10/MA30 趋势跟踪', code: 'cross(sma(10,i), sma(30,i))', icon: GitBranch },
+ { id: 'sslang_rule', name: 'SSLang 规则', description: '使用交易规则页编写的自定义规则', code: '自定义 SSLang', icon: Code },
 ];
 
 const DEFAULT_PARAMS: Record<string, StrategyParams> = {
@@ -1409,7 +1410,8 @@ useEffect(() => {
  <Icon size={16} className={selected ? 'text-[hsl(var(--swiss-accent))]' : ''} />
  <span className={`text-sm font-medium ${selected ? '' : ''}`}>{s.name}</span>
  </div>
- <div className="text-xs mt-1 ml-6">{s.description}</div>
+ <div className="text-xs mt-1 ml-6" style={{ color: 'var(--text-secondary)' }}>{s.description}</div>
+ <div className="text-[11px] mt-0.5 ml-6 font-mono" style={{ color: 'var(--text-tertiary)' }}>{s.code}</div>
  </button>
  );
  })}
