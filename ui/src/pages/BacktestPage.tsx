@@ -1057,7 +1057,7 @@ useEffect(() => {
       const raw = localStorage.getItem('stockmate_trading_rules_v2');
       const savedRules = raw ? JSON.parse(raw) : [];
       const codeRules = savedRules.filter((r: any) => r.code && (!r.kind || r.kind === 'code'));
-      const templates = RULE_TEMPLATES.filter((r: any) => r.code && r.kind === 'code').map((r: any) => ({ ...r, direction: r.direction || 'both' }));
+      const templates = RULE_TEMPLATES.filter((r: any) => r.code && r.kind === 'code').map((r: any) => ({ ...r, direction: r.direction || r.signal || 'both' }));
       const allRules = [...codeRules, ...templates.filter(t => !codeRules.find((s: any) => s.id === t.id))];
       setAvailableRules(allRules);
     } catch {}

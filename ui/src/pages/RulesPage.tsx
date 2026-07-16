@@ -14,7 +14,7 @@ import { Code, FileCode, Plus, X, Check, Pencil } from 'lucide-react';
 const STORAGE_KEY_RULES = 'stockmate_trading_rules_v2';
 
 function loadRules(): TradingRule[] {
-  try { const raw = localStorage.getItem(STORAGE_KEY_RULES); if (raw) { const parsed = JSON.parse(raw); return parsed.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex ?? i + 1, color: ruleColor(r.markerIndex ?? i) })); } return RULE_TEMPLATES; } catch (e) { console.warn('Failed to load rules:', e); return RULE_TEMPLATES; }
+  try { const raw = localStorage.getItem(STORAGE_KEY_RULES); if (raw) { const parsed = JSON.parse(raw); return parsed.map((r: any, i: number) => ({ ...r, markerIndex: r.markerIndex ?? i + 1, color: ruleColor(r.markerIndex ?? i), direction: r.direction || r.signal || 'both' })); } return RULE_TEMPLATES.map((r: any) => ({ ...r, direction: r.direction || r.signal || 'both' })); } catch (e) { console.warn('Failed to load rules:', e); return RULE_TEMPLATES; }
 }
 function saveRules(rules: TradingRule[]) { try { localStorage.setItem(STORAGE_KEY_RULES, JSON.stringify(rules)); window.dispatchEvent(new Event('stockmate:rules-changed')); } catch (e) { console.warn('Failed to save rules:', e); } }
 
