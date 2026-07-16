@@ -837,27 +837,18 @@ function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
 }
 
 function TradeTable({ trades }: { trades: TradeRecord[] }) {
- const [expanded, setExpanded] = useState(false);
  if (!trades || trades.length === 0) return null;
 
  return (
  <div
- className="glass-card p-4"
+ className="glass-card p-3"
  >
- <button
- onClick={() => setExpanded(!expanded)}
- className="flex items-center gap-2 w-full mb-2"
- >
- {expanded ? <ChevronDown size={16} className="" /> : <ChevronRight size={16} className="" />}
+ <div className="flex items-center gap-2 mb-2">
  <Hash size={14} className="text-[hsl(var(--swiss-accent))]" />
- <span className="text-sm font-bold ">交易记录</span>
+ <span className="text-sm font-bold">交易记录</span>
  <span className="text-xs ml-1">({trades.length} 笔)</span>
- </button>
- {expanded && (
- <div
- className="overflow-hidden"
- >
- <div className="max-h-80 overflow-auto mt-2">
+ </div>
+ <div className="max-h-80 overflow-auto">
  <table className="w-full text-sm">
  <thead>
  <tr className="text-xs border-b border-slate-100 dark:border-slate-100 dark:border-white/5">
@@ -899,8 +890,6 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  </tbody>
  </table>
  </div>
- </div>
- )}
  </div>
  );
 }
@@ -1672,10 +1661,7 @@ useEffect(() => {
    </div>
 
    {/* 4. 交易记录 */}
-   <div className="glass-card p-3">
-     <div className="text-data-sm font-bold mb-2">交易记录 ({result.trades?.length || 0} 笔)</div>
-     <TradeTable trades={result.trades} />
-   </div>
+   <TradeTable trades={result.trades} />
 
    {/* 5. 策略对比 */}
    {savedResults.length > 0 && (
