@@ -203,7 +203,10 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
         // 5. Mark-to-market equity
         // ----------------------------------------------------------------
         let equity = if position > Decimal::ZERO {
-            // Position is active: MTM = cash + position * (close - entry)
+            // Position is active: capital = original_capital - commission (cost NOT deducted)
+            // → capital - position * entry_price + position * q.close
+            //   = (orig_capital - commission) - cost + shares_value
+            //   = remaining_cash + current_position_value
             capital - position * entry_price + position * q.close
         } else {
             // No position (or pending entry not yet applied): equity = cash
