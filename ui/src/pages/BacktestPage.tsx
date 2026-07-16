@@ -1034,7 +1034,20 @@ export default function BacktestPage() {
  }, [stocks, code]);
  const stockId = stock?.id ?? code;
 
- const { data: quotes, isLoading: historyLoading, error: historyError } = useStockHistory(stockId, 1095);
+const [startDate, setStartDate] = useState('');
+const [endDate, setEndDate] = useState('');
+
+// Calculate how many days of history to fetch based on selected start date
+const backtestDays = useMemo(() => {
+  if (startDate) {
+    const from = new Date(startDate);
+    const now = new Date();
+    return Math.ceil((now.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 30;
+  }
+  return 1095;
+}, [startDate]);
+
+ const { data: quotes, isLoading: historyLoading, error: historyError } = useStockHistory(stockId, backtestDays);
 
  const [selectedStrategy, setSelectedStrategy] = useState('ma_cross');
  const [params, setParams] = useState<StrategyParams>(DEFAULT_PARAMS.ma_cross);
@@ -1066,8 +1079,6 @@ useEffect(() => {
   window.addEventListener('stockmate:rules-changed', load);
   return () => window.removeEventListener('stockmate:rules-changed', load);
 }, []);
-const [startDate, setStartDate] = useState('');
-const [endDate, setEndDate] = useState('');
 
 // Calculate days needed based on startDate
  const runTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
