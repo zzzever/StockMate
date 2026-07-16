@@ -537,7 +537,7 @@ function PercentInput({ label, value, min, max, step, onChange }: {
  );
 }
 
-function EquityCurveChart({ result, initialCapital, quotes }: { result: BacktestResult | null; initialCapital: number; quotes?: Quote[] }) {
+function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result: BacktestResult | null; initialCapital: number; quotes?: Quote[] }) {
  const containerRef = useRef<HTMLDivElement>(null);
  const chartRef = useRef<IChartApi | null>(null);
  const strategySeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
@@ -571,24 +571,20 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
  if (!result?.equity_curve?.length) { strategySeriesRef.current.setData([]); benchmarkSeriesRef.current.setData([]); return; }
 
- // Equity curve — display absolute values with benchmark normalization
- const numEq = result.equity_curve.map(p => ({ time: p.date as any, value: Number(p.value) }));
- strategySeriesRef.current.setData(numEq);
-
- // Benchmark buy-and-hold on same absolute scale
- const firstPrice = Number(quotes?.[0]?.close ?? 0);
- const firstEqVal = Number(result.equity_curve[0]?.value ?? initialCapital);
- const shares = firstPrice > 0 && firstEqVal > 0 ? firstEqVal / firstPrice : 0;
- if (shares > 0 && quotes && quotes.length > 0) {
- benchmarkSeriesRef.current.setData(
- result.equity_curve.map((p, i) => {
- const q = quotes[i];
- return { time: p.date as any, value: shares * Number(q.close) };
- })
+ // Equity curve — show P&L as percentage change from initial capital.
+ // This makes changes visible even when equity is mostly flat (cash periods).
+ const eqNum = result.equity_curve.map(p => ({
+ time: p.date as any,
+ value: Number(p.value),
+ }));
+ const firstVal = eqNum.length > 0 ? eqNum[0].value : initialCapital;
+ const base = firstVal > 0 ? firstVal : 1;
+ // Strategy: percentage P&L (0 = starting capital, +10 = 10% profit)
+ strategySeriesRef.current.setData(
+ eqNum.map(p => ({ time: p.time, value: Number(((p.value - base) / base * 100).toFixed(2)) }))
  );
- } else {
- benchmarkSeriesRef.current.setData(numEq);
- }
+ // No benchmark — user explicitly asked to remove stock price comparison
+ benchmarkSeriesRef.current.setData([]);
  // Trade markers
  if (result.trades?.length) {
  const markers = result.trades.filter(t => t.date && t.type).map(t => ({
@@ -630,12 +626,8 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  <BarChart3 size={14} className="text-violet-400" />
  <span className="text-sm font-bold text-white">收益曲线</span>
  <span className="flex items-center gap-1 text-xs ml-auto">
- <span className="w-3 h-0.5 bg-emerald-400 rounded-full" />
- <span className="text-zinc-400">策略净值</span>
- </span>
- <span className="flex items-center gap-1 text-xs">
- <span className="w-3 h-0.5 bg-zinc-500 rounded-full" />
- <span className="text-zinc-400">基准</span>
+ <span className="w-3 h-0.5 rounded-full" style={{ background: "#c1272d" }} />
+ <span style={{ color: "var(--text-tertiary)" }}>策略P&amp;L %</span>
  </span>
  <span className="flex items-center gap-1 text-xs">
  <span className="w-2 h-2 rounded-full bg-emerald-500" />
