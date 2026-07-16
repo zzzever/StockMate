@@ -276,7 +276,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const execIdx = Math.min(i + 1, quotes.length - 1);
  const execPrice = Number(quotes[execIdx].open) * (1 + params.slippage);
  const buyAmount = capital * (1 - params.commissionRate);
- const buyShares = Math.floor(buyAmount / execPrice);
+ const buyShares = execPrice > 0 ? Math.floor(buyAmount / execPrice) : 0;
  if (buyShares > 0) {
  capital = buyAmount - buyShares * execPrice;
  shares = buyShares;
@@ -303,7 +303,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  // 风控检查：止损/止盈/最大持仓
  if (shares > 0 && lastBuyDay >= 0 && i > lastBuyDay) {
  const holdingDays = i - lastBuyDay;
- const unrealizedPnl = (close - avgCost) / avgCost;
+ const unrealizedPnl = avgCost > 0 ? (close - avgCost) / avgCost : 0;
  let riskSell = false;
  if (stopLoss > 0 && unrealizedPnl <= -stopLoss / 100) {
  riskSell = true;
@@ -335,7 +335,7 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const final = equityCurve.at(-1)?.value ?? initial;
  const totalReturn = initial > 0 ? ((final - initial) / initial) * 100 : 0;
  const years = Math.max(quotes.length / 252, 0.1);
- const annualReturn = (Math.pow(final / initial, 1 / years) - 1) * 100;
+ const annualReturn = initial > 0 ? (Math.pow(final / initial, 1 / years) - 1) * 100 : 0;
 
  let maxDrawdown = 0;
  let peak = initial;
