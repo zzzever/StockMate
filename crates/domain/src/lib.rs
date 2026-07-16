@@ -787,7 +787,13 @@ mod tests {
             leading_stock: "NVDA".into(),
             leading_change: 5.12,
             fund_flow: None,
+            turnover: None,
+            change_5d: None,
+            change_1m: None,
+            leading_stock_code: "NVDA".into(),
             stock_count: None,
+            up_count: None,
+            down_count: None,
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: HotSector = serde_json::from_str(&json).unwrap();
@@ -805,7 +811,13 @@ mod tests {
             leading_stock: "Y".into(),
             leading_change: 2.0,
             fund_flow: None,
+            turnover: None,
+            change_5d: None,
+            change_1m: None,
+            leading_stock_code: "".into(),
             stock_count: None,
+            up_count: None,
+            down_count: None,
         };
         let _dbg = format!("{:?}", h);
         let _cloned = h.clone();
@@ -820,8 +832,8 @@ mod tests {
             id: "hs_001".into(),
             ticker: "600519".into(),
             name: "Kweichow Moutai".into(),
-            price: sample_decimal("1800.50"),
-            change: sample_decimal("15.20"),
+            price: 1800.50,
+            change: 15.20,
             change_percent: 0.85,
             volume: 2_000_000,
             turnover: Some(sample_decimal("3601000000")),
@@ -842,8 +854,8 @@ mod tests {
             id: "1".into(),
             ticker: "T".into(),
             name: "N".into(),
-            price: Decimal::ZERO,
-            change: Decimal::ZERO,
+            price: 0.0,
+            change: 0.0,
             change_percent: 0.0,
             volume: 0,
             turnover: None,
@@ -1022,10 +1034,10 @@ mod tests {
     fn support_resistance_roundtrip() {
         let original = SupportResistance {
             stock_id: "stock_001".into(),
-            supports: vec![sample_decimal("140.00"), sample_decimal("135.00")],
-            resistances: vec![sample_decimal("155.00"), sample_decimal("160.00")],
-            nearest_support: Some(sample_decimal("140.00")),
-            nearest_resistance: Some(sample_decimal("155.00")),
+            supports: vec![140.0, 135.0],
+            resistances: vec![155.0, 160.0],
+            nearest_support: Some(140.0),
+            nearest_resistance: Some(155.0),
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: SupportResistance = serde_json::from_str(&json).unwrap();
@@ -1079,10 +1091,10 @@ mod tests {
             ma_signals: vec!["ma5>ma10".into(), "ma10>ma20".into()],
             support_resistance: Some(SupportResistance {
                 stock_id: "stock_001".into(),
-                supports: vec![sample_decimal("140.00")],
-                resistances: vec![sample_decimal("160.00")],
-                nearest_support: Some(sample_decimal("140.00")),
-                nearest_resistance: Some(sample_decimal("160.00")),
+                supports: vec![140.0],
+                resistances: vec![160.0],
+                nearest_support: Some(140.0),
+                nearest_resistance: Some(155.0),
             }),
             generated_at: sample_datetime(),
         };
@@ -1424,7 +1436,7 @@ mod tests {
     fn hot_stock_default() {
         let h = HotStock::default();
         assert_eq!(h.id, "");
-        assert_eq!(h.price, Decimal::ZERO);
+        assert_eq!(h.price, 0.0);  // h.price is f64
     }
 
     #[test]

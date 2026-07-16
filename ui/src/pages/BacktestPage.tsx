@@ -1277,6 +1277,7 @@ useEffect(() => {
  setResult(res);
  } catch (e) {
  console.error('Backtest failed:', e);
+ setError(e instanceof Error ? e.message : '回测执行失败');
  } finally {
  setRunning(false);
  }
