@@ -129,10 +129,10 @@ mod tests {
     fn dummy_sr() -> SupportResistance {
         SupportResistance {
             stock_id: "TEST".into(),
-            supports: vec![Decimal::from(90u64)],
-            resistances: vec![Decimal::from(110u64)],
-            nearest_support: Some(Decimal::from(90u64)),
-            nearest_resistance: Some(Decimal::from(110u64)),
+            supports: vec![90.0],
+            resistances: vec![110.0],
+            nearest_support: Some(90.0),
+            nearest_resistance: Some(110.0),
         }
     }
 
@@ -259,10 +259,10 @@ mod tests {
         ];
         let sr = SupportResistance {
             stock_id: "TEST".into(),
-            supports: vec![Decimal::from(90u64)],
-            resistances: vec![Decimal::from(110u64)],
-            nearest_support: Some(Decimal::from(90u64)),
-            nearest_resistance: Some(Decimal::from(110u64)),
+            supports: vec![90.0],
+            resistances: vec![110.0],
+            nearest_support: Some(90.0),
+            nearest_resistance: Some(110.0),
         };
         let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
         assert_eq!(sig.action, SignalAction::Buy);
