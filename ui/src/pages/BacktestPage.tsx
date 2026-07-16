@@ -1545,98 +1545,50 @@ useEffect(() => {
  )}
 
  {result && (
- <div
- className="space-y-4"
- >
- {/* 信号结论卡片 */}
- {result && (
- <div className="glass-card p-4 mb-4">
- <div className="flex items-start justify-between">
- <div>
- <div className="flex items-center gap-2">
- <span className="text-lg font-black" style={{
- color: result.total_return > 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))'
- }}>
- {result.total_return > 0 ? '📈 买入信号' : '📉 卖出/观望'}
- </span>
- <span className="text-data-xs px-2 py-0.5 rounded-sm" style={{
- background: result.win_rate > 50 ? 'hsl(var(--price-up-bg))' : 'hsl(var(--price-down-bg))',
- color: result.win_rate > 50 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
- }}>
- 可信度 {result.win_rate.toFixed(0)}%
- </span>
- </div>
- <p className="text-data-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
- 累计收益 {result.total_return >= 0 ? '+' : ''}{result.total_return.toFixed(2)}% ·
- 最大回撤 {result.max_drawdown.toFixed(2)}% ·
- 夏普 {result.sharpe_ratio.toFixed(2)} ·
- 胜率 {result.win_rate.toFixed(1)}%
- </p>
- </div>
- <div className="text-right text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
- 共 {result.trade_count} 笔交易 · 数据 {result.equity_curve[0]?.date ?? '?'} ~ {result.equity_curve[result.equity_curve.length-1]?.date ?? '?'}
- </div>
- </div>
- <div className="flex items-center gap-4 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)' }}>
- <span>期望值 <b className="font-mono-nums" style={{ color: (result as any).expectancy >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{(result as any).expectancy?.toFixed(2) ?? '--'}</b></span>
- <span>盈亏比 <b className="font-mono-nums">{(result as any).payoff_ratio?.toFixed(2) ?? '--'}</b></span>
- <span>盈利因子 <b className="font-mono-nums">{(result as any).profit_factor?.toFixed(2) ?? '--'}</b></span>
- <span>平均持仓 <b className="font-mono-nums">{(result as any).avg_holding_days?.toFixed(0) ?? '--'} 天</b></span>
- <span>最大连盈 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{(result as any).max_consecutive_wins ?? '--'}</b></span>
- <span>最大连亏 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{(result as any).max_consecutive_losses ?? '--'}</b></span>
- </div>
- </div>
- )}
+ <div className="space-y-3">
+   {/* 1. 信号结论卡片 */}
+   <div className="glass-card p-3">
+     <div className="flex items-center">
+       <span className="text-lg mr-2">{result.total_return > 0 ? '📈' : '📉'}</span>
+       <span className="text-heading-sm font-extrabold" style={{ color: result.total_return > 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>
+         {result.total_return > 0 ? '买入信号' : '卖出/观望'}
+       </span>
+       <span className="text-data-xs ml-2 px-2 py-0.5 rounded-sm" style={{
+         background: result.win_rate > 50 ? 'hsl(var(--price-up-bg))' : 'hsl(var(--price-down-bg))',
+         color: result.win_rate > 50 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
+       }}>可信度 {result.win_rate?.toFixed(0) || 0}%</span>
+       <span className="ml-auto text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+         共 {result.trade_count || 0} 笔 · 数据 {result.equity_curve?.[0]?.date ?? '?'} ~ {result.equity_curve?.[result.equity_curve.length-1]?.date ?? '?'}
+       </span>
+     </div>
+   </div>
 
- {/* 收益指标卡片 */}
- <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
- <MetricCard
- label="总收益率"
- value={formatPct(result.total_return)}
- color={result.total_return >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}
- icon={BarChart3}
- />
- <MetricCard
- label="年化收益率"
- value={formatPct(result.annual_return)}
- color={result.annual_return >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}
- icon={TrendingUp}
- />
- <MetricCard
- label="最大回撤"
- value={formatPct(result.max_drawdown)}
- color="text-[hsl(var(--price-down))]"
- icon={Shield}
- />
- <MetricCard
- label="夏普比率"
- value={safeToFixed(result.sharpe_ratio, 2)}
- color={result.sharpe_ratio >= 1 ? 'text-cyan-400' : ''}
- icon={Activity}
- />
- <MetricCard
- label="胜率"
- value={`${safeToFixed(result.win_rate, 1)}%`}
- color="text-[hsl(var(--swiss-accent))]"
- icon={Target}
- />
- <MetricCard
- label="交易次数"
- value={`${result.trade_count}`}
- color=""
- suffix={`盈利 ${result.profit_trades} / 亏损 ${result.loss_trades}`}
- icon={Hash}
- />
- </div>
+   {/* 2. 紧凑指标卡片行 */}
+   <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+     <MetricCard label="总收益" value={formatPct(result.total_return)} color={result.total_return >= 0 ? 'price-up' : 'price-down'} icon={BarChart3} />
+     <MetricCard label="年化" value={formatPct(result.annual_return)} color={result.annual_return >= 0 ? 'price-up' : 'price-down'} icon={TrendingUp} />
+     <MetricCard label="夏普" value={safeToFixed(result.sharpe_ratio, 2)} color={result.sharpe_ratio >= 1 ? 'price-up' : ''} icon={Activity} />
+     <MetricCard label="回撤" value={formatPct(result.max_drawdown)} color="price-down" icon={Shield} />
+     <MetricCard label="胜率" value={safeToFixed(result.win_rate, 1) + '%'} color={result.win_rate > 50 ? 'price-up' : ''} icon={Target} />
+     <MetricCard label="交易" value={String(result.trade_count)} color="" suffix={'盈' + result.profit_trades + '/亏' + result.loss_trades} icon={Hash} />
+   </div>
 
- {/* 收益曲线图 (with benchmark comparison & trade markers) */}
- <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
+   {/* 3. 收益曲线 */}
+   <div className="glass-card p-3">
+     <div className="text-data-sm font-bold mb-2">收益曲线</div>
+     <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
+   </div>
 
- {/* 月度热力图 + 交易记录 */}
- <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
- <MonthlyHeatmap data={result.monthly_returns} />
- <TradeTable trades={result.trades} />
- </div>
+   {/* 4. 交易记录（折叠） */}
+   <details className="glass-card p-3">
+     <summary className="text-data-sm font-bold cursor-pointer select-none">交易记录 ({result.trades?.length || 0} 笔) ▾</summary>
+     <div className="mt-2"><TradeTable trades={result.trades} /></div>
+   </details>
+
+   {/* 5. 策略对比 */}
+   {savedResults.length > 0 && (
+     <StrategyComparison savedResults={savedResults} onRemove={(id: any) => { setSavedResults(p => p.filter((_, j) => String(j) !== String(id))); }} />
+   )}
  </div>
  )}
 
