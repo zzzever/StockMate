@@ -14,7 +14,7 @@ function generateMarkers(trades: any[]) {
       shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
       color: t.type === 'buy' ? '#22c55e' : '#ef4444',
       text: t.type === 'buy' ? 'B' : 'S',
-      size: 2.5,
+      size: 1.0,
     }));
 }
 
