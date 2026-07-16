@@ -528,7 +528,7 @@ function PercentInput({ label, value, min, max, step, onChange }: {
  const val = Number(e.target.value);
  onChange(isNaN(val) ? 0 : val);
  }}
- className="w-20 border dark: dark:border-white/10 rounded-lg px-2 py-1 text-sm text-center font-mono-nums focus:outline-none focus:border-violet-500/50"
+ className="w-20 border dark:border-white/10 rounded-lg px-2 py-1 text-sm text-center font-mono-nums focus:outline-none focus:border-violet-500/50"
  />
  <span className="text-xs ">%</span>
  </div>
@@ -763,7 +763,7 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  className="flex items-center gap-2 w-full mb-2"
  >
  {expanded ? <ChevronDown size={16} className="" /> : <ChevronRight size={16} className="" />}
- <Hash size={14} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
+ <Hash size={14} className="text-[hsl(var(--swiss-accent))]" />
  <span className="text-sm font-bold ">交易记录</span>
  <span className="text-xs ml-1">({trades.length} 笔)</span>
  </button>
@@ -789,7 +789,7 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  <td className="py-2 px-2 font-mono-nums">{trade.index}</td>
  <td className="py-2 px-2 ">{trade.date}</td>
  <td className="py-2 px-2">
- <span className={`text-xs px-2 py-0.5 rounded-full ${trade.type === 'buy' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'bg-rose-500/20 text-rose-600 dark:text-rose-600 dark:text-rose-400'}`}>
+ <span className={`text-xs px-2 py-0.5 rounded-full ${trade.type === 'buy' ? 'bg-emerald-500/20 text-[hsl(var(--price-up))]' : 'bg-rose-500/20 text-[hsl(var(--price-down))]'}`}>
  {trade.type === 'buy' ? '买入' : '卖出'}
  </span>
  </td>
@@ -797,7 +797,7 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  <td className="py-2 px-2 text-right font-mono-nums ">{trade.shares}</td>
  <td className="py-2 px-2 text-right font-mono-nums">
  {trade.type === 'sell' ? (
- <span className={trade.profit > 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}>
+ <span className={trade.profit > 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}>
  {trade.profit > 0 ? '+' : ''}{safeToFixed(trade.profit, 2)}
  </span>
  ) : (
@@ -906,7 +906,7 @@ function StrategyComparison({ savedResults, onRemove }: {
  >
  <div className="flex items-center justify-between mb-3">
  <div className="flex items-center gap-2">
- <Layers size={14} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
+ <Layers size={14} className="text-[hsl(var(--swiss-accent))]" />
  <span className="text-sm font-bold ">策略对比</span>
  <span className="text-xs ">({savedResults.length} 条已保存)</span>
  </div>
@@ -1281,7 +1281,7 @@ useEffect(() => {
  </div>
  <div className="text-right">
  <div className="font-mono-nums text-2xl font-bold ">{safeToFixed(price, 2)}</div>
- <div className={`flex items-center justify-end gap-1 text-sm font-medium ${up ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}`}>
+ <div className={`flex items-center justify-end gap-1 text-sm font-medium ${up ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}`}>
  {up ? <TrendingUp size={16} /> : <TrendingUp size={16} className="rotate-180" />}
  <span>{up ? '+' : ''}{safeToFixed(change, 2)} ({up ? '+' : ''}{safeToFixed(changePercent, 2)}%)</span>
  </div>
@@ -1295,7 +1295,7 @@ useEffect(() => {
  className="lg:col-span-1 glass-card p-4 space-y-3"
  >
  <div className="flex items-center gap-2 mb-2">
- <Zap size={14} className="text-violet-600 dark:text-violet-600 dark:text-violet-400" />
+ <Zap size={14} className="text-[hsl(var(--swiss-accent))]" />
  <h2 className="text-sm font-bold ">选择策略</h2>
  </div>
  <div className="space-y-2">
@@ -1309,11 +1309,11 @@ useEffect(() => {
  className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
  selected
  ? 'bg-violet-500/10 border-violet-500/50 border-l-2 border-l-violet-400'
- : ' dark: dark:border-white/10 hover:bg-white/[0.07] hover:border-white/15'
+ : ' dark:border-white/10 hover:bg-white/[0.07] hover:border-white/15'
  }`}
  >
  <div className="flex items-center gap-2">
- <Icon size={16} className={selected ? 'text-violet-600 dark:text-violet-600 dark:text-violet-400' : ''} />
+ <Icon size={16} className={selected ? 'text-[hsl(var(--swiss-accent))]' : ''} />
  <span className={`text-sm font-medium ${selected ? '' : ''}`}>{s.name}</span>
  </div>
  <div className="text-xs mt-1 ml-6">{s.description}</div>
@@ -1422,7 +1422,7 @@ useEffect(() => {
  type="range" min={10000} max={1000000} step={10000}
  value={params.initialCapital}
  onChange={e => setParams(p => ({ ...p, initialCapital: Number(e.target.value) }))}
- className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-slate-200 dark:bg-white/10 accent-gray-700"
+ className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-[var(--bg-input)] accent-current"
  />
  </div>
  <PercentInput label="手续费率" value={params.commissionRate * 100} min={0} max={0.5} step={0.01} onChange={v => setParams(p => ({ ...p, commissionRate: v / 100 }))} />
@@ -1502,7 +1502,7 @@ useEffect(() => {
  value={saveName}
  onChange={e => setSaveName(e.target.value)}
  onKeyDown={e => e.key === 'Enter' && handleSave()}
- className="flex-1 border dark: dark:border-white/10 rounded-lg px-3 py-2 text-sm placeholder-zinc-600 focus:outline-none focus:border-violet-500/50"
+ className="flex-1 border dark:border-white/10 rounded-lg px-3 py-2 text-sm placeholder-zinc-600 focus:outline-none focus:border-violet-500/50"
  />
  <button
  onClick={handleSave}
@@ -1522,11 +1522,11 @@ useEffect(() => {
  <div
  className="glass-card p-8 flex flex-col items-center justify-center gap-3"
  >
- <RotateCcw size={24} className="text-violet-600 dark:text-violet-600 dark:text-violet-400 animate-spin" />
+ <RotateCcw size={24} className="text-[hsl(var(--swiss-accent))] animate-spin" />
  <span className="text-sm ">正在运行回测引擎...</span>
  <div className="w-48 h-1.5 bg-slate-200 dark:bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
  <div
- className="h-full bg-violet-400 rounded-full"
+ className="h-full bg-[hsl(var(--swiss-accent))] rounded-full"
  />
  </div>
  </div>
@@ -1581,19 +1581,19 @@ useEffect(() => {
  <MetricCard
  label="总收益率"
  value={formatPct(result.total_return)}
- color={result.total_return >= 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}
+ color={result.total_return >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}
  icon={BarChart3}
  />
  <MetricCard
  label="年化收益率"
  value={formatPct(result.annual_return)}
- color={result.annual_return >= 0 ? 'text-emerald-600 dark:text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-600 dark:text-rose-400'}
+ color={result.annual_return >= 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}
  icon={TrendingUp}
  />
  <MetricCard
  label="最大回撤"
  value={formatPct(result.max_drawdown)}
- color="text-rose-600 dark:text-rose-600 dark:text-rose-400"
+ color="text-[hsl(var(--price-down))]"
  icon={Shield}
  />
  <MetricCard
@@ -1605,7 +1605,7 @@ useEffect(() => {
  <MetricCard
  label="胜率"
  value={`${safeToFixed(result.win_rate, 1)}%`}
- color="text-violet-600 dark:text-violet-600 dark:text-violet-400"
+ color="text-[hsl(var(--swiss-accent))]"
  icon={Target}
  />
  <MetricCard
