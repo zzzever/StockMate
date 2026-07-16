@@ -1129,7 +1129,7 @@ useEffect(() => {
           invoke('backtest_strategy', {
             stockId: stockId,
             strategyCode: combinedCode,
-            days: 250,
+            days: backtestDays,
             period: 'day',
           }).then((result: any) => {
             setResult({
