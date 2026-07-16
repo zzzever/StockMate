@@ -582,7 +582,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  topColor: 'rgba(193,39,45,0.3)',
  bottomColor: 'rgba(193,39,45,0.02)',
  lineColor: '#c1272d',
- lineWidth: 2,
+ lineWidth: 1,
  });
  strategySeriesRef.current = series;
 
