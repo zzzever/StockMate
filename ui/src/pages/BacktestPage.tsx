@@ -607,7 +607,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
  color: t.type === 'buy' ? '#22c55e' : '#ef4444',
  text: t.type === 'buy' ? 'B' : 'S',
- size: 1.5,
+ size: 2.5,
  }));
  console.log('[EF2] markers count=', markers.length, 'first=', markers[0]);
  try {
@@ -1598,7 +1598,7 @@ useEffect(() => {
    {/* 3. 收益曲线 */}
    <div className="glass-card p-3">
      <div className="text-data-sm font-bold mb-2">收益曲线</div>
-     <EquityCurveChart key={result?.trade_count ?? 0} result={result} initialCapital={params.initialCapital} quotes={quotes} />
+     <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
    </div>
 
    {/* 4. 交易记录（折叠） */}
