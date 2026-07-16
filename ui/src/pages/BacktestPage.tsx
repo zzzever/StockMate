@@ -1105,9 +1105,7 @@ useEffect(() => {
  let filteredQuotes = quotes;
  if (startDate) {
    if (quotes[0]?.date > startDate) {
-     setError('数据最早从 ' + quotes[0].date + ' 开始，所选区间之前无数据');
-     setRunning(false);
-     return;
+     console.warn('[BacktestPage] data starts from ' + quotes[0].date + ', not ' + startDate);
    }
    filteredQuotes = filteredQuotes.filter(q => q.date >= startDate);
  }
@@ -1549,7 +1547,7 @@ useEffect(() => {
  </p>
  </div>
  <div className="text-right text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
- 共 {result.trade_count} 笔交易
+ 共 {result.trade_count} 笔交易 · 数据 {result.equity_curve[0]?.date ?? '?'} ~ {result.equity_curve[result.equity_curve.length-1]?.date ?? '?'}
  </div>
  </div>
  <div className="flex items-center gap-4 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)' }}>
