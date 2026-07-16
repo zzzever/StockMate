@@ -1226,7 +1226,7 @@ useEffect(() => {
           }
           setResult({
             total_return: result.total_return || 0,
-            annual_return: result.annual_return || result.total_return || 0,
+            annual_return: result.annual_return ?? 0,
             max_drawdown: result.max_drawdown || 0,
             sharpe_ratio: result.sharpe_ratio || 0,
             win_rate: (result.win_rate || 0) * 100,

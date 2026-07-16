@@ -23,6 +23,7 @@ pub struct Trade {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BacktestResult {
     pub total_return: f64,
+    pub annual_return: f64,
     pub max_drawdown: f64,
     pub sharpe_ratio: f64,
     pub win_rate: f64,
@@ -57,6 +58,7 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
     if quotes.is_empty() || signals.is_empty() {
         return Ok(BacktestResult {
             total_return: 0.0,
+            annual_return: 0.0,
             max_drawdown: 0.0,
             sharpe_ratio: 0.0,
             win_rate: 0.0,
@@ -337,8 +339,18 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
         }
     };
 
+    // Annual return: annualize total_return over the equity_curve period
+    let years = if equity_curve.len() > 1 { (equity_curve.len() - 1) as f64 / 252.0 } else { 1.0 };
+    let annual_return = if years > 0.0 && total_return > -100.0 {
+        let r = (1.0 + total_return / 100.0).powf(1.0 / years) - 1.0;
+        r * 100.0
+    } else {
+        0.0
+    };
+
     Ok(BacktestResult {
         total_return,
+        annual_return,
         max_drawdown,
         sharpe_ratio,
         win_rate,
@@ -361,6 +373,7 @@ pub fn run_sslang_backtest(
     if quotes.is_empty() {
         return Ok(BacktestResult {
             total_return: 0.0,
+            annual_return: 0.0,
             max_drawdown: 0.0,
             sharpe_ratio: 0.0,
             win_rate: 0.0,
