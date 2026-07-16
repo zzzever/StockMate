@@ -609,9 +609,11 @@ benchmarkSeriesRef.current = chart.addLineSeries({
 
  // Stock price overlay
  stockSeriesRef.current = chart.addLineSeries({
- color: 'rgba(59,130,246,0.4)',
+ priceScaleId: 'stock',
+ color: 'rgba(59,130,246,0.25)',
  lineWidth: 1,
  });
+ try { chart.priceScale('stock').applyOptions({ scaleMargins: { top: 0.3, bottom: 0.3 }, borderColor: 'rgba(59,130,246,0.08)' }); } catch (_) {}
  } catch (e) { console.error('EquityCurveChart creation failed:', e); }
  return () => { isMounted.current = false; try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
  // eslint-disable-next-line react-hooks/exhaustive-deps
