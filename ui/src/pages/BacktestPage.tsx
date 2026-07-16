@@ -537,11 +537,12 @@ function PercentInput({ label, value, min, max, step, onChange }: {
  );
 }
 
-function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result: BacktestResult | null; initialCapital: number; quotes?: Quote[] }) {
+function EquityCurveChart({ result, initialCapital, quotes }: { result: BacktestResult | null; initialCapital: number; quotes?: Quote[] }) {
  const containerRef = useRef<HTMLDivElement>(null);
  const chartRef = useRef<IChartApi | null>(null);
  const strategySeriesRef = useRef<ISeriesApi<'Area'> | null>(null);
  const benchmarkSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+ const stockSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
  const isMounted = useRef(true);
  const [selectedTrade, setSelectedTrade] = useState<TradeRecord | null>(null);
 
@@ -608,7 +609,7 @@ function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result:
 
  // EFFECT 2: Update data + dynamically adjust colors
  useEffect(() => {
- if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current) return;
+ if (!isMounted.current || !chartRef.current || !strategySeriesRef.current || !benchmarkSeriesRef.current || !stockSeriesRef.current) return;
  if (!result?.equity_curve?.length) {
  strategySeriesRef.current.setData([]);
  benchmarkSeriesRef.current.setData([]);
@@ -638,7 +639,22 @@ function EquityCurveChart({ result, initialCapital, quotes: _quotes }: { result:
 
  // No benchmark — user explicitly asked to remove stock price comparison
  benchmarkSeriesRef.current.setData([]);
- // Trade markers
+
+  // Stock price: same percentage scale as P&L (0-based)
+  const firstClose = Number(quotes?.[0]?.close ?? 0);
+  if (stockSeriesRef.current && quotes && quotes.length > 0 && firstClose > 0) {
+    stockSeriesRef.current.setData(
+      result.equity_curve.map((p, i) => {
+        const q = quotes[i];
+        const pct = q ? ((Number(q.close) - firstClose) / firstClose) * 100 : 0;
+        return { time: p.date as any, value: Number(pct.toFixed(2)) };
+      })
+    );
+  } else if (stockSeriesRef.current) {
+    stockSeriesRef.current.setData([]);
+  }
+
+  // Trade markers
  if (result.trades?.length) {
  const markers = result.trades.filter(t => t.date && t.type).map(t => ({
  time: t.date as any,
