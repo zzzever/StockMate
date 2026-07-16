@@ -1671,11 +1671,11 @@ useEffect(() => {
      <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
    </div>
 
-   {/* 4. 交易记录（折叠） */}
-   <details className="glass-card p-3">
-     <summary className="text-data-sm font-bold cursor-pointer select-none">交易记录 ({result.trades?.length || 0} 笔) ▾</summary>
-     <div className="mt-2"><TradeTable trades={result.trades} /></div>
-   </details>
+   {/* 4. 交易记录 */}
+   <div className="glass-card p-3">
+     <div className="text-data-sm font-bold mb-2">交易记录 ({result.trades?.length || 0} 笔)</div>
+     <TradeTable trades={result.trades} />
+   </div>
 
    {/* 5. 策略对比 */}
    {savedResults.length > 0 && (
