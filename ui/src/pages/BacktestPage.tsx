@@ -600,7 +600,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  shape: t.type === 'buy' ? 'arrowUp' as const : 'arrowDown' as const,
  color: t.type === 'buy' ? '#22c55e' : '#ef4444',
  text: t.type === 'buy' ? 'B' : 'S',
- size: 2.5,
+ size: 1.8,
  }));
  try { strategySeriesRef.current.setMarkers(markers); } catch (e) { console.warn('setMarkers failed:', e); }
  } else {

@@ -58,7 +58,7 @@ describe('ruleParser — conditionsToCode + code attachment', () => {
   it('parseRulesLocally attaches a viewable code + explanation to each rule', () => {
     const rules = parseRulesLocally('连续三天缩量下跌，次日上涨');
     expect(rules[0].kind).toBe('condition');
-    expect(rules[0].code).toContain("=> SIGNAL('buy')");
+    expect(rules[0].code).toContain("RULE");
     expect(rules[0].code).toContain('down(i-1, 3)');
     expect(rules[0].explanation).toBeTruthy();
   });

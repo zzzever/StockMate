@@ -70,7 +70,7 @@ function mkRule(name: string, conditions: RuleCondition[], signal: TradingRule['
     markerIndex: idx + 1,
     createdAt: '',
     kind: 'condition',
-    code: `// ${name}\n${conditionsToCode(conditions)} => SIGNAL('${signal}')`,
+    code: `RULE "${name}"\n  SIGNAL ${signal}\n  WHEN ${conditionsToCode(conditions)}\n`,
     explanation: name,
   };
 }
