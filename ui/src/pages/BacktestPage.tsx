@@ -1173,14 +1173,11 @@ useEffect(() => {
                   return pairs.length > 0 ? pairs.reduce((a: number, b: number) => a + b, 0) / pairs.length : null;
                 } catch { return null; }
               })(),
-              max_consecutive_wins: maxWinStreak || null,
-              max_consecutive_losses: maxLossStreak || null,
-              profit_factor: totalLoss > 0 ? totalProfit / totalLoss : totalProfit > 0 ? Infinity : 0,
-              payoff_ratio: (() => { const aw = wins.length > 0 ? totalProfit / wins.length : 0; const al = losses.length > 0 ? totalLoss / losses.length : 0; return al > 0 ? aw / al : aw > 0 ? Infinity : 0; })(),
-              expectancy: sellTrades.length > 0 ? (totalProfit - totalLoss) / sellTrades.length : null,
-              profit_factor: result.profit_factor ?? null,
-              payoff_ratio: result.payoff_ratio ?? null,
-              expectancy: result.expectancy ?? null,
+              max_consecutive_wins: maxWS || null,
+              max_consecutive_losses: maxLS || null,
+              profit_factor: totLoss > 0 ? totProfit / totLoss : totProfit > 0 ? Infinity : 0,
+              payoff_ratio: (() => { const aw = wins.length > 0 ? totProfit / wins.length : 0; const al = losses.length > 0 ? totLoss / losses.length : 0; return al > 0 ? aw / al : aw > 0 ? Infinity : 0; })(),
+              expectancy: sellT.length > 0 ? (totProfit - totLoss) / sellT.length : null,
             });
             setRunning(false);
           }).catch((e: any) => {
