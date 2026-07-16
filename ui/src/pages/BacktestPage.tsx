@@ -651,10 +651,14 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
   // Stock price: same percentage scale as P&L (0-based)
   const firstClose = Number(quotes?.[0]?.close ?? 0);
   if (stockSeriesRef.current && quotes && quotes.length > 0 && firstClose > 0) {
+    const quoteMap = new Map<string, number>();
+    for (const q of quotes) {
+      quoteMap.set(String(q.date), Number(q.close));
+    }
     stockSeriesRef.current.setData(
-      result.equity_curve.map((p, i) => {
-        const q = quotes[i];
-        const pct = q ? ((Number(q.close) - firstClose) / firstClose) * 100 : 0;
+      result.equity_curve.map((p) => {
+        const close = quoteMap.get(String(p.date)) ?? null;
+        const pct = close != null ? ((close - firstClose) / firstClose) * 100 : 0;
         return { time: p.date as any, value: Number(pct.toFixed(2)) };
       })
     );
