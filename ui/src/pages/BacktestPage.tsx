@@ -547,6 +547,7 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
 
  // EFFECT 1: Create chart ONCE on mount, NEVER recreate
  useEffect(() => {
+ isMounted.current = true;
  if (!containerRef.current) return;
  try {
  const chart = createChart(containerRef.current, {
