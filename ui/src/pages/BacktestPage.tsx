@@ -579,8 +579,8 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
 
  // Strategy series — default colors, refreshed dynamically in Effect 2
  const series = chart.addAreaSeries({
- topColor: 'rgba(193,39,45,0.3)',
- bottomColor: 'rgba(193,39,45,0.02)',
+ topColor: 'rgba(193,39,45,0.15)',
+ bottomColor: 'rgba(193,39,45,0.005)',
  lineColor: '#c1272d',
  lineWidth: 1,
  });
@@ -638,8 +638,8 @@ function EquityCurveChart({ result, initialCapital, quotes }: { result: Backtest
  // Dynamic colors: red for positive (中国红涨), green for negative (中国绿跌)
  const isPositive = result.total_return >= 0;
  strategySeriesRef.current.applyOptions({
- topColor: isPositive ? 'rgba(193,39,45,0.3)' : 'rgba(22,163,74,0.3)',
- bottomColor: isPositive ? 'rgba(193,39,45,0.02)' : 'rgba(22,163,74,0.02)',
+ topColor: isPositive ? 'rgba(193,39,45,0.15)' : 'rgba(22,163,74,0.12)',
+ bottomColor: isPositive ? 'rgba(193,39,45,0.005)' : 'rgba(22,163,74,0.003)',
  lineColor: isPositive ? '#c1272d' : '#16a34a',
  });
 
