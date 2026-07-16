@@ -25,17 +25,18 @@ import { RULE_TEMPLATES } from '@/utils/ruleEngine';
 // 工具函数 — SSLang 自动包装
 // ───────────────────────────────────────────────
 
-function wrapSSLangRule(rule: TradingRule): string {
+function wrapSSLangRule(rule: TradingRule, signalType?: 'buy' | 'sell'): string {
   // If code already contains RULE blocks, use as-is
   if (rule.code?.toUpperCase().includes('RULE')) return rule.code;
   const code = rule.code || '';
-  // If the explanation mentions sell/exit AND signal is buy, generate two RULE blocks
-  const hasSell = rule.explanation?.includes('卖出') || rule.explanation?.toLowerCase().includes('sell');
-  if (hasSell && rule.signal === 'buy') {
-    return `RULE "${rule.name}"\n  SIGNAL buy\n  WHEN ${code}\n\nRULE "${rule.name}·卖出"\n  SIGNAL sell\n  WHEN ${code}\n`;
+  // For 'both' direction rules, use specific buyCode/sellCode if available
+  if (rule.direction === 'both') {
+    const buyCode = rule.buyCode || code;
+    const sellCode = rule.sellCode || code;
+    return `RULE "${rule.name}·买入"\n  SIGNAL buy\n  WHEN ${buyCode}\n\nRULE "${rule.name}·卖出"\n  SIGNAL sell\n  WHEN ${sellCode}\n`;
   }
-  // Otherwise wrap as a single rule
-  return `RULE "${rule.name || '策略'}"\n  SIGNAL ${rule.signal || 'buy'}\n  WHEN ${code}\n`;
+  // Otherwise wrap as a single rule with specified signal type
+  return `RULE "${rule.name || '策略'}"\n  SIGNAL ${signalType || rule.signal || 'buy'}\n  WHEN ${code}\n`;
 }
 
 // ───────────────────────────────────────────────
@@ -1119,11 +1120,15 @@ useEffect(() => {
  try {
  runTimeoutRef.current = null;
  if (selectedStrategy === 'sslang_rule') {
-          const rule = availableRules.find(r => r.id === selectedRuleId);
-          if (!rule?.code) { setRunning(false); return; }
+          const buyRule = availableRules.find(r => r.id === selectedRuleId);
+          const sellRule = availableRules.find(r => r.id === selectedSellRuleId);
+          let combinedCode = '';
+          if (buyRule?.code) combinedCode += wrapSSLangRule(buyRule, 'buy') + '\n';
+          if (sellRule?.code) combinedCode += wrapSSLangRule(sellRule, 'sell') + '\n';
+          if (!combinedCode) { setError('请选择至少一个买入或卖出规则'); setRunning(false); return; }
           invoke('backtest_strategy', {
             stockId: stockId,
-            strategyCode: wrapSSLangRule(rule),
+            strategyCode: combinedCode,
             days: 250,
             period: 'day',
           }).then((result: any) => {
@@ -1186,7 +1191,7 @@ useEffect(() => {
  setRunning(false);
  }
  }, 1200);
- }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, stockId, startDate, endDate]);
+ }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, selectedSellRuleId, stockId, startDate, endDate, stopLoss, takeProfit, maxHolding]);
 
  const handleSave = () => {
  if (!result || !saveName.trim()) return;
