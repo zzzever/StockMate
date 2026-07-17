@@ -41,7 +41,9 @@ const EMA = (data: number[], period: number): number[] => { if (data.length === 
 
 type IndicatorType = 'macd' | 'kdj' | 'boll' | 'none';
 
-function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; drawMode?: boolean; drawColor?: string }) {
+function clearSRLines(lines: any[]) { if (lines) lines.forEach(l => { try { l.remove(); } catch (_) {} }); }
+
+function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, showSR, sr, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; showSR?: boolean; sr?: any; drawMode?: boolean; drawColor?: string }) {
   const chartStyle = useAppStore(s => s.chartStyle);
   const darkMode = useAppStore(s => s.darkMode);
   const T = useMemo(() => getChartTheme(chartStyle, darkMode), [chartStyle, darkMode]);
@@ -64,6 +66,8 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
   // click handler via this ref. No closure/state double-tracking that can drift on remount.
   const drawModeRef = useRef(drawMode); drawModeRef.current = drawMode;
   const drawColorRef = useRef(drawColor); drawColorRef.current = drawColor;
+  const showSRRef = useRef(showSR); showSRRef.current = showSR;
+  const srRef = useRef(sr); srRef.current = sr;
 
   const updateOverlays = useCallback(() => {
     const c = charts.current; const markers = ruleMarkersRef.current;
@@ -310,7 +314,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       if (data.length !== prevLenRef.current) { c.mc.timeScale().fitContent(); c.mc.timeScale().scrollToPosition(0, false); prevLenRef.current = data.length; }
       updateOverlays();
     } catch (e) { console.warn('Chart data update failed:', e); }
-  }, [data, maData, T, IND, indData, updateOverlays, showBOLL]);
+  }, [data, maData, T, IND, indData, updateOverlays, showBOLL, showSR, sr]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden kline-fullscreen-target" style={{ position: 'relative', background: 'var(--bg-root)' }}>
@@ -384,6 +388,7 @@ export default function StockDetailPage() {
   const handleSetPeriod = (p: string) => { setPeriod(p); if (p === 'minute') setCrosshair(null); };
   const [indicator, setIndicator] = useState<IndicatorType>('none');
   const [showBOLL, setShowBOLL] = useState(false);
+  const [showSR, setShowSR] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
   const [drawColor, setDrawColor] = useState<string>(DRAW_COLORS[0].value);
   // Sync draw mode off when chart signals exit (Escape) — event-driven, no polling
@@ -496,6 +501,7 @@ export default function StockDetailPage() {
             {INDICATORS.map(ind => (<button key={ind} onClick={() => setIndicator(ind)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: ind === indicator ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: ind === indicator ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{IND_LABELS[ind]}</button>))}
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
+            <button onClick={() => setShowSR(!showSR)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showSR ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showSR ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>支撑</button>
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => { const on = !drawMode; setDrawMode(on); (window as any).__klineDrawModeActive = on; }}
               className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`}
@@ -537,7 +543,7 @@ export default function StockDetailPage() {
             ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
             : historyError && !chartData.length
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
-              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
+              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} showSR={showSR} sr={sr} drawMode={drawMode} drawColor={drawColor} />)}
       </div>
       {secondaryErrors.length > 0 && (
         <div className="shrink-0 px-1">
