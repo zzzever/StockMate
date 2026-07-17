@@ -246,7 +246,7 @@ function generateSignals(quotes: Quote[], strategyId: string, params: StrategyPa
  return signals;
 }
 
-function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyParams): BacktestResult {
+function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyParams, stopLoss = 0, takeProfit = 0, maxHolding = 0): BacktestResult {
  const signals = generateSignals(quotes, strategyId, params);
  let capital = params.initialCapital;
  let shares = 0;
@@ -303,6 +303,23 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const profit = net - (avgCost * shares);
  const profitPct = avgCost > 0 ? (execPrice - avgCost) / avgCost * 100 : 0;
  pendingSell = { capital: net, price: execPrice, date: quotes[sellExecIdx].date, pnl: profitPct, pnlPct: profitPct, shares: shares };
+ }
+
+ // Wind control: stop-loss / take-profit / max holding (deferred to next bar)
+ if (shares > 0 && lastBuyDay >= 0 && i > lastBuyDay && !pendingSell.shares) {
+   const holdingDays = i - lastBuyDay;
+   const unrealizedPnl = avgCost > 0 ? (close - avgCost) / avgCost : 0;
+   let riskSell = false;
+   if (stopLoss > 0 && unrealizedPnl <= -stopLoss / 100) { riskSell = true; }
+   else if (takeProfit > 0 && unrealizedPnl >= takeProfit / 100) { riskSell = true; }
+   else if (maxHolding > 0 && holdingDays >= maxHolding) { riskSell = true; }
+   if (riskSell) {
+     if (i + 1 < quotes.length) {
+       const execPrice = Number(quotes[i + 1].open) * (1 - params.slippage);
+       const net = shares * execPrice * (1 - params.commissionRate);
+       pendingSell = { capital: net, price: execPrice, date: quotes[i + 1].date, pnl: net - avgCost * shares, pnlPct: avgCost > 0 ? ((execPrice - avgCost) / avgCost * 100) : 0, shares: shares };
+     }
+   }
  }
 
  const totalValue = capital + shares * close;
@@ -796,6 +813,9 @@ export default function BacktestPage() {
 
 const [startDate, setStartDate] = useState('');
 const [endDate, setEndDate] = useState('');
+const [stopLoss, setStopLoss] = useState(5);
+const [takeProfit, setTakeProfit] = useState(50);
+const [maxHolding, setMaxHolding] = useState(0);
 
 // Calculate how many days of history to fetch based on selected start date
 const backtestDays = useMemo(() => {
@@ -941,7 +961,7 @@ useEffect(() => {
           });
           return;
         }
-        const res = runMockBacktest(filteredQuotes, selectedStrategy, params);
+        const res = runMockBacktest(filteredQuotes, selectedStrategy, params, stopLoss, takeProfit, maxHolding);
  console.log('[BacktestPage] strategy run complete:', {
  total_return: res.total_return.toFixed(2) + '%',
  annual_return: res.annual_return.toFixed(2) + '%',
@@ -958,7 +978,7 @@ useEffect(() => {
  setRunning(false);
  }
  }, 1200);
- }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, selectedSellRuleId, stockId, startDate, endDate]);
+ }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, selectedSellRuleId, stockId, startDate, endDate, stopLoss, takeProfit, maxHolding]);
 
 
  const formatPct = (v: number) => `${v > 0 ? '+' : ''}${safeToFixed(v, 2)}%`;
