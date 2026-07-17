@@ -41,9 +41,7 @@ const EMA = (data: number[], period: number): number[] => { if (data.length === 
 
 type IndicatorType = 'macd' | 'kdj' | 'boll' | 'none';
 
-function clearSRLines(lines: any[]) { if (lines) lines.forEach(l => { try { l.remove(); } catch (_) {} }); }
-
-function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, showSR, sr, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; showSR?: boolean; sr?: any; drawMode?: boolean; drawColor?: string }) {
+function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; drawMode?: boolean; drawColor?: string }) {
   const chartStyle = useAppStore(s => s.chartStyle);
   const darkMode = useAppStore(s => s.darkMode);
   const T = useMemo(() => getChartTheme(chartStyle, darkMode), [chartStyle, darkMode]);
@@ -66,8 +64,6 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
   // click handler via this ref. No closure/state double-tracking that can drift on remount.
   const drawModeRef = useRef(drawMode); drawModeRef.current = drawMode;
   const drawColorRef = useRef(drawColor); drawColorRef.current = drawColor;
-  const showSRRef = useRef(showSR); showSRRef.current = showSR;
-  const srRef = useRef(sr); srRef.current = sr;
 
   const updateOverlays = useCallback(() => {
     const c = charts.current; const markers = ruleMarkersRef.current;
@@ -314,7 +310,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       if (data.length !== prevLenRef.current) { c.mc.timeScale().fitContent(); c.mc.timeScale().scrollToPosition(0, false); prevLenRef.current = data.length; }
       updateOverlays();
     } catch (e) { console.warn('Chart data update failed:', e); }
-  }, [data, maData, T, IND, indData, updateOverlays, showBOLL, showSR, sr]);
+  }, [data, maData, T, IND, indData, updateOverlays, showBOLL]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden kline-fullscreen-target" style={{ position: 'relative', background: 'var(--bg-root)' }}>
@@ -543,8 +539,55 @@ export default function StockDetailPage() {
             ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
             : historyError && !chartData.length
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
-              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} showSR={showSR} sr={sr} drawMode={drawMode} drawColor={drawColor} />)}
+              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
       </div>
+
+      {/* SR Modal Popup */}
+      {showSR && sr && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setShowSR(false)}>
+          <div className="w-[420px] max-h-[80vh] overflow-y-auto glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-data-sm font-bold" style={{ color: 'var(--text-primary)' }}>支撑阻力位</h3>
+              <button onClick={() => setShowSR(false)} className="text-data-xs px-2 py-0.5 rounded hover:bg-[var(--bg-hover)]"
+                style={{ color: 'var(--text-tertiary)' }}>✕</button>
+            </div>
+            <div className="space-y-3">
+              {sr.nearest_support != null && (
+                <div className="glass-card-flat p-3">
+                  <div className="text-data-xs font-bold mb-1" style={{ color: 'hsl(var(--price-down))' }}>近端支撑位</div>
+                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Number(sr.nearest_support).toFixed(2)}</div>
+                </div>
+              )}
+              {sr.nearest_resistance != null && (
+                <div className="glass-card-flat p-3">
+                  <div className="text-data-xs font-bold mb-1" style={{ color: 'hsl(var(--price-up))' }}>近端阻力位</div>
+                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>¥{Number(sr.nearest_resistance).toFixed(2)}</div>
+                </div>
+              )}
+              <div className="border-t" style={{ borderColor: 'var(--border-subtle)' }} />
+              <div className="text-data-xs font-bold mb-1" style={{ color: 'var(--text-secondary)' }}>全部支撑位</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(sr.supports || []).map((p: number, i: number) => (
+                  <span key={i} className="px-2 py-1 text-data-xs font-mono-nums rounded" style={{ background: 'hsl(var(--price-down-bg))', color: 'hsl(var(--price-down))' }}>
+                    ¥{p.toFixed(2)}
+                  </span>
+                ))}
+              </div>
+              <div className="text-data-xs font-bold mb-1 mt-2" style={{ color: 'var(--text-secondary)' }}>全部阻力位</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(sr.resistances || []).map((p: number, i: number) => (
+                  <span key={i} className="px-2 py-1 text-data-xs font-mono-nums rounded" style={{ background: 'hsl(var(--price-up-bg))', color: 'hsl(var(--price-up))' }}>
+                    ¥{p.toFixed(2)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {secondaryErrors.length > 0 && (
         <div className="shrink-0 px-1">
           <InlineError message={`${secondaryErrors.join('、')}数据加载失败`} onRetry={retrySecondary} />
