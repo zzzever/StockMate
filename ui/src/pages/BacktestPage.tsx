@@ -1137,7 +1137,7 @@ useEffect(() => {
 
            {/* 分隔线 */}
           <div className="col-span-full border-t my-2" style={{ borderColor: 'var(--border-subtle)' }} />
-          <div className="col-span-full">
+          <div className="col-span-full" style={{ display: selectedStrategy === 'sslang_rule' ? 'block' : 'none' }}>
             <div className="col-span-full space-y-3">
               <div>
                 <div className="text-data-xs font-medium mb-1" style={{ color: 'hsl(var(--price-up))' }}>▲ 买入规则</div>
@@ -1207,6 +1207,33 @@ useEffect(() => {
     <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="input flex-1" />
   </div>
 </div>
+
+{/* Risk control */}
+<details className="mt-2">
+  <summary className="text-data-xs cursor-pointer select-none" style={{ color: "var(--text-secondary)" }}>风控设置 ▾</summary>
+  <div className="space-y-2 mt-2">
+    <div>
+      <label className="text-data-xs" style={{ color: "var(--text-tertiary)" }}>止损比例 (%)</label>
+      <input type="range" min="0" max="20" step="1" value={stopLoss}
+        onChange={e => setStopLoss(+e.target.value)}
+        className="w-full" />
+      <span className="text-data-xs font-mono-nums">{stopLoss}%</span>
+    </div>
+    <div>
+      <label className="text-data-xs" style={{ color: "var(--text-tertiary)" }}>止盈比例 (%)</label>
+      <input type="range" min="0" max="100" step="1" value={takeProfit}
+        onChange={e => setTakeProfit(+e.target.value)}
+        className="w-full" />
+      <span className="text-data-xs font-mono-nums">{takeProfit}%</span>
+    </div>
+    <div>
+      <label className="text-data-xs" style={{ color: "var(--text-tertiary)" }}>最大持仓天数 (0=不限)</label>
+      <input type="number" min="0" max="365" value={maxHolding}
+        onChange={e => setMaxHolding(+e.target.value)}
+        className="input w-24" />
+    </div>
+  </div>
+</details>
 
 {/* 开始回测按钮 */}
  <div className="flex items-center gap-3">
