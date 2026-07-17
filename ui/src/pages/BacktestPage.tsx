@@ -1,11 +1,7 @@
-import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { createChart, type IChartApi, type ISeriesApi, LineStyle, CrosshairMode, ColorType } from 'lightweight-charts';
-import {
- RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
- ResponsiveContainer, Tooltip as RechartsTooltip, Legend,
-} from 'recharts';
 import { invoke } from '@tauri-apps/api/core';
 
 function safeToFixed(v: unknown, digits: number): string {
@@ -14,8 +10,8 @@ function safeToFixed(v: unknown, digits: number): string {
 }
 import {
  ArrowLeft, TrendingUp, Activity, Gauge, CircleDashed, GitBranch, Code,
- Play, ChevronDown, ChevronRight, Save, BarChart3, Target,
- Shield, Hash, Zap, RotateCcw, RefreshCw, X, Layers
+ Play, BarChart3,
+ Hash, Zap, RotateCcw, RefreshCw, X
 } from 'lucide-react';
 import { useStockList, useStockHistory } from '@/hooks/useTauriQuery';
 import type { Quote, TradingRule } from '@/types';
@@ -98,15 +94,6 @@ interface StrategyDef {
  icon: React.ElementType;
 }
 
-interface SavedResult {
- id: string;
- name: string;
- strategyId: string;
- strategyName: string;
- timestamp: number;
- result: BacktestResult;
- params: StrategyParams;
-}
 
 // ───────────────────────────────────────────────
 // 策略定义
@@ -259,7 +246,7 @@ function generateSignals(quotes: Quote[], strategyId: string, params: StrategyPa
  return signals;
 }
 
-function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyParams, stopLoss = 0, takeProfit = 0, maxHolding = 0): BacktestResult {
+function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyParams): BacktestResult {
  const signals = generateSignals(quotes, strategyId, params);
  let capital = params.initialCapital;
  let shares = 0;
@@ -316,27 +303,6 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
  const profit = net - (avgCost * shares);
  const profitPct = avgCost > 0 ? (execPrice - avgCost) / avgCost * 100 : 0;
  pendingSell = { capital: net, price: execPrice, date: quotes[sellExecIdx].date, pnl: profitPct, pnlPct: profitPct, shares: shares };
- }
-
- // 风控检查：止损/止盈/最大持仓
- if (shares > 0 && lastBuyDay >= 0 && i > lastBuyDay && !pendingSell.shares) {
- const holdingDays = i - lastBuyDay;
- const unrealizedPnl = avgCost > 0 ? (close - avgCost) / avgCost : 0;
- let riskSell = false;
- if (stopLoss > 0 && unrealizedPnl <= -stopLoss / 100) {
- riskSell = true;
- } else if (takeProfit > 0 && unrealizedPnl >= takeProfit / 100) {
- riskSell = true;
- } else if (maxHolding > 0 && holdingDays >= maxHolding) {
- riskSell = true;
- }
- if (riskSell && !pendingSell.shares) {
- const execIdx = Math.min(i + 1, quotes.length - 1);
- const price = Number(quotes[execIdx].open) * (1 - params.slippage);
- const gross = shares * price;
- const net = gross * (1 - params.commissionRate);
- pendingSell = { capital: net, price, date: quotes[execIdx].date, pnl: net - avgCost * shares, pnlPct: avgCost > 0 ? ((price - avgCost) / avgCost * 100) : 0, shares: shares };
- }
  }
 
  const totalValue = capital + shares * close;
@@ -482,23 +448,13 @@ function runMockBacktest(quotes: Quote[], strategyId: string, params: StrategyPa
 // 子组件
 // ───────────────────────────────────────────────
 
-function MetricCard({ label, value, color, suffix, icon: Icon }: {
- label: string; value: string; color: string; suffix?: string; icon: React.ElementType;
-}) {
- return (
- <div
- className="glass-card p-4"
- >
- <div className="flex items-center gap-2 mb-2">
- <Icon size={14} className="" />
- <span className="text-xs uppercase tracking-wider">{label}</span>
- </div>
- <div className={`text-xl font-bold font-mono-nums ${color}`}>
- {value}
- {suffix && <span className="text-xs font-normal ml-1">{suffix}</span>}
- </div>
- </div>
- );
+function MetricCard({ label, value, up }: { label: string; value: string; up?: boolean }) {
+  return (
+    <div className="flex flex-col items-start p-2 rounded-lg" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+      <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{label}</span>
+      <span className={`text-data-sm font-bold font-mono-nums transition-all duration-200 ${up === true ? "price-up" : up === false ? "price-down" : ""}`}>{value}</span>
+    </div>
+  );
 }
 
 function SliderInput({ label, value, min, max, step, onChange }: {
@@ -721,11 +677,11 @@ benchmarkSeriesRef.current = chart.addLineSeries({
  <span style={{ color: 'var(--text-tertiary)' }}>策略P&amp;L %</span>
  </span>
  <span className="flex items-center gap-1 text-xs">
- <span className="w-2 h-2 rounded-full bg-emerald-500" />
+ <span className="w-2 h-2 rounded-full bg-[hsl(var(--price-up))]" />
  <span className="text-zinc-500">买入</span>
  </span>
  <span className="flex items-center gap-1 text-xs">
- <span className="w-2 h-2 rounded-full bg-rose-500" />
+ <span className="w-2 h-2 rounded-full bg-[hsl(var(--price-down))]" />
  <span className="text-zinc-500">卖出</span>
  </span>
  </div>
@@ -750,89 +706,13 @@ benchmarkSeriesRef.current = chart.addLineSeries({
  <span>价格: ¥{safeToFixed(selectedTrade.price, 2)}</span>
  <span>数量: {selectedTrade.shares}</span>
  {selectedTrade.type === 'sell' && (
- <span className={selectedTrade.profit > 0 ? 'text-emerald-500' : 'text-rose-500'}>
+ <span className={selectedTrade.profit > 0 ? 'text-[hsl(var(--price-up))]' : 'text-[hsl(var(--price-down))]'}>
  盈亏: {selectedTrade.profit > 0 ? '+' : ''}{safeToFixed(selectedTrade.profit, 2)}
  </span>
  )}
  </div>
  </div>
  )}
- </div>
- );
-}
-
-function MonthlyHeatmap({ data }: { data: BacktestResult['monthly_returns'] }) {
- if (!data || data.length === 0) return null;
- const years = [...new Set(data.map(d => d.year))].sort();
- const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
- const maxRet = Math.max(...data.map(d => Math.abs(d.return_pct)), 0.1);
-
- const getColor = (ret: number) => {
- const intensity = Math.min(Math.abs(ret) / maxRet, 1);
- if (ret > 0) return `rgba(16, 185, 129, ${0.15 + intensity * 0.55})`;
- if (ret < 0) return `rgba(244, 63, 94, ${0.15 + intensity * 0.55})`;
- return 'rgba(255, 255, 255, 0.05)';
- };
-
- const getTextColor = (ret: number) => {
- if (ret > 0) return '#6ee7b7';
- if (ret < 0) return '#fda4af';
- return 'hsl(var(--text-secondary))';
- };
-
- return (
- <div
- className="glass-card p-4"
- >
- <div className="flex items-center gap-2 mb-3">
- <Target size={14} className="text-cyan-400" />
- <span className="text-sm font-bold ">月度收益热力图</span>
- <span className="text-[10px] ml-auto" style={{ color: 'hsl(var(--text-tertiary))' }}>
- {data.length} 个月数据
- </span>
- </div>
- <div className="overflow-x-auto">
- <div className="inline-block min-w-full">
- <div className="grid gap-1" style={{ gridTemplateColumns: `40px repeat(12, 1fr)` }}>
- <div />
- {months.map(m => (
- <div key={m} className="text-center text-[10px] font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>{m}月</div>
- ))}
- {years.map(year => (
- <Fragment key={`row-${year}`}>
- <div className="text-xs font-mono-nums flex items-center justify-center" style={{ color: 'hsl(var(--text-secondary))' }}>{year}</div>
- {months.map(m => {
- const cell = data.find(d => d.year === year && d.month === m);
- return (
- <div
- key={`${year}-${m}`}
- className="h-8 rounded-md flex items-center justify-center text-[10px] font-mono-nums cursor-default transition-transform hover:scale-105"
- style={{ backgroundColor: getColor(cell?.return_pct ?? 0) }}
- title={cell ? `${year}-${String(m).padStart(2, '0')}: ${cell.return_pct > 0 ? '+' : ''}${safeToFixed(cell.return_pct, 2)}%` : ''}
- >
- <span style={{ color: getTextColor(cell?.return_pct ?? 0) }}>
- {cell ? `${cell.return_pct > 0 ? '+' : ''}${safeToFixed(cell.return_pct, 1)}` : '—'}
- </span>
- </div>
- );
- })}
- </Fragment>
- ))}
- </div>
- </div>
- </div>
- {/* Legend */}
- <div className="flex items-center gap-3 mt-2 text-[10px]" style={{ color: 'hsl(var(--text-tertiary))' }}>
- <span className="flex items-center gap-1">
- <span className="w-3 h-3 rounded" style={{ background: 'rgba(16,185,129,0.55)' }} />
- 盈利
- </span>
- <span className="flex items-center gap-1">
- <span className="w-3 h-3 rounded" style={{ background: 'rgba(244,63,94,0.55)' }} />
- 亏损
- </span>
- <span className="ml-auto">颜色越深 | 幅度越大</span>
- </div>
  </div>
  );
 }
@@ -868,7 +748,7 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
  <td className="py-2 px-2 font-mono-nums">{trades.length - i}</td>
  <td className="py-2 px-2 ">{trade.date}</td>
  <td className="py-2 px-2">
- <span className={`text-xs px-2 py-0.5 rounded-full ${trade.type === 'buy' ? 'bg-emerald-500/20 text-[hsl(var(--price-up))]' : 'bg-rose-500/20 text-[hsl(var(--price-down))]'}`}>
+ <span className={`text-xs px-2 py-0.5 rounded-full ${trade.type === 'buy' ? 'bg-[hsl(var(--price-up))]/20 text-[hsl(var(--price-up))]' : 'bg-[hsl(var(--price-down))]/20 text-[hsl(var(--price-down))]'}`}>
  {trade.type === 'buy' ? '买入' : '卖出'}
  </span>
  </td>
@@ -896,207 +776,6 @@ function TradeTable({ trades }: { trades: TradeRecord[] }) {
 }
 
 // ── Radar Comparison Chart ──
-interface RadarDataItem {
- metric: string;
- [key: string]: string | number;
-}
-
-function StrategyRadarChart({ results, names }: { results: SavedResult[]; names: string[] }) {
- const radarData: RadarDataItem[] = useMemo(() => {
- const metrics = [
- { key: 'total_return', label: '总收益', normalize: (v: number, max: number) => max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0 },
- { key: 'sharpe_ratio', label: '夏普比率', normalize: (v: number, max: number) => max > 0 ? Math.max(0, Math.min(100, (v / max) * 100)) : 0 },
- { key: 'win_rate', label: '胜率', normalize: (v: number, _: number) => Math.min(100, v) },
- { key: 'max_drawdown', label: '风险控制', normalize: (v: number, max: number) => max > 0 ? Math.max(0, 100 - (v / max) * 100) : 100 },
- { key: 'trade_count', label: '交易频率', normalize: (v: number, max: number) => max > 0 ? Math.min(100, (v / max) * 100) : 0 },
- ];
-
- const maxValues: Record<string, number> = {};
- for (const metric of metrics) {
- maxValues[metric.key] = Math.max(...results.map(r => Math.abs(r.result[metric.key as keyof BacktestResult] as number)), 0.01);
- }
-
- return metrics.map(metric => {
- const item: RadarDataItem = { metric: metric.label };
- results.forEach((r, i) => {
- const raw = r.result[metric.key as keyof BacktestResult] as number;
- item[names[i]] = metric.normalize(raw, maxValues[metric.key]);
- });
- return item;
- });
- }, [results, names]);
-
- const colors = ['hsl(var(--price-up))', 'hsl(var(--swiss-accent))', 'hsl(var(--risk-warning))', 'hsl(var(--risk-danger))'];
-
- return (
- <div className="w-full h-72">
- <ResponsiveContainer width="100%" height="100%">
- <RadarChart data={radarData}>
- <PolarGrid stroke="rgba(255,255,255,0.1)" />
- <PolarAngleAxis dataKey="metric" tick={{ fill: 'hsl(var(--text-tertiary))', fontSize: 10 }} />
- <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: 'hsl(var(--text-secondary))', fontSize: 9 }} />
- {results.map((_, i) => (
- <Radar
- key={i}
- name={names[i]}
- dataKey={names[i]}
- stroke={colors[i % colors.length]}
- fill={colors[i % colors.length]}
- fillOpacity={0.1}
- strokeWidth={2}
- />
- ))}
- <RechartsTooltip
- contentStyle={{ background: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', fontSize: '12px' }}
- labelStyle={{ color: '#ccc' }}
- />
- <Legend
- wrapperStyle={{ fontSize: '11px', color: 'hsl(var(--text-tertiary))' }}
- />
- </RadarChart>
- </ResponsiveContainer>
- </div>
- );
-}
-
-// ── Strategy Comparison Panel ──
-function StrategyComparison({ savedResults, onRemove }: {
- savedResults: SavedResult[];
- onRemove: (id: string) => void;
-}) {
- const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
- const [showRadar, setShowRadar] = useState(false);
-
- const toggleCompare = (id: string) => {
- setSelectedForCompare(prev => {
- if (prev.includes(id)) return prev.filter(x => x !== id);
- if (prev.length >= 4) return prev;
- return [...prev, id];
- });
- };
-
- const compareResults = savedResults.filter(s => selectedForCompare.includes(s.id));
- const compareNames = compareResults.map(s => s.name);
-
- const formatPct = (v: number) => `${v > 0 ? '+' : ''}${safeToFixed(v, 2)}%`;
-
- return (
- <div
- className="glass-card p-4"
- >
- <div className="flex items-center justify-between mb-3">
- <div className="flex items-center gap-2">
- <Layers size={14} className="text-[hsl(var(--swiss-accent))]" />
- <span className="text-sm font-bold ">策略对比</span>
- <span className="text-xs ">({savedResults.length} 条已保存)</span>
- </div>
- {compareResults.length >= 2 && (
- <button
- onClick={() => setShowRadar(!showRadar)}
- className="text-xs px-2 py-1 rounded border transition-colors"
- style={{ borderColor: 'hsl(var(--border-subtle))', color: 'hsl(var(--text-secondary))' }}
- >
- {showRadar ? '表格视图' : '雷达图对比'}
- </button>
- )}
- </div>
-
- {/* Strategy selection */}
- <div className="flex flex-wrap gap-1 mb-3">
- {savedResults.map(s => (
- <button
- key={s.id}
- onClick={() => toggleCompare(s.id)}
- className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
- selectedForCompare.includes(s.id) ? 'bg-violet-500/20 border-violet-500/40' : 'hover:bg-white/5'
- }`}
- style={{ borderColor: selectedForCompare.includes(s.id) ? 'rgba(139,92,246,0.4)' : 'hsl(var(--border-subtle))', color: 'hsl(var(--text-secondary))' }}
- >
- {s.name} ({s.strategyName})
- </button>
- ))}
- </div>
-
- {/* Comparison table */}
- {compareResults.length >= 2 && !showRadar && (
- <div className="overflow-x-auto">
- <table className="w-full text-xs">
- <thead>
- <tr className="border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
- <th className="text-left py-2 px-2 font-medium" style={{ color: 'hsl(var(--text-tertiary))' }}>指标</th>
- {compareResults.map((s, i) => (
- <th key={s.id} className="text-right py-2 px-2 font-medium" style={{ color: ['hsl(var(--price-up))', 'hsl(var(--swiss-accent))', 'hsl(var(--risk-warning))', 'hsl(var(--risk-danger))'][i] }}>
- {s.name}
- </th>
- ))}
- </tr>
- </thead>
- <tbody>
- {[
- { label: '总收益率', key: 'total_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' },
- { label: '年化收益率', key: 'annual_return', fmt: (v: number) => formatPct(v), color: (v: number) => v >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' },
- { label: '最大回撤', key: 'max_drawdown', fmt: (v: number) => formatPct(v), color: () => 'hsl(var(--price-down))' },
- { label: '夏普比率', key: 'sharpe_ratio', fmt: (v: number) => safeToFixed(v, 2), color: (v: number) => v >= 1 ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))' },
- { label: '胜率', key: 'win_rate', fmt: (v: number) => `${safeToFixed(v, 1)}%`, color: () => 'hsl(var(--swiss-accent))' },
- { label: '交易次数', key: 'trade_count', fmt: (v: number) => String(v), color: () => 'hsl(var(--text-tertiary))' },
- ].map(row => (
- <tr key={row.key} className="border-b" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
- <td className="py-2 px-2" style={{ color: 'hsl(var(--text-secondary))' }}>{row.label}</td>
- {compareResults.map(s => {
- const val = s.result[row.key as keyof BacktestResult] as number;
- return (
- <td key={s.id} className="py-2 px-2 text-right font-mono-nums font-medium" style={{ color: row.color(val) }}>
- {row.fmt(val)}
- </td>
- );
- })}
- </tr>
- ))}
- </tbody>
- </table>
- </div>
- )}
-
- {/* Radar chart */}
- {compareResults.length >= 2 && showRadar && (
- <StrategyRadarChart results={compareResults} names={compareNames} />
- )}
-
- {/* Saved results list */}
- <div className="mt-3 space-y-1">
- <div className="text-[11px] font-medium mb-1" style={{ color: 'hsl(var(--text-tertiary))' }}>已保存回测结果</div>
- <div className="max-h-48 overflow-y-auto space-y-1">
- {savedResults.map((s, i) => (
- <div key={s.id} className="flex items-center justify-between px-2 py-1.5 rounded text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid hsl(var(--border-subtle))' }}>
- <div className="flex items-center gap-2 min-w-0">
- <span className="w-4 h-4 rounded-full shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ background: ['hsl(var(--price-up))', 'hsl(var(--swiss-accent))', 'hsl(var(--risk-warning))', 'hsl(var(--risk-danger))'][i % 4] }}>
- {i + 1}
- </span>
- <span className="truncate font-medium" style={{ color: 'hsl(var(--text-primary))' }}>{s.name}</span>
- <span className="text-[10px] shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{s.strategyName}</span>
- <span className={`text-[10px] font-mono-nums shrink-0 ${s.result.total_return >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
- {formatPct(s.result.total_return)}
- </span>
- </div>
- <div className="flex items-center gap-1 shrink-0">
- <label className="flex items-center gap-1 cursor-pointer" onClick={() => toggleCompare(s.id)}>
- <input type="checkbox" checked={selectedForCompare.includes(s.id)} onChange={() => {}} className="w-3 h-3" />
- </label>
- <button onClick={() => onRemove(s.id)} className="hover:opacity-70" style={{ color: 'hsl(var(--text-tertiary))' }}>
- <X size={12} />
- </button>
- </div>
- </div>
- ))}
- </div>
- </div>
- </div>
- );
-}
-
-// ───────────────────────────────────────────────
-// 主组件
-// ───────────────────────────────────────────────
 
 export default function BacktestPage() {
  const [searchParams] = useSearchParams();
@@ -1134,25 +813,10 @@ const backtestDays = useMemo(() => {
  const [params, setParams] = useState<StrategyParams>(DEFAULT_PARAMS.ma_cross);
  const [running, setRunning] = useState(false);
  const [result, setResult] = useState<BacktestResult | null>(null);
- const [savedResults, setSavedResults] = useState<SavedResult[]>(() => {
- try {
- const raw = localStorage.getItem('stockmate_saved_results');
- return raw ? JSON.parse(raw) : [];
- } catch { return []; }
-});
- const [saveName, setSaveName] = useState('');
-// Persist saved results to localStorage
-useEffect(() => {
- localStorage.setItem('stockmate_saved_results', JSON.stringify(savedResults));
-}, [savedResults]);
- const [showSaveInput, setShowSaveInput] = useState(false);
 const [availableRules, setAvailableRules] = useState<TradingRule[]>([]);
 const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
 const [selectedSellRuleId, setSelectedSellRuleId] = useState<string | null>(null);
 const [error, setError] = useState<string | null>(null);
-const [stopLoss, setStopLoss] = useState(5);
-const [takeProfit, setTakeProfit] = useState(10);
-const [maxHolding, setMaxHolding] = useState(0); // 0 = unlimited
 
 useEffect(() => {
   const load = () => {
@@ -1277,7 +941,7 @@ useEffect(() => {
           });
           return;
         }
-        const res = runMockBacktest(filteredQuotes, selectedStrategy, params, stopLoss, takeProfit, maxHolding);
+        const res = runMockBacktest(filteredQuotes, selectedStrategy, params);
  console.log('[BacktestPage] strategy run complete:', {
  total_return: res.total_return.toFixed(2) + '%',
  annual_return: res.annual_return.toFixed(2) + '%',
@@ -1294,29 +958,8 @@ useEffect(() => {
  setRunning(false);
  }
  }, 1200);
- }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, selectedSellRuleId, stockId, startDate, endDate, stopLoss, takeProfit, maxHolding]);
+ }, [quotes, selectedStrategy, params, availableRules, selectedRuleId, selectedSellRuleId, stockId, startDate, endDate]);
 
- const handleSave = () => {
- if (!result || !saveName.trim()) return;
- const strategyName = STRATEGIES.find(s => s.id === selectedStrategy)?.name ?? selectedStrategy;
- const saved: SavedResult = {
- id: Date.now().toString(),
- name: saveName.trim(),
- strategyId: selectedStrategy,
- strategyName,
- timestamp: Date.now(),
- result: { ...result },
- params: { ...params },
- };
- console.log('[BacktestPage] save result:', { name: saved.name, strategy: saved.strategyName, totalReturn: saved.result.total_return.toFixed(2) + '%' });
- setSavedResults(prev => [...prev, saved]);
- setSaveName('');
- setShowSaveInput(false);
- };
-
- const removeSaved = (id: string) => {
- setSavedResults(prev => prev.filter(s => s.id !== id));
- };
 
  const formatPct = (v: number) => `${v > 0 ? '+' : ''}${safeToFixed(v, 2)}%`;
 
@@ -1534,34 +1177,6 @@ useEffect(() => {
  </div>
  </div>
 
-{/* Risk control */}
-<details className="mt-2">
-  <summary className="text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-secondary)' }}>
-    风控设置 ▾
-  </summary>
-  <div className="space-y-2 mt-2">
-    <div>
-      <label className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>止损比例 (%)</label>
-      <input type="range" min="0" max="20" step="1" value={stopLoss}
-        onChange={e => setStopLoss(+e.target.value)}
-        className="w-full" />
-      <span className="text-data-xs font-mono-nums">{stopLoss}%</span>
-    </div>
-    <div>
-      <label className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>止盈比例 (%)</label>
-      <input type="range" min="0" max="50" step="1" value={takeProfit}
-        onChange={e => setTakeProfit(+e.target.value)}
-        className="w-full" />
-      <span className="text-data-xs font-mono-nums">{takeProfit}%</span>
-    </div>
-    <div>
-      <label className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最大持仓天数 (0=不限)</label>
-      <input type="number" min="0" max="365" value={maxHolding}
-        onChange={e => setMaxHolding(+e.target.value)}
-        className="input w-24" />
-    </div>
-  </div>
-</details>
 
 {/* Date range */}
 <div className="mt-2">
@@ -1583,40 +1198,9 @@ useEffect(() => {
  {running ? <RotateCcw size={16} className="animate-spin" /> : <Play size={16} />}
  {running ? '回测运行中...' : '开始回测'}
  </button>
- {result && (
- <button
- onClick={() => setShowSaveInput(!showSaveInput)}
- className="flex items-center gap-2 btn-secondary"
- >
- <Save size={16} />
- 保存结果
- </button>
- )}
  </div>
 
  {/* 保存输入框 */}
- {showSaveInput && (
- <div
- className="overflow-hidden mt-3"
- >
- <div className="flex items-center gap-2">
- <input
- type="text"
- placeholder="输入策略名称..."
- value={saveName}
- onChange={e => setSaveName(e.target.value)}
- onKeyDown={e => e.key === 'Enter' && handleSave()}
- className="flex-1 border dark:border-white/10 rounded-lg px-3 py-2 text-sm placeholder-zinc-600 focus:outline-none focus:border-violet-500/50"
- />
- <button
- onClick={handleSave}
- className="btn-ghost"
- >
- 确认
- </button>
- </div>
- </div>
- )}
  </div>
  </div>
  </div>
@@ -1657,12 +1241,12 @@ useEffect(() => {
 
    {/* 2. 紧凑指标卡片行 */}
    <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-     <MetricCard label="总收益" value={formatPct(result.total_return)} color={result.total_return >= 0 ? 'price-up' : 'price-down'} icon={BarChart3} />
-     <MetricCard label="年化" value={formatPct(result.annual_return)} color={result.annual_return >= 0 ? 'price-up' : 'price-down'} icon={TrendingUp} />
-     <MetricCard label="夏普" value={safeToFixed(result.sharpe_ratio, 2)} color={result.sharpe_ratio >= 1 ? 'price-up' : ''} icon={Activity} />
-     <MetricCard label="回撤" value={formatPct(result.max_drawdown)} color="price-down" icon={Shield} />
-     <MetricCard label="胜率" value={safeToFixed(result.win_rate, 1) + '%'} color={result.win_rate > 50 ? 'price-up' : ''} icon={Target} />
-     <MetricCard label="交易" value={String(result.trade_count)} color="" suffix={'盈' + result.profit_trades + '/亏' + result.loss_trades} icon={Hash} />
+     <MetricCard label="总收益" value={formatPct(result.total_return)} />
+     <MetricCard label="年化" value={formatPct(result.annual_return)} />
+     <MetricCard label="夏普" value={safeToFixed(result.sharpe_ratio, 2)} />
+     <MetricCard label="回撤" value={formatPct(result.max_drawdown)} up={false} />
+     <MetricCard label="胜率" value={safeToFixed(result.win_rate, 1) + '%'} />
+     <MetricCard label="交易" value={String(result.trade_count)} />
    </div>
 
    {/* 3. 收益曲线 */}
@@ -1675,16 +1259,10 @@ useEffect(() => {
    <TradeTable trades={result.trades} />
 
    {/* 5. 策略对比 */}
-   {savedResults.length > 0 && (
-     <StrategyComparison savedResults={savedResults} onRemove={(id: any) => { setSavedResults(p => p.filter((_, j) => String(j) !== String(id))); }} />
-   )}
  </div>
  )}
 
  {/* 策略对比区 */}
- {savedResults.length > 0 && (
- <StrategyComparison savedResults={savedResults} onRemove={removeSaved} />
- )}
  </div>
  );
 }

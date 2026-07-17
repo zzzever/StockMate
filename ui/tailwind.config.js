@@ -38,6 +38,15 @@ export default {
         'dropdown': 'var(--shadow-dropdown)',
         'modal': 'var(--shadow-modal)',
       },
+      animation: {
+        'fadeIn': 'fadeIn 0.3s ease-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
       transitionDuration: {
         'fast': '150ms',
         'normal': '250ms',
