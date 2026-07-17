@@ -53,7 +53,7 @@ export default function LNNPage() {
 
   // Run prediction
   const handlePredict = async () => {
-    if (!selectedCode) return;
+    if (!selectedCode) { setError('请先选择一只股票'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -62,6 +62,7 @@ export default function LNNPage() {
         days: 60,
       });
       setResult({ prediction, quotes: quotes || [] });
+      setError(null);
     } catch (e: any) {
       setError(e?.message || '预测失败');
     } finally {
@@ -158,6 +159,12 @@ export default function LNNPage() {
                 </button>
               ))}
             </div>
+            {selectedStock && (
+              <div className="mt-1 px-2 py-1.5 rounded-sm" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                <div className="text-data-xs font-bold" style={{ color: 'var(--text-primary)' }}>{selectedStock.name}</div>
+                <div className="text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{selectedStock.ticker}</div>
+              </div>
+            )}
           </div>
 
           {/* Params */}
@@ -221,6 +228,7 @@ export default function LNNPage() {
                   result.prediction.direction === 'down' ? '3px solid hsl(var(--price-down))' : '3px solid hsl(var(--risk-warning))'
               }}>
                 <span className="text-2xl">{result.prediction.direction === 'up' ? '📈' : result.prediction.direction === 'down' ? '📉' : '📊'}</span>
+                  <span style={{ color: 'var(--text-tertiary)' }} className="text-data-xs ml-auto">基于 {result.quotes?.length || 0} 个交易日数据</span>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-heading-sm font-extrabold" style={{
