@@ -6,7 +6,10 @@
     <img src="https://img.shields.io/badge/Rust-1.85+-orange?logo=rust" alt="Rust"/>
     <img src="https://img.shields.io/badge/React-19+-blue?logo=react" alt="React"/>
     <img src="https://img.shields.io/badge/Tauri-2.x-purple?logo=tauri" alt="Tauri"/>
-    <img src="https://img.shields.io/badge/license-MIT-green" alt="License"/>
+    <img src="https://img.shields.io/badge/license-GPLv3-green" alt="License"/>
+  </p>
+  <p>
+    <img src="https://img.shields.io/github/stars/zzzever/StockMate?style=social" alt="stars"/>
   </p>
 </div>
 
