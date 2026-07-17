@@ -85,18 +85,18 @@ export default function SettingsPage() {
       )}
 
       {configError && (
-        <div className="p-4 text-red-500 border border-red-300 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-900/20">
+        <div className="p-4  border   rounded-lg  ">
           加载配置失败: {configError.message}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-4">
         {/* DeepSeek Config */}
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <div className="flex items-center gap-2 mb-4">
             <Bot size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>DeepSeek AI 配置</h2>
-            <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${config?.has_key ? '' : 'bg-zinc-500/20'}`} style={{ color: config?.has_key ? 'hsl(var(--price-up))' : 'hsl(var(--text-secondary))', background: config?.has_key ? 'hsl(var(--price-up) / 0.2)' : undefined }}>
+            <span className={`ml-auto text-xs px-2 py-0.5 rounded-full ${config?.has_key ? '' : ''}`} style={{ color: config?.has_key ? 'hsl(var(--price-up))' : 'hsl(var(--text-secondary))', background: config?.has_key ? 'hsl(var(--price-up) / 0.2)' : undefined }}>
               {config?.has_key ? '已配置' : '未配置'}
             </span>
           </div>
@@ -110,7 +110,7 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={toggleDeepseek}
-                className={`relative w-11 h-6 rounded-full transition-colors ${deepseekEnabled ? '' : 'bg-zinc-600'}`}
+                className={`relative w-11 h-6 rounded-full transition-colors ${deepseekEnabled ? '' : ''}`}
                 style={{ background: deepseekEnabled ? 'hsl(var(--swiss-accent))' : undefined }}
               >
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${deepseekEnabled ? 'translate-x-5' : ''}`} />
@@ -125,7 +125,7 @@ export default function SettingsPage() {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={config?.has_key ? '••••••••••••••••' : '请输入 DeepSeek API Key'}
-                  className="w-full border rounded-xl px-3 py-2 text-sm placeholder-slate-400 dark:placeholder-slate-400 dark:placeholder-zinc-500 outline-none pr-10"
+                  className="w-full border rounded-lg px-3 py-2 text-sm  dark: dark:placeholder-zinc-500 outline-none pr-10"
                   style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', outline: '2px solid hsl(var(--swiss-accent))', outlineOffset: '2px' }}
                 />
                 <button
@@ -143,7 +143,7 @@ export default function SettingsPage() {
               <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                className="w-full border rounded-xl px-3 py-2 text-sm outline-none"
+                className="w-full border rounded-lg px-3 py-2 text-sm outline-none"
                 style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', outline: '2px solid hsl(var(--swiss-accent))', outlineOffset: '2px' }}
               >
                 <option value="deepseek-v4-pro" className="bg-zinc-900">deepseek-v4-pro</option>
@@ -197,7 +197,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <div className="flex items-center gap-2 mb-4">
             <Wifi size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>数据源配置</h2>
@@ -220,11 +220,11 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <DataSourceStatus />
         </div>
 
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <div className="flex items-center gap-2 mb-4">
             <Database size={16} style={{ color: 'hsl(var(--price-up))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>缓存管理</h2>
@@ -235,7 +235,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={16} style={{ color: 'hsl(var(--risk-warning))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>K线风格</h2>
@@ -243,7 +243,7 @@ export default function SettingsPage() {
           <ChartStyleSelector />
         </div>
 
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <div className="flex items-center gap-2 mb-4">
             <Palette size={16} style={{ color: 'hsl(var(--accent-purple))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>配色方案</h2>
@@ -251,7 +251,7 @@ export default function SettingsPage() {
           <ThemeSchemeSelector />
         </div>
 
-        <div className="glass-card p-5">
+        <div className="glass-card-flat p-3">
           <div className="flex items-center gap-2 mb-4">
             <Palette size={16} style={{ color: 'hsl(var(--swiss-accent))' }} />
             <h2 className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>外观设置</h2>
@@ -296,7 +296,7 @@ function AccentColorPicker() {
         const [h, s] = ACCENT_VALS[c.key];
         return (
           <button key={c.key} onClick={() => setAccent(c.key)}
-            className={`w-8 h-8 rounded-full border-2 shadow-sm hover:scale-110 transition-transform ${accent === c.key ? 'border-black dark:border-white scale-110' : 'border-white dark:border-zinc-700'}`}
+            className={`w-8 h-8 rounded-full border-2  hover:scale-110 transition-transform ${accent === c.key ? 'border-black dark:border-white scale-110' : 'border-white dark:border-zinc-700'}`}
             style={{ background: `hsl(${h}, ${s}%, 58%)` }}
             title={c.name}
           />
@@ -317,17 +317,17 @@ function CacheClearButton() {
   return (
     <>
       <button onClick={() => setShowConfirm(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-red-700 text-red-700 font-black text-xs hover:bg-red-50 transition-colors">
+        className="flex items-center gap-1.5 px-3 py-1.5  text-red-700 font-black text-xs hover: transition-colors">
         <Trash2 size={12} /> {cleared ? '已清除 ✓' : '清理缓存'}
       </button>
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowConfirm(false)}>
-          <div className="glass-card p-6 max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="glass-card-flat p-6 max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-black mb-2" style={{ color: 'hsl(var(--ink))' }}>确认清理缓存？</h3>
             <p className="text-sm mb-4" style={{ color: 'hsl(var(--text-secondary))' }}>将删除所有本地缓存的行情数据，下次加载时重新获取。</p>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setShowConfirm(false)} className="px-4 py-1.5 border-2 text-sm font-bold" style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>取消</button>
-              <button onClick={handleClear} className="px-4 py-1.5 border-2 border-red-700 bg-red-700 text-white text-sm font-bold">确认清理</button>
+              <button onClick={handleClear} className="px-4 py-1.5  bg-red-700 text-white text-sm font-bold">确认清理</button>
             </div>
           </div>
         </div>
@@ -352,7 +352,7 @@ function ThemeSchemeSelector() {
     <div className="grid grid-cols-2 gap-2">
       {THEME_SCHEMES.map((opt) => (
         <button key={opt.key} onClick={() => setTheme(opt.key)}
-          className={`flex flex-col items-start gap-1.5 p-3 rounded-xl border transition-all ${
+          className={`flex flex-col items-start gap-1.5 p-3 rounded-lg border transition-all ${
             theme === opt.key
               ? '' : 'hover:border-slate-300 dark:hover:border-zinc-600'
           }`}
