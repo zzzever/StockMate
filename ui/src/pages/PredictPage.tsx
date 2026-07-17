@@ -179,12 +179,12 @@ export default function PredictPage() {
             </select>
           )}
           {selectedDate && (
-            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300">历史: {selectedDate}</span>
+            <span className="text-xs font-bold px-2 py-0.5 border ">历史: {selectedDate}</span>
           )}
           {dataErrors.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
               {dataErrors.map((de, i) => (
-                <span key={i} className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 border border-amber-300">
+                <span key={i} className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 border ">
                   {de.label} 失败
                   <button onClick={de.retry} className="underline decoration-dotted underline-offset-2 hover:text-amber-900">重试</button>
                 </span>
@@ -192,13 +192,13 @@ export default function PredictPage() {
             </div>
           )}
           {configError && (
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 border border-amber-300 flex items-center gap-1">
+            <span className="text-xs font-bold px-2 py-0.5 border flex items-center gap-1">
               <AlertTriangle size={12} /> 配置加载失败
               <button onClick={() => refetchConfig()} className="underline decoration-dotted underline-offset-2">重试</button>
             </span>
           )}
           {errors.length > 0 && (
-            <span className="text-xs font-bold text-red-700 bg-red-50 px-2 py-0.5 border border-red-300 flex items-center gap-1">
+            <span className="text-xs font-bold px-2 py-0.5 border flex items-center gap-1">
               <AlertTriangle size={12} /> {errors.length === 1 ? 'AI 查询失败' : `${errors.length} 个查询失败`}
               <button onClick={() => refetch()} className="underline decoration-dotted underline-offset-2">重试</button>
             </span>
@@ -214,12 +214,12 @@ export default function PredictPage() {
         </div>
         <div className="flex items-center gap-2">
           {!hasKey && (
-            <span className="text-xs font-bold text-red-600 bg-red-50 border border-red-300 px-2 py-1 flex items-center gap-1">
+            <span className="text-xs font-bold border px-2 py-1 flex items-center gap-1">
               <AlertTriangle size={12} /> 未配置 API Key
             </span>
           )}
           <button onClick={refreshAll} disabled={anyLoading || !stockId}
-            className="flex items-center gap-1.5 text-xs font-black border-2 px-3 py-1.5 hover:bg-black/5 disabled:opacity-30 transition-colors"
+            className="flex items-center gap-1.5 text-xs font-black border-2 px-3 py-1.5 disabled:opacity-30 transition-colors"
             style={{ borderColor: 'hsl(var(--ink))', color: 'hsl(var(--ink))' }}>
             <RefreshCw size={14} className={anyLoading ? 'animate-spin' : ''} /> 刷新全部
           </button>
@@ -237,7 +237,7 @@ export default function PredictPage() {
       ) : !hasKey ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
-            <ShieldAlert size={40} className="mx-auto text-red-400" />
+            <ShieldAlert size={40} className="mx-auto " />
             <p className="text-lg font-bold" style={{ color: 'hsl(var(--ink))' }}>请先在设置页配置 DeepSeek API Key</p>
             <button onClick={() => navigate('/settings')} className="btn-primary">
               <Settings size={12} /> 前往设置
@@ -247,11 +247,11 @@ export default function PredictPage() {
       ) : error ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center space-y-3">
-            <AlertTriangle size={40} className="mx-auto text-red-500" />
-            <p className="text-sm font-bold text-red-700 dark:text-red-400">AI 分析失败</p>
+            <AlertTriangle size={40} className="mx-auto " />
+            <p className="text-sm font-bold dark:">AI 分析失败</p>
             <p className="text-xs max-w-md" style={{ color: 'hsl(var(--text-secondary))' }}>{error.message || 'DeepSeek API 调用异常，请检查网络连接和 API Key 配置'}</p>
             <div className="flex items-center justify-center gap-3">
-              <button onClick={() => refetch()} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: '#6366f1', color: '#ffffff' }}>
+              <button onClick={() => refetch()} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: 'hsl(var(--swiss-accent))', color: '#ffffff' }}>
                 <RefreshCw size={12} /> 重试
               </button>
               <button onClick={() => navigate('/settings')} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors" style={{ background: 'hsl(var(--bg-card))', color: 'hsl(var(--text-secondary))', border: '1px solid hsl(var(--border-default))' }}>
@@ -303,7 +303,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
     <div
       className="flex-1 grid grid-cols-2 gap-3 overflow-auto">
       {/* Main prediction card */}
-      <div className="glass-card p-5 col-span-2 flex flex-col items-center justify-center gap-4 min-h-[200px]">
+      <div className="glass-card-flat p-5 col-span-2 flex flex-col items-center justify-center gap-4 min-h-[200px]">
         {loading ? (
           <RefreshCw size={32} className="animate-spin" style={{ color: 'hsl(var(--text-tertiary))' }} />
         ) : data ? (
@@ -326,7 +326,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
       </div>
 
       {/* Probability distribution */}
-      <div className="glass-card p-4">
+      <div className="glass-card-flat p-4">
         <h3 className="text-sm font-black tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
           <Target size={14} /> 概率分布
         </h3>
@@ -367,7 +367,7 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
       </div>
 
       {/* Key levels */}
-      <div className="glass-card p-4">
+      <div className="glass-card-flat p-4">
         <h3 className="text-sm font-black tracking-wider mb-3 flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
           <Activity size={14} /> 关键数据
         </h3>
@@ -391,9 +391,9 @@ function PredictPanel({ data, loading }: { data: DeepSeekPrediction | null; load
 // ═══════════════════════════════════════════════════════
 
 function DimCard({ label, data }: { label: string; data: import('@/types').DimensionScore | null }) {
-  if (!data) return <div className="glass-card p-4"><p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>等待数据…</p></div>;
+  if (!data) return <div className="glass-card-flat p-4"><p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>等待数据…</p></div>;
   return (
-    <div className="glass-card p-4">
+    <div className="glass-card-flat p-4">
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-sm font-black tracking-wider" style={{ color: 'hsl(var(--ink))' }}>{label}</h4>
         <span className={`text-lg font-black ${data.score >= 60 ? 'text-red-700' : data.score >= 40 ? 'text-amber-600' : 'text-blue-700'}`}>
@@ -402,13 +402,13 @@ function DimCard({ label, data }: { label: string; data: import('@/types').Dimen
       </div>
       <p className="text-xs mb-2" style={{ color: 'hsl(var(--text-secondary))' }}>{data.summary}</p>
       {(data.key_points ?? []).slice(0, 3).map((kp: string, j: number) => (
-        <div key={j} className="flex items-start gap-1 text-xs"><span className="text-red-700 mt-0.5">◆</span><span>{kp}</span></div>
+        <div key={j} className="flex items-start gap-1 text-xs"><span className="mt-0.5">◆</span><span>{kp}</span></div>
       ))}
       <div className="mt-2 flex flex-wrap gap-1">
         {(data.signals ?? []).slice(0, 4).map((s: any, k: number) => (
           <span key={k} className={`text-[10px] font-bold px-1.5 py-0.5 border ${
-            s.direction === 'bullish' ? 'bg-red-50 text-red-700 border-red-300' :
-            s.direction === 'bearish' ? 'bg-blue-50 text-blue-700 border-blue-300' :
+            s.direction === 'bullish' ? 'border-red-300' :
+            s.direction === 'bearish' ? 'border-blue-300' :
             'text-gray-600'
           }`}>{s.name} {s.strength != null ? `${(s.strength * 100).toFixed(0)}%` : ''}</span>
         ))}
@@ -422,12 +422,12 @@ function MultiDimPanel({ data, loading }: { data: MultiDimensionAnalysis | null;
     <div
       className="flex-1 overflow-auto space-y-3">
       {loading ? (
-        <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin text-gray-400" /></div>
+        <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin " /></div>
       ) : data ? (
         <>
-          <div className="glass-card p-5 flex items-center gap-6">
-            <div className="w-24 h-24 rounded-full border-4 border-red-700 flex items-center justify-center shrink-0 bg-red-50">
-              <span className="text-3xl font-black text-red-700">{data.composite.overall}</span>
+          <div className="glass-card-flat p-5 flex items-center gap-6">
+            <div className="w-24 h-24 rounded-full border-4 border-red-700 flex items-center justify-center shrink-0 ">
+              <span className="text-3xl font-black ">{data.composite.overall}</span>
             </div>
             <div className="flex-1">
               <h3 className="text-lg font-black mb-1" style={{ color: 'hsl(var(--ink))' }}>综合评分</h3>
@@ -445,12 +445,12 @@ function MultiDimPanel({ data, loading }: { data: MultiDimensionAnalysis | null;
             <DimCard label="情绪面" data={data.sentiment} />
           </div>
           {data.briefing && (
-            <div className="glass-card p-4">
+            <div className="glass-card-flat p-4">
               <h3 className="text-sm font-black tracking-wider mb-2" style={{ color: 'hsl(var(--ink))' }}>AI 简报</h3>
               <p className="text-sm leading-relaxed" style={{ color: 'hsl(var(--text-secondary))' }}>{data.briefing.commentary}</p>
               <div className="mt-2 flex flex-wrap gap-1">
                 {data.briefing.risk_warnings.map((w: string, i: number) => (
-                  <span key={i} className="text-[10px] font-bold px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-300 flex items-center gap-1">
+                  <span key={i} className="text-[10px] font-bold px-1.5 py-0.5 border flex items-center gap-1">
                     <AlertTriangle size={10} />{w}
                   </span>
                 ))}
@@ -491,18 +491,18 @@ function CardPanel({ data, loading, error }: { data: CardData | null; loading: b
     <div
       className="flex-1 overflow-auto flex flex-col items-center">
       {loading ? (
-        <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin text-gray-400" /></div>
+        <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin " /></div>
       ) : error ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <AlertTriangle size={40} className="text-red-500" />
-          <p className="text-sm font-bold text-red-700">DeepSeek 生成失败</p>
+          <AlertTriangle size={40} className="" />
+          <p className="text-sm font-bold ">DeepSeek 生成失败</p>
           <p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>{error.message}</p>
         </div>
       ) : data ? (
         <div className="flex flex-col items-center gap-3 w-full max-w-[480px]">
           {/* Card — modern finance report card */}
           <div ref={cardRef}
-            className="relative w-full rounded-xl shadow-lg overflow-hidden"
+            className="relative w-full rounded-lg overflow-hidden"
             style={{
               aspectRatio: '3/4',
               background: 'hsl(var(--bg-card))',
@@ -598,7 +598,7 @@ const CTX_LABELS: Record<string, string> = { bullish: '偏多', bearish: '偏空
 
 function CtxCard({ title, items }: { title: string; items: [string, import('@/types').MarketContextItem][] }) {
   return (
-    <div className="glass-card p-4">
+    <div className="glass-card-flat p-4">
       <h3 className="text-sm font-black tracking-wider mb-3 border-b-2 pb-1" style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>{title}</h3>
       <div className="space-y-2">
         {items.map(([label, item]) => (
@@ -618,7 +618,7 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
     <div
       className="flex-1 overflow-auto space-y-3">
       {loading ? (
-        <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin text-gray-400" /></div>
+        <div className="flex items-center justify-center py-20"><RefreshCw size={32} className="animate-spin " /></div>
       ) : data ? (
         <>
           <div className="grid grid-cols-3 gap-3">
@@ -630,7 +630,7 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
               ['政策环境', data.industry_context.policy], ['行业景气', data.industry_context.prosperity],
               ['竞争格局', data.industry_context.competition], ['供应链', data.industry_context.supply_chain],
             ]} />
-            <div className="glass-card p-4">
+            <div className="glass-card-flat p-4">
               <h3 className="text-sm font-black tracking-wider mb-3 border-b-2 pb-1" style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>公司消息面</h3>
               {['announcements', 'management_changes', 'contracts', 'product_progress'].map((cat) => {
                 const items = (data.company_news as any)[cat] as string[];
@@ -638,7 +638,7 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
                 const labels: Record<string, string> = { announcements: '公告', management_changes: '管理层', contracts: '重大合同', product_progress: '产品进展' };
                 return (
                   <div key={cat} className="mb-2">
-                    <span className="text-[10px] font-black text-red-700">{labels[cat]}</span>
+                    <span className="text-[10px] font-black ">{labels[cat]}</span>
                     {items.map((item, i) => (
                       <div key={i} className="text-xs ml-2 mt-0.5" style={{ color: 'hsl(var(--text-secondary))' }}>· {item}</div>
                     ))}
@@ -647,17 +647,17 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
               })}
             </div>
           </div>
-          <div className="glass-card p-4">
+          <div className="glass-card-flat p-4">
             <h3 className="text-sm font-black tracking-wider mb-2 flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
-              <AlertTriangle size={14} className="text-red-600" /> 风险提示
+              <AlertTriangle size={14} className="" /> 风险提示
             </h3>
             <div className="grid grid-cols-2 gap-2">
               {data.risks.map((r, i) => (
                 <div key={i} className={`flex items-start gap-2 p-2 border-l-4 ${
-                  r.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-950/30' : r.severity === 'medium' ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30' : 'border-blue-400 bg-blue-50 dark:bg-blue-950/30'
+                  r.severity === 'high' ? 'border-red-500 dark:bg-red-950/30' : r.severity === 'medium' ? 'border-amber-500 dark:bg-amber-950/30' : 'border-blue-400 dark:bg-blue-950/30'
                 }`}>
                   <span className={`text-[10px] font-black px-1 ${
-                    r.severity === 'high' ? 'text-red-700 dark:text-red-400' : r.severity === 'medium' ? 'text-amber-700 dark:text-amber-400' : 'text-blue-700 dark:text-blue-400'
+                    r.severity === 'high' ? 'dark:text-red-400' : r.severity === 'medium' ? 'dark:text-amber-400' : 'dark:text-blue-400'
                   }`}>{r.severity === 'high' ? '高' : r.severity === 'medium' ? '中' : '低'}</span>
                   <span className="text-xs font-bold" style={{ color: 'hsl(var(--ink))' }}>{r.description}</span>
                 </div>
@@ -700,12 +700,12 @@ function HistoryPanel({ stockId }: { stockId: string }) {
   return (
     <div
       className="flex-1 overflow-auto space-y-3">
-      <div className="glass-card p-5">
+      <div className="glass-card-flat p-5">
         <h3 className="text-sm font-black tracking-wider mb-4" style={{ color: 'hsl(var(--ink))' }}>历史预测准确率</h3>
         {records.length === 0 ? (
           <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center bg-red-50">
-              <span className="text-2xl font-black text-red-700">--</span>
+            <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center ">
+              <span className="text-2xl font-black ">--</span>
             </div>
             <div>
               <p className="text-sm font-bold">暂无预测记录</p>
@@ -714,8 +714,8 @@ function HistoryPanel({ stockId }: { stockId: string }) {
           </div>
         ) : verifiedCount === 0 ? (
           <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center bg-red-50">
-              <span className="text-2xl font-black text-red-700">--</span>
+            <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center ">
+              <span className="text-2xl font-black ">--</span>
             </div>
             <div>
               <p className="text-sm font-bold">共 {records.length} 次预测（待验证）</p>
@@ -725,8 +725,8 @@ function HistoryPanel({ stockId }: { stockId: string }) {
         ) : records.length > 0 ? (
           <>
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center bg-red-50">
-                <span className="text-2xl font-black text-red-700">{accuracy.toFixed(0)}%</span>
+              <div className="w-20 h-20 rounded-full border-4 border-red-700 flex items-center justify-center ">
+                <span className="text-2xl font-black ">{accuracy.toFixed(0)}%</span>
               </div>
               <div><p className="text-sm font-bold">共 {records.length} 次预测</p><p className="text-xs" style={{ color: 'hsl(var(--text-secondary))' }}>{correct} 次正确 · {verifiedCount - correct} 次错误</p></div>
             </div>
