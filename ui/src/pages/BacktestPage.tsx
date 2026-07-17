@@ -1134,8 +1134,17 @@ const backtestDays = useMemo(() => {
  const [params, setParams] = useState<StrategyParams>(DEFAULT_PARAMS.ma_cross);
  const [running, setRunning] = useState(false);
  const [result, setResult] = useState<BacktestResult | null>(null);
- const [savedResults, setSavedResults] = useState<SavedResult[]>([]);
+ const [savedResults, setSavedResults] = useState<SavedResult[]>(() => {
+ try {
+ const raw = localStorage.getItem('stockmate_saved_results');
+ return raw ? JSON.parse(raw) : [];
+ } catch { return []; }
+});
  const [saveName, setSaveName] = useState('');
+// Persist saved results to localStorage
+useEffect(() => {
+ localStorage.setItem('stockmate_saved_results', JSON.stringify(savedResults));
+}, [savedResults]);
  const [showSaveInput, setShowSaveInput] = useState(false);
 const [availableRules, setAvailableRules] = useState<TradingRule[]>([]);
 const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
