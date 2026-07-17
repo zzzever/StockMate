@@ -6,6 +6,8 @@ members = [
     "crates/screener",
     "crates/backtest",
     "crates/deepseek",
+    "crates/api_tauri_commands",
+    "crates/lnn_predictor",
     "src-tauri",
 ]
 resolver = "2"

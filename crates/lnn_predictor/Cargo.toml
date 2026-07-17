@@ -1,0 +1,10 @@
+[package]
+name = "lnn_predictor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+num-traits = "0.2"
+rust_decimal = { version = "1.35", features = ["serde"] }
+domain = { path = "../domain" }

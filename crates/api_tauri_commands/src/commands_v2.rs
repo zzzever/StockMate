@@ -2,6 +2,7 @@ use tauri::State;
 use rust_decimal::prelude::ToPrimitive;
 
 use crate::AppState;
+use lnn_predictor;
 
 // ============================================================
 // Input validation helpers
@@ -579,6 +580,22 @@ pub async fn backtest_strategy(
         message: e,
         details: None,
     })
+}
+
+#[tauri::command]
+pub async fn predict_with_lnn(
+    state: State<'_, AppState>,
+    stock_id: String,
+    days: u32,
+) -> Result<lnn_predictor::LNNPrediction, String> {
+    let history = state.data_service.get_stock_history(&stock_id, days, "day")
+        .await
+        .map_err(|e| format!("获取历史数据失败: {}", e))?;
+    if history.is_empty() {
+        return Err("暂无历史数据".into());
+    }
+    lnn_predictor::predict(&stock_id, &history)
+        .map_err(|e| format!("LNN 预测失败: {}", e))
 }
 
 #[cfg(test)]

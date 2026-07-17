@@ -20,6 +20,7 @@ const PredictPage = lazy(() => import('@/pages/PredictPage'));
 const RulesPage = lazy(() => import('@/pages/RulesPage'));
 const IndicatorLabPage = lazy(() => import('@/pages/IndicatorLabPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+const LNNPage = lazy(() => import('@/pages/LNNPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -65,6 +66,7 @@ function AppRoutes() {
             <Route path="/rules" element={<RulesPage />} />
             <Route path="/indicator-lab" element={<IndicatorLabPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/lnn" element={<LNNPage />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

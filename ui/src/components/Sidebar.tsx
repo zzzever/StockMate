@@ -5,6 +5,7 @@ import { Link, useLocation } from 'react-router-dom';
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
   '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
+  '/lnn': 'lnn',
 };
 
 const navGroups = [
@@ -21,6 +22,7 @@ const navGroups = [
       { id: 'quote' as const, label: '行情', icon: BarChart3, path: '/quote' },
       { id: 'sector' as const, label: '板塊', icon: LayoutGrid, path: '/sector' },
       { id: 'indicatorLab' as const, label: '支撐線', icon: FlaskConical, path: '/indicator-lab' },
+      { id: 'lnn' as const, label: 'LNN 预测', icon: BrainCircuit, path: '/lnn' },
     ],
   },
   {

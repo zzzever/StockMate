@@ -16,5 +16,6 @@ chrono = { version = "0.4", features = ["serde"] }
 deepseek = { path = "../deepseek" }
 screener = { path = "../screener" }
 backtest = { path = "../backtest" }
+lnn_predictor = { path = "../lnn_predictor" }
 reqwest = { version = "0.12", features = ["json"] }
 tracing = "0.1"

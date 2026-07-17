@@ -10,6 +10,7 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
   quote: { group: '分析工具', label: '行情' },
   sector: { group: '分析工具', label: '板塊' },
   indicatorLab: { group: '分析工具', label: '支撐線' },
+  lnn: { group: '分析工具', label: 'LNN 预测' },
   backtest: { group: '交易策略', label: '回測' },
   predict: { group: '交易策略', label: '預測' },
   rules: { group: '交易策略', label: '規則' },
@@ -19,6 +20,7 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
   '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
+  '/lnn': 'lnn',
 };
 
 /** A‑share trading session based on Beijing time (UTC+8). */

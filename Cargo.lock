@@ -86,6 +86,7 @@ dependencies = [
  "data_fetcher",
  "deepseek",
  "domain",
+ "lnn_predictor",
  "reqwest 0.12.28",
  "rust_decimal",
  "screener",
@@ -2283,6 +2284,16 @@ name = "litemap"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
+
+[[package]]
+name = "lnn_predictor"
+version = "0.1.0"
+dependencies = [
+ "domain",
+ "num-traits",
+ "rust_decimal",
+ "serde",
+]
 
 [[package]]
 name = "lock_api"
