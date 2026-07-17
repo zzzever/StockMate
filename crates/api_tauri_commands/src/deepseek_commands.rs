@@ -828,6 +828,46 @@ pub async fn analyze_market_environment(
         .map_err(|e| ApiError { code: 500, message: e.to_string(), details: None })
 }
 
+
+#[tauri::command]
+pub async fn save_prediction(
+    state: State<'_, AppState>,
+    stock_id: String,
+    date: String,
+    prediction_json: String,
+    multi_json: Option<String>,
+    card_json: Option<String>,
+    market_json: Option<String>,
+) -> Result<(), String> {
+    let pool = &state.db_pool;
+    storage::save_prediction_history(pool, &stock_id, &date, &prediction_json, multi_json.as_deref(), card_json.as_deref(), market_json.as_deref())
+        .await
+        .map_err(|e| format!("保存预测历史失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_prediction_history(
+    state: State<'_, AppState>,
+    stock_id: String,
+) -> Result<Vec<(String, String, Option<String>, Option<String>, Option<String>)>, String> {
+    let pool = &state.db_pool;
+    storage::get_prediction_history(pool, &stock_id)
+        .await
+        .map_err(|e| format!("获取预测历史失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn delete_prediction(
+    state: State<'_, AppState>,
+    stock_id: String,
+    date: String,
+) -> Result<(), String> {
+    let pool = &state.db_pool;
+    storage::delete_prediction_history(pool, &stock_id, &date)
+        .await
+        .map_err(|e| format!("删除预测历史失败: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

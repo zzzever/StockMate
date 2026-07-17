@@ -21,6 +21,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0004_add_stock_type.sql"),
         include_str!("../migrations/0005_add_kline.sql"),
         include_str!("../migrations/0006_add_unique_constraints.sql"),
+        include_str!("../migrations/0007_add_prediction_history.sql"),
     ];
     for mig in migrations {
         // Wrap each migration file in a transaction for atomicity
@@ -41,6 +42,56 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         }
         tx.commit().await?;
     }
+    Ok(())
+}
+
+pub async fn save_prediction_history(
+    pool: &DbPool,
+    stock_id: &str,
+    date: &str,
+    prediction_json: &str,
+    multi_json: Option<&str>,
+    card_json: Option<&str>,
+    market_json: Option<&str>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT OR REPLACE INTO prediction_history (stock_id, date, prediction_json, multi_json, card_json, market_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+    )
+    .bind(stock_id)
+    .bind(date)
+    .bind(prediction_json)
+    .bind(multi_json)
+    .bind(card_json)
+    .bind(market_json)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn get_prediction_history(pool: &DbPool, stock_id: &str) -> Result<Vec<(String, String, Option<String>, Option<String>, Option<String>)>> {
+    #[derive(Debug, sqlx::FromRow)]
+    struct Row {
+        date: String,
+        prediction_json: String,
+        multi_json: Option<String>,
+        card_json: Option<String>,
+        market_json: Option<String>,
+    }
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT date, prediction_json, multi_json, card_json, market_json FROM prediction_history WHERE stock_id = ?1 ORDER BY date DESC LIMIT 30"
+    )
+    .bind(stock_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.date, r.prediction_json, r.multi_json, r.card_json, r.market_json)).collect())
+}
+
+pub async fn delete_prediction_history(pool: &DbPool, stock_id: &str, date: &str) -> Result<()> {
+    sqlx::query("DELETE FROM prediction_history WHERE stock_id = ?1 AND date = ?2")
+        .bind(stock_id)
+        .bind(date)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

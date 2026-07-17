@@ -345,6 +345,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::validate_sslang,
             api_tauri_commands::commands_v2::parse_sslang_rules,
             api_tauri_commands::commands_v2::backtest_strategy,
+            api_tauri_commands::deepseek_commands::save_prediction,
+            api_tauri_commands::deepseek_commands::get_prediction_history,
+            api_tauri_commands::deepseek_commands::delete_prediction,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAnalyzeAll, useStockHistory, useRealtimeQuote, useStockFinance, useDeepSeekConfig, useStockDetail } from '@/hooks/useTauriQuery';
 import type { DeepSeekPrediction, MultiDimensionAnalysis, CardData, MarketEnvironment, Quote } from '@/types';
+import { invoke } from '@tauri-apps/api/core';
 import { fmtPrice, fmtPct } from '@/lib/format';
 
 // ── helpers ──
@@ -42,19 +43,33 @@ const DIR_BG_STYLE: Record<string, React.CSSProperties> = {
 const DIR_LABEL: Record<string, string> = { up: '看涨', down: '看跌', sideways: '震荡' };
 
 // ── History storage ──
-interface HistoryEntry { date: string; prediction: DeepSeekPrediction | null; multi: MultiDimensionAnalysis | null; card: CardData | null; market: MarketEnvironment | null; }
-function loadAllHistory(): Record<string, HistoryEntry> { try { return JSON.parse(localStorage.getItem('stockmate_pred_full') || '{}'); } catch { return {}; } }
-function saveHistoryEntry(stockId: string, entry: HistoryEntry) {
+interface HistoryEntry { date: string; prediction: DeepSeekPrediction | null; multi?: MultiDimensionAnalysis | null; card?: CardData | null; market?: MarketEnvironment | null; }
+function loadAllHistory(): Record<string, HistoryEntry> { return {}; }
+async function savePredictionHistory(stockId: string, entry: HistoryEntry) {
   try {
-    const all = loadAllHistory();
-    all[stockId] = entry;
-    localStorage.setItem('stockmate_pred_full', JSON.stringify(all));
-  } catch (e) {
-    console.error('Failed to save prediction history:', e);
-  }
+    await invoke('save_prediction', {
+      stockId,
+      date: entry.date,
+      predictionJson: JSON.stringify(entry.prediction || {}),
+      multiJson: entry.multi ? JSON.stringify(entry.multi) : null,
+      cardJson: entry.card ? JSON.stringify(entry.card) : null,
+      marketJson: entry.market ? JSON.stringify(entry.market) : null,
+    });
+  } catch (e) { console.error('Failed to save prediction:', e); }
 }
-function getHistoryDates(stockId: string): string[] { const e = loadAllHistory()[stockId]; return e?.date ? [e.date] : []; }
-
+async function loadPredictionHistory(stockId: string): Promise<{ date: string; prediction: any; multi?: any; card?: any; market?: any }[]> {
+  try {
+    const rows: [string, string, string | null, string | null, string | null][] = await invoke('get_prediction_history', { stockId });
+    return rows.map(([date, predJson, multiJson, cardJson, marketJson]) => ({
+      date,
+      prediction: JSON.parse(predJson),
+      multi: multiJson ? JSON.parse(multiJson) : undefined,
+      card: cardJson ? JSON.parse(cardJson) : undefined,
+      market: marketJson ? JSON.parse(marketJson) : undefined,
+    }));
+  } catch (e) { console.error('Failed to load history:', e); return []; }
+}
+function getHistoryDates(_stockId: string): string[] { return []; }
 // ── Component ──
 export default function PredictPage() {
   const navigate = useNavigate();
@@ -124,7 +139,11 @@ export default function PredictPage() {
     const key = stockId + '_' + todayStr();
     if (key === lastSavedRef.current) return;
     lastSavedRef.current = key;
-    saveHistoryEntry(stockId, { date: todayStr(), prediction, multi: multiDim, card, market: marketEnv });
+    savePredictionHistory(stockId, { date: todayStr(), prediction, multi: multiDim, card, market: marketEnv });
+    loadPredictionHistory(stockId).then(list => {
+      setHistoryDates(list.map(h => h.date));
+      if (list.length > 0) setHistoryData(list[0] as HistoryEntry);
+    });
     setHistoryDates(getHistoryDates(stockId));
   }, [stockId, allData]);
 
@@ -150,10 +169,10 @@ export default function PredictPage() {
     refetch();
   }, [refetch]);
 
-  const handleHistorySelect = useCallback((date: string) => {
+  const handleHistorySelect = useCallback(async (date: string) => {
     setSelectedDate(date);
-    const entry = loadAllHistory()[stockId];
-    if (entry && entry.date === date) setHistoryData(entry);
+    const list = await loadPredictionHistory(stockId);
+    const found = list.find(h => h.date === date);
   }, [stockId]);
 
   return (
@@ -674,26 +693,23 @@ function MarketEnvPanel({ data, loading }: { data: MarketEnvironment | null; loa
 
 // ── History Panel (localStorage) ──
 interface HistoryRecord { date: string; stockId: string; stockName: string; predicted: string; confidence: number; actual?: string; correct?: boolean; }
-function loadHistory(): HistoryRecord[] {
+async function loadHistory(stockId: string): Promise<HistoryRecord[]> {
   try {
-    const all = JSON.parse(localStorage.getItem('stockmate_pred_full') || '{}');
-    return Object.entries(all).map(([sid, entry]) => {
-      const e = entry as HistoryEntry;
-      return {
-        date: e.date,
-        stockId: sid,
-        stockName: '',
-        predicted: e.prediction?.direction ?? '',
-        confidence: e.prediction?.confidence ?? 0,
-        // TODO: correct 字段需要实际行情数据来验证预测结果，目前无法自动设置
-        correct: undefined,
-      };
-    });
+    const rows = await loadPredictionHistory(stockId);
+    return rows.map(r => ({
+      date: r.date,
+      stockId,
+      stockName: '',
+      predicted: r.prediction?.direction ?? '',
+      confidence: r.prediction?.confidence ?? 0,
+      correct: undefined,
+    }));
   } catch { return []; }
 }
 
 function HistoryPanel({ stockId }: { stockId: string }) {
-  const records = loadHistory().filter(r => r.stockId === stockId);
+  const [records, setRecords] = useState<HistoryRecord[]>([]);
+  useEffect(() => { loadHistory(stockId).then(setRecords); }, [stockId]);
   const verifiedCount = records.filter(r => r.correct !== undefined).length;
   const correct = records.filter(r => r.correct === true).length;
   const accuracy = verifiedCount > 0 ? (correct / verifiedCount * 100) : 0;
