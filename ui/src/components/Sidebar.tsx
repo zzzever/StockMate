@@ -1,36 +1,31 @@
 import { useAppStore } from '@/store/useAppStore';
-import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, ScrollText, FlaskConical, LayoutGrid, Settings, BarChart3 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, ScrollText, LayoutGrid, Settings, BarChart3, LineChart, PanelTop, Table2, CandlestickChart } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
-  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
+  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules',
+  '/settings': 'settings',
   '/lnn': 'lnn',
 };
 
 const navGroups = [
   {
-    label: '市場',
+    label: '行情',
     items: [
-      { id: 'watchlist' as const, label: '自選', icon: Star, path: '/watchlist' },
-      { id: 'search' as const, label: '搜尋', icon: Search, path: '/search' },
+      { id: 'watchlist' as const, label: '自選股', icon: Star, path: '/watchlist' },
+      { id: 'search' as const, label: '股票搜索', icon: Search, path: '/search' },
+      { id: 'quote' as const, label: '個股詳情', icon: CandlestickChart, path: '/quote' },
+      { id: 'sector' as const, label: '板塊熱點', icon: LayoutGrid, path: '/sector' },
     ],
   },
   {
-    label: '分析工具',
+    label: '分析預測',
     items: [
-      { id: 'quote' as const, label: '行情', icon: BarChart3, path: '/quote' },
-      { id: 'sector' as const, label: '板塊', icon: LayoutGrid, path: '/sector' },
-      { id: 'indicatorLab' as const, label: '支撐線', icon: FlaskConical, path: '/indicator-lab' },
-      { id: 'lnn' as const, label: 'LNN 预测', icon: BrainCircuit, path: '/lnn' },
-    ],
-  },
-  {
-    label: '交易策略',
-    items: [
-      { id: 'backtest' as const, label: '回測', icon: TrendingUp, path: '/backtest' },
-      { id: 'predict' as const, label: '預測', icon: BrainCircuit, path: '/predict' },
-      { id: 'rules' as const, label: '規則', icon: ScrollText, path: '/rules' },
+      { id: 'lnn' as const, label: 'LNN 預測', icon: BrainCircuit, path: '/lnn' },
+      { id: 'predict' as const, label: 'AI 分析', icon: PanelTop, path: '/predict' },
+      { id: 'backtest' as const, label: '策略回測', icon: TrendingUp, path: '/backtest' },
+      { id: 'rules' as const, label: '交易規則', icon: ScrollText, path: '/rules' },
     ],
   },
   {
@@ -47,7 +42,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'quote'];
+  const stockPages = ['backtest', 'predict', 'rules', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {
