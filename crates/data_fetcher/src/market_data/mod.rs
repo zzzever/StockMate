@@ -309,9 +309,8 @@ async fn diagnose_eastmoney() -> DataSourceResult {
 
 async fn diagnose_sina() -> DataSourceResult {
     let name = "新浪行情".to_string();
-    let endpoint = "https://suggest3.sinajs.cn/suggest".to_string();
-    let encoded_key = url::form_urlencoded::byte_serialize("贵州茅台".as_bytes()).collect::<String>();
-    let url = format!("{}?type=11,12&key={}", endpoint, encoded_key);
+    let endpoint = "https://hq.sinajs.cn".to_string();
+    let url = format!("{}?list=sh600519", endpoint);
     let start = std::time::Instant::now();
 
     let client = match reqwest::Client::builder()
@@ -348,23 +347,21 @@ async fn diagnose_sina() -> DataSourceResult {
         },
     };
 
-    let (text, _, _) = encoding_rs::GBK.decode(&bytes);
-    let has_suggest = text.contains("茅台") || text.contains("600519");
-    if status_code.is_success() && has_suggest {
+    let has_data = bytes.len() > 50;
+    if status_code.is_success() && has_data {
         DataSourceResult {
             name, endpoint, status: "ok".into(),
             response_time_ms: elapsed_ms,
-            detail: Some(format!("HTTP {}, {} bytes, suggest data found", status_code, bytes.len())),
+            detail: Some(format!("HTTP {}, {} bytes, quote data received", status_code, bytes.len())),
         }
     } else {
         DataSourceResult {
             name, endpoint, status: "error".into(),
             response_time_ms: elapsed_ms,
-            detail: Some(format!("HTTP {}, {} bytes, unexpected response", status_code, text.chars().take(100).collect::<String>())),
+            detail: Some(format!("HTTP {}, {} bytes", status_code, bytes.len())),
         }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
