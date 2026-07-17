@@ -497,7 +497,7 @@ export default function StockDetailPage() {
             {INDICATORS.map(ind => (<button key={ind} onClick={() => setIndicator(ind)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: ind === indicator ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: ind === indicator ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{IND_LABELS[ind]}</button>))}
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
-            <button onClick={() => window.open(`/indicator-lab?code=${effectiveCode}`, '_blank', 'width=1200,height=800')}
+            <button onClick={() => window.location.href = `/indicator-lab?code=${effectiveCode}`}
               className="px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0"
               style={{ color: 'hsl(var(--text-tertiary))', borderBottom: '2px solid transparent' }}
               title="打开支撑线分析页">支撑</button>
