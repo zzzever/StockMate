@@ -9,6 +9,7 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
   search: { group: '市場', label: '搜尋' },
   quote: { group: '分析工具', label: '行情' },
   sector: { group: '行情', label: '板塊' },
+  indicatorLab: { group: '分析預測', label: '支撐阻力' },
   lnn: { group: '分析預測', label: 'LNN 预测' },
   backtest: { group: '分析預測', label: '策略回測' },
   predict: { group: '分析預測', label: 'AI 分析' },
@@ -18,7 +19,7 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
-  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/settings': 'settings',
+  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
   '/lnn': 'lnn',
 };
 

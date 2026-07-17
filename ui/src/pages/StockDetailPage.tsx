@@ -384,7 +384,7 @@ export default function StockDetailPage() {
   const handleSetPeriod = (p: string) => { setPeriod(p); if (p === 'minute') setCrosshair(null); };
   const [indicator, setIndicator] = useState<IndicatorType>('none');
   const [showBOLL, setShowBOLL] = useState(false);
-  const [showSR, setShowSR] = useState(false);
+  
   const [drawMode, setDrawMode] = useState(false);
   const [drawColor, setDrawColor] = useState<string>(DRAW_COLORS[0].value);
   // Sync draw mode off when chart signals exit (Escape) — event-driven, no polling
@@ -497,7 +497,10 @@ export default function StockDetailPage() {
             {INDICATORS.map(ind => (<button key={ind} onClick={() => setIndicator(ind)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: ind === indicator ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: ind === indicator ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{IND_LABELS[ind]}</button>))}
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
-            <button onClick={() => setShowSR(!showSR)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showSR ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showSR ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>支撑</button>
+            <button onClick={() => window.open(`/indicator-lab?code=${effectiveCode}`, '_blank', 'width=1200,height=800')}
+              className="px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0"
+              style={{ color: 'hsl(var(--text-tertiary))', borderBottom: '2px solid transparent' }}
+              title="打开支撑线分析页">支撑</button>
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => { const on = !drawMode; setDrawMode(on); (window as any).__klineDrawModeActive = on; }}
               className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`}
@@ -541,52 +544,6 @@ export default function StockDetailPage() {
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
               : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
       </div>
-
-      {/* SR Modal Popup */}
-      {showSR && sr && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowSR(false)}>
-          <div className="w-[420px] max-h-[80vh] overflow-y-auto glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
-            onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-data-sm font-bold" style={{ color: 'var(--text-primary)' }}>支撑阻力位</h3>
-              <button onClick={() => setShowSR(false)} className="text-data-xs px-2 py-0.5 rounded hover:bg-[var(--bg-hover)]"
-                style={{ color: 'var(--text-tertiary)' }}>✕</button>
-            </div>
-            <div className="space-y-3">
-              {sr.nearest_support != null && (
-                <div className="glass-card-flat p-3">
-                  <div className="text-data-xs font-bold mb-1" style={{ color: 'hsl(var(--price-down))' }}>近端支撑位</div>
-                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Number(sr.nearest_support).toFixed(2)}</div>
-                </div>
-              )}
-              {sr.nearest_resistance != null && (
-                <div className="glass-card-flat p-3">
-                  <div className="text-data-xs font-bold mb-1" style={{ color: 'hsl(var(--price-up))' }}>近端阻力位</div>
-                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>¥{Number(sr.nearest_resistance).toFixed(2)}</div>
-                </div>
-              )}
-              <div className="border-t" style={{ borderColor: 'var(--border-subtle)' }} />
-              <div className="text-data-xs font-bold mb-1" style={{ color: 'var(--text-secondary)' }}>全部支撑位</div>
-              <div className="flex flex-wrap gap-1.5">
-                {(sr.supports || []).map((p: number, i: number) => (
-                  <span key={i} className="px-2 py-1 text-data-xs font-mono-nums rounded" style={{ background: 'hsl(var(--price-down-bg))', color: 'hsl(var(--price-down))' }}>
-                    ¥{p.toFixed(2)}
-                  </span>
-                ))}
-              </div>
-              <div className="text-data-xs font-bold mb-1 mt-2" style={{ color: 'var(--text-secondary)' }}>全部阻力位</div>
-              <div className="flex flex-wrap gap-1.5">
-                {(sr.resistances || []).map((p: number, i: number) => (
-                  <span key={i} className="px-2 py-1 text-data-xs font-mono-nums rounded" style={{ background: 'hsl(var(--price-up-bg))', color: 'hsl(var(--price-up))' }}>
-                    ¥{p.toFixed(2)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {secondaryErrors.length > 0 && (
         <div className="shrink-0 px-1">
