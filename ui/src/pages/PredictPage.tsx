@@ -114,8 +114,17 @@ export default function PredictPage() {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [historyData, setHistoryData] = useState<HistoryEntry | null>(null);
 
-  // Refresh history list when stockId changes
-  useEffect(() => { setHistoryDates(getHistoryDates(stockId)); setSelectedDate(''); setHistoryData(null); }, [stockId]);
+  // Load prediction history from DB when stockId changes
+  useEffect(() => {
+    loadPredictionHistory(stockId).then(list => {
+      setHistoryDates(list.map(h => h.date));
+      if (list.length > 0) {
+        setHistoryData(list[0] as HistoryEntry);
+      } else {
+        setHistoryData(null);
+      }
+    });
+  }, [stockId]);
 
   // Extract data from unified response
   const prediction = allData?.prediction ?? null;
