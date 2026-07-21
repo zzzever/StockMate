@@ -538,7 +538,9 @@ export default function StockDetailPage() {
             ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
             : historyError && !chartData.length
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
-              : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
+              : !historyLoading && !chartData.length
+                ? (<div className="flex-1 flex items-center justify-center"><span className="text-data-sm" style={{ color: 'var(--text-tertiary)' }}>暂无日线数据</span></div>)
+                : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
       </div>
 
       {secondaryErrors.length > 0 && (
