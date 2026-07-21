@@ -45,9 +45,9 @@ export default function ScreenerPage() {
     setResults([]);
     try {
       const conditions = [
-        { type: 'LowPrice', params: [strategyParams.maxPrice] },
-        { type: 'ShrinkDrop', params: { days: strategyParams.shrinkDays, max_vol_ratio: strategyParams.maxVolRatio } },
-        { type: 'LowPosition', params: { days: strategyParams.lowPosDays, ratio: strategyParams.lowPosRatio } },
+        { LowPrice: strategyParams.maxPrice },
+        { ShrinkDrop: { days: strategyParams.shrinkDays, max_vol_ratio: strategyParams.maxVolRatio } },
+        { LowPosition: { days: strategyParams.lowPosDays, ratio: strategyParams.lowPosRatio } },
       ];
       const res: ScreenResult[] = await invoke('screen_stocks', {
         conditionsJson: JSON.stringify(conditions),
