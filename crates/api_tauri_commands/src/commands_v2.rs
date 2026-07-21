@@ -598,6 +598,53 @@ pub async fn predict_with_lnn(
         .map_err(|e| format!("LNN 预测失败: {}", e))
 }
 
+use screener::stock_screener;
+
+#[tauri::command]
+pub async fn screen_stocks(
+    state: State<'_, AppState>,
+    conditions_json: String,
+    limit: u32,
+) -> Result<Vec<stock_screener::ScreenedStock>, String> {
+    let conditions: Vec<stock_screener::ScreenCondition> = serde_json::from_str(&conditions_json)
+        .map_err(|e| format!("策略解析失败: {}", e))?;
+
+    let all_stocks = state.stock_repo.get_all()
+        .await
+        .map_err(|e| format!("获取股票列表失败: {}", e))?;
+
+    let a_shares: Vec<_> = all_stocks.iter().filter(|s| {
+        let id = s.id.as_str();
+        (id.ends_with(".SH") || id.ends_with(".SZ")) && !id.starts_with("51") && !id.starts_with("56") && !id.starts_with("15")
+    }).collect();
+
+    let mut results = Vec::new();
+    let batch = a_shares.iter().take(limit as usize);
+
+    for stock in batch {
+        if let Ok(history) = state.data_service.get_stock_history(&stock.id, 60, "day").await {
+            let matches = stock_screener::screen_stock(&history, &conditions);
+            if !matches.is_empty() {
+                let last = history.last().unwrap();
+                let prev = if history.len() >= 2 { &history[history.len() - 2] } else { last };
+                let change_pct = if prev.close != rust_decimal::Decimal::ZERO {
+                    ((last.close - prev.close) / prev.close * rust_decimal::Decimal::from(100))
+                        .to_f64().unwrap_or(0.0)
+                } else { 0.0 };
+                results.push(stock_screener::ScreenedStock {
+                    id: stock.id.clone(),
+                    ticker: stock.ticker.clone(),
+                    name: stock.name.clone(),
+                    close: last.close.to_f64().unwrap_or(0.0),
+                    change_pct,
+                    matches,
+                });
+            }
+        }
+    }
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use domain::MovingAverage;
