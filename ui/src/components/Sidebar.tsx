@@ -1,10 +1,10 @@
 import { useAppStore } from '@/store/useAppStore';
-import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, ScrollText, LayoutGrid, Settings, BarChart3, LineChart, PanelTop, Table2, CandlestickChart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, ScrollText, LayoutGrid, Settings, BarChart3, LineChart, PanelTop, Table2, CandlestickChart, Filter } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
-  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab',
+  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/screener': 'screener',
   '/settings': 'settings',
   '/lnn': 'lnn',
 };
@@ -14,6 +14,7 @@ const navGroups = [
     label: '行情',
     items: [
       { id: 'watchlist' as const, label: '自選股', icon: Star, path: '/watchlist' },
+      { id: 'screener' as const, label: '選股', icon: Filter, path: '/screener' },
       { id: 'search' as const, label: '股票搜索', icon: Search, path: '/search' },
       { id: 'quote' as const, label: '個股詳情', icon: CandlestickChart, path: '/quote' },
       { id: 'sector' as const, label: '板塊熱點', icon: LayoutGrid, path: '/sector' },
@@ -43,7 +44,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'lnn', 'quote'];
+  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'screener', 'lnn', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {

@@ -36,12 +36,12 @@ describe('Sidebar', () => {
     );
     expect(screen.getByText('StockMate')).toBeInTheDocument();
     // Swiss-style text-only nav labels
-    expect(screen.getByText('自選')).toBeInTheDocument();
+    expect(screen.getByText('自選股')).toBeInTheDocument();
     expect(screen.getByText('行情')).toBeInTheDocument();
-    expect(screen.getByText('搜尋')).toBeInTheDocument();
-    expect(screen.getByText('回測')).toBeInTheDocument();
-    expect(screen.getByText('預測')).toBeInTheDocument();
-    expect(screen.getByText('規則')).toBeInTheDocument();
+    expect(screen.getByText('股票搜索')).toBeInTheDocument();
+    expect(screen.getByText('策略回測')).toBeInTheDocument();
+    expect(screen.getByText('AI 分析')).toBeInTheDocument();
+    expect(screen.getByText('交易規則')).toBeInTheDocument();
   });
 
   it('calls toggleSidebar when collapse button is clicked', () => {
@@ -61,13 +61,13 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    const watchlistLink = screen.getByText('自選').closest('a');
+    const watchlistLink = screen.getByText('自選股').closest('a');
     expect(watchlistLink).toHaveAttribute('href', '/watchlist');
-    const searchLink = screen.getByText('搜尋').closest('a');
+    const searchLink = screen.getByText('股票搜索').closest('a');
     expect(searchLink).toHaveAttribute('href', '/search');
-    const backtestLink = screen.getByText('回測').closest('a');
+    const backtestLink = screen.getByText('策略回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
-    const predictLink = screen.getByText('預測').closest('a');
+    const predictLink = screen.getByText('AI 分析').closest('a');
     expect(predictLink).toHaveAttribute('href', '/predict');
     const settingsLink = screen.getByText('設置').closest('a');
     expect(settingsLink).toHaveAttribute('href', '/settings');
@@ -79,7 +79,7 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    const sectorsLink = screen.getByText('板塊').closest('a');
+    const sectorsLink = screen.getByText('板塊熱點').closest('a');
     // Swiss style: active = border-left-* + font-semibold, not bg-violet-100
     expect(sectorsLink).toHaveClass('font-semibold');
   });

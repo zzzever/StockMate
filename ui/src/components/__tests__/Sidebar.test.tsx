@@ -37,13 +37,13 @@ describe('Sidebar', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('StockMate')).toBeInTheDocument();
-    expect(screen.getByText('自選')).toBeInTheDocument();
+    expect(screen.getByText('自選股')).toBeInTheDocument();
     expect(screen.getByText('行情')).toBeInTheDocument();
-    expect(screen.getByText('搜尋')).toBeInTheDocument();
-    expect(screen.getByText('回測')).toBeInTheDocument();
-    expect(screen.getByText('預測')).toBeInTheDocument();
-    expect(screen.getByText('規則')).toBeInTheDocument();
-    expect(screen.getByText('板塊')).toBeInTheDocument();
+    expect(screen.getByText('股票搜索')).toBeInTheDocument();
+    expect(screen.getByText('策略回測')).toBeInTheDocument();
+    expect(screen.getByText('AI 分析')).toBeInTheDocument();
+    expect(screen.getByText('交易規則')).toBeInTheDocument();
+    expect(screen.getByText('板塊熱點')).toBeInTheDocument();
     expect(screen.getByText('設置')).toBeInTheDocument();
   });
 
@@ -74,17 +74,17 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    const searchLink = screen.getByText('搜尋').closest('a');
+    const searchLink = screen.getByText('股票搜索').closest('a');
     expect(searchLink).toHaveAttribute('href', '/search');
-    const watchlistLink = screen.getByText('自選').closest('a');
+    const watchlistLink = screen.getByText('自選股').closest('a');
     expect(watchlistLink).toHaveAttribute('href', '/watchlist');
-    const backtestLink = screen.getByText('回測').closest('a');
+    const backtestLink = screen.getByText('策略回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
-    const predictLink = screen.getByText('預測').closest('a');
+    const predictLink = screen.getByText('AI 分析').closest('a');
     expect(predictLink).toHaveAttribute('href', '/predict');
-    const rulesLink = screen.getByText('規則').closest('a');
+    const rulesLink = screen.getByText('交易規則').closest('a');
     expect(rulesLink).toHaveAttribute('href', '/rules');
-    const sectorLink = screen.getByText('板塊').closest('a');
+    const sectorLink = screen.getByText('板塊熱點').closest('a');
     expect(sectorLink).toHaveAttribute('href', '/sector');
     const settingsLink = screen.getByText('設置').closest('a');
     expect(settingsLink).toHaveAttribute('href', '/settings');
@@ -97,11 +97,11 @@ describe('Sidebar', () => {
         <Sidebar />
       </MemoryRouter>
     );
-    const backtestLink = screen.getByText('回測').closest('a');
+    const backtestLink = screen.getByText('策略回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest?code=600519.SH');
-    const predictLink = screen.getByText('預測').closest('a');
+    const predictLink = screen.getByText('AI 分析').closest('a');
     expect(predictLink).toHaveAttribute('href', '/predict?code=600519.SH');
-    const rulesLink = screen.getByText('規則').closest('a');
+    const rulesLink = screen.getByText('交易規則').closest('a');
     expect(rulesLink).toHaveAttribute('href', '/rules?code=600519.SH');
     mockStore.selectedStock = null;
   });

@@ -44,7 +44,7 @@ export interface PriceData {
   turnover_rate: number; // 换手率
 }
 
-export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'indicatorLab' | 'settings' | 'quote' | 'lnn';
+export type Page = 'search' | 'sector' | 'stockDetail' | 'backtest' | 'predict' | 'rules' | 'indicatorLab' | 'settings' | 'quote' | 'lnn' | 'screener';
 
 // v0.2.0 new types
 export interface SectorTopStock {

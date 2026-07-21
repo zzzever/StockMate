@@ -15,12 +15,14 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
   predict: { group: '分析預測', label: 'AI 分析' },
   rules: { group: '分析預測', label: '交易規則' },
   settings: { group: '系統', label: '設置' },
+  screener: { group: '行情', label: '選股' },
 };
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
   '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
   '/lnn': 'lnn',
+  '/screener': 'screener',
 };
 
 /** A‑share trading session based on Beijing time (UTC+8). */

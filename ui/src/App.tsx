@@ -21,6 +21,7 @@ const RulesPage = lazy(() => import('@/pages/RulesPage'));
 const IndicatorLabPage = lazy(() => import('@/pages/IndicatorLabPage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const LNNPage = lazy(() => import('@/pages/LNNPage'));
+const ScreenerPage = lazy(() => import('@/pages/ScreenerPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ function AppRoutes() {
             <Route path="/indicator-lab" element={<IndicatorLabPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/lnn" element={<LNNPage />} />
+            <Route path="/screener" element={<ScreenerPage />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

@@ -4,3 +4,4 @@ pub mod strategy;
 pub mod prediction;
 pub mod late_rush;
 pub mod sslang;
+pub mod stock_screener;
