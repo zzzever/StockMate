@@ -29,6 +29,8 @@ pub enum ScreenCondition {
     BelowMA(u32),
     /// RSI低于指定值
     RsiBelow(u32, f64),
+    /// 价格处于N日内的低位（当前价/最高价 < ratio）
+    LowPosition { days: u32, ratio: f64 },
 }
 
 /// 筛选策略
@@ -117,6 +119,16 @@ pub fn screen_stock(quotes: &[Quote], conditions: &[ScreenCondition]) -> Vec<Str
                 let rsi = compute_rsi(&closes, *period as usize);
                 if rsi < *threshold {
                     matches.push(format!("RSI({})={:.1}<{:.0}", period, rsi, threshold));
+                }
+            }
+            ScreenCondition::LowPosition { days, ratio } => {
+                if n < *days as usize { continue; }
+                let start = n - *days as usize;
+                let period_max = closes[start..].iter().fold(closes[n-1], |a, &b| a.max(b));
+                let period_min = closes[start..].iter().fold(closes[n-1], |a, &b| a.min(b));
+                let range = period_max - period_min;
+                if range > 0.0 && (last_close - period_min) / range < *ratio {
+                    matches.push(format!("低位({:.0}%)", (last_close - period_min) / range * 100.0));
                 }
             }
         }
