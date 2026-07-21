@@ -648,6 +648,29 @@ pub async fn screen_stocks(
     Ok(results)
 }
 
+#[tauri::command]
+pub async fn save_screener_result(
+    state: State<'_, AppState>,
+    strategy_name: String,
+    strategy_params: String,
+    results_json: String,
+    match_count: u32,
+) -> Result<i64, String> {
+    storage::save_screener_result(&state.db_pool, &strategy_name, &strategy_params, &results_json, match_count)
+        .await
+        .map_err(|e| format!("保存选股结果失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_screener_history(
+    state: State<'_, AppState>,
+    limit: u32,
+) -> Result<Vec<(i64, String, String, u32, String)>, String> {
+    storage::get_screener_history(&state.db_pool, limit)
+        .await
+        .map_err(|e| format!("获取选股历史失败: {}", e))
+}
+
 #[cfg(test)]
 mod tests {
     use domain::MovingAverage;

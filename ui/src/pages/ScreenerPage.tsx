@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Search, RefreshCw, ArrowLeft, Settings } from 'lucide-react';
+import { Filter, Search, RefreshCw, ArrowLeft, Settings, Save } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface ScreenResult {
@@ -41,10 +41,60 @@ export default function ScreenerPage() {
   });
   const [running, setRunning] = useState(false);
   useEffect(() => { sessionStorage.setItem('screener_results', JSON.stringify(results)); }, [results]);
+  const [sortKey, setSortKey] = useState<'close' | 'change_pct' | 'name'>('close');
+  const [sortAsc, setSortAsc] = useState(true);
+  const [screenerHistory, setScreenerHistory] = useState<any[]>([]);
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [strategyParams, setStrategyParams] = useState({
     maxPrice: 20, shrinkDays: 3, maxVolRatio: 0.6, lowPosDays: 20, lowPosRatio: 0.3,
   });
+
+  const sortedResults = useMemo(() => {
+    const sorted = [...results].sort((a, b) => {
+      const aVal = a[sortKey];
+      const bVal = b[sortKey];
+      if (typeof aVal === 'string') return sortAsc ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
+      return sortAsc ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+    return sorted;
+  }, [results, sortKey, sortAsc]);
+
+  const handleSaveResult = async () => {
+    try {
+      await invoke('save_screener_result', {
+        strategyName: PRESET_STRATEGIES[0].name,
+        strategyParams: JSON.stringify(strategyParams),
+        resultsJson: JSON.stringify(results),
+        matchCount: results.length,
+      });
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 2000);
+    } catch (e) {
+      console.error('Save failed:', e);
+    }
+  };
+
+  const loadHistoryResult = async (historyId: string) => {
+    try {
+      const res: ScreenResult[] = await invoke('load_screener_history_result', { historyId });
+      setResults(res);
+    } catch (e) {
+      console.error('Load history failed:', e);
+    }
+  };
+
+  // Load screener history on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const history = await invoke<any[]>('get_screener_history', { limit: 20 });
+        setScreenerHistory(history);
+      } catch (e) {
+        // backend may not have this command yet
+      }
+    })();
+  }, []);
 
   const runScreener = async () => {
     setRunning(true);
@@ -98,8 +148,26 @@ export default function ScreenerPage() {
             <Settings size={12} /> 编辑策略
           </button>
 
+          {/* History panel */}
+          <details className="mt-1">
+            <summary className="text-data-xs cursor-pointer select-none px-2 py-1 rounded" style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)' }}>
+              历史记录 ({screenerHistory.length})
+            </summary>
+            <div className="max-h-32 overflow-y-auto mt-1 space-y-0.5">
+              {screenerHistory.length === 0 && (
+                <div className="text-data-xs px-2 py-1" style={{ color: 'var(--text-tertiary)' }}>暂无记录</div>
+              )}
+              {screenerHistory.map((h: any) => (
+                <div key={h[0]} onClick={() => loadHistoryResult(h[0])}
+                  className="px-2 py-1 text-data-xs rounded cursor-pointer hover:bg-[var(--bg-hover)]"
+                  style={{ color: 'var(--text-tertiary)' }}>
+                  {String(h[4]).slice(0, 10)} — {h[3]} 只
+                </div>
+              ))}
+            </div>
+          </details>
           <button onClick={runScreener} disabled={running}
-            className="btn-primary w-full flex items-center justify-center gap-2 mt-auto">
+            className="btn-primary w-full flex items-center justify-center gap-2">
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
             {running ? `选股中...` : '运行选股'}
           </button>
@@ -142,6 +210,10 @@ export default function ScreenerPage() {
                   <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Math.min(...results.map(r=>r.close)).toFixed(2)}</div>
                   <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低价</div>
                 </div>
+                <button onClick={handleSaveResult} className="btn-secondary text-data-xs px-2 py-1 flex items-center gap-1"
+                  title="保存选股结果到数据库">
+                  <Save size={12} /> {showSaveSuccess ? '已保存' : '保存'}
+                </button>
               </div>
               {/* Results table */}
               <div className="flex-1 overflow-auto">
@@ -149,14 +221,16 @@ export default function ScreenerPage() {
                   <thead className="sticky top-0" style={{ background: 'var(--bg-root)' }}>
                     <tr className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
                       <th className="text-left py-2 px-2 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>代码</th>
-                      <th className="text-left py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>名称</th>
+                      <th className="text-left py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
+                        onClick={() => { setSortKey('name'); setSortAsc(sortKey !== 'name' ? true : !sortAsc); }}>
+                        名称 {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}</th>
                       <th className="text-right py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最新价</th>
                       <th className="text-right py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>涨跌幅</th>
                       <th className="text-left py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配条件</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map(r => (
+                    {sortedResults.map(r => (
                       <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>

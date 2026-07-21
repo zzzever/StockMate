@@ -347,6 +347,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::backtest_strategy,
             api_tauri_commands::commands_v2::screen_stocks,
             api_tauri_commands::commands_v2::predict_with_lnn,
+            api_tauri_commands::commands_v2::save_screener_result,
+            api_tauri_commands::commands_v2::get_screener_history,
             api_tauri_commands::deepseek_commands::save_prediction,
             api_tauri_commands::deepseek_commands::get_prediction_history,
             api_tauri_commands::deepseek_commands::delete_prediction,

@@ -22,6 +22,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0005_add_kline.sql"),
         include_str!("../migrations/0006_add_unique_constraints.sql"),
         include_str!("../migrations/0007_add_prediction_history.sql"),
+        include_str!("../migrations/0008_add_screener_results.sql"),
     ];
     for mig in migrations {
         // Wrap each migration file in a transaction for atomicity
@@ -93,6 +94,37 @@ pub async fn delete_prediction_history(pool: &DbPool, stock_id: &str, date: &str
         .execute(pool)
         .await?;
     Ok(())
+}
+
+pub async fn save_screener_result(
+    pool: &DbPool,
+    strategy_name: &str,
+    strategy_params: &str,
+    results_json: &str,
+    match_count: u32,
+) -> Result<i64> {
+    let result = sqlx::query(
+        "INSERT INTO screener_results (strategy_name, strategy_params, results_json, match_count) VALUES (?1, ?2, ?3, ?4)"
+    )
+    .bind(strategy_name)
+    .bind(strategy_params)
+    .bind(results_json)
+    .bind(match_count)
+    .execute(pool)
+    .await?;
+    Ok(result.last_insert_rowid())
+}
+
+pub async fn get_screener_history(pool: &DbPool, limit: u32) -> Result<Vec<(i64, String, String, u32, String)>> {
+    #[derive(sqlx::FromRow)]
+    struct Row { id: i64, strategy_name: String, strategy_params: String, match_count: u32, created_at: String }
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, strategy_name, strategy_params, match_count, created_at FROM screener_results ORDER BY created_at DESC LIMIT ?1"
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.strategy_name, r.strategy_params, r.match_count, r.created_at)).collect())
 }
 
 /// Escape SQL `LIKE` wildcards (`%`, `_`) and the escape character itself so
