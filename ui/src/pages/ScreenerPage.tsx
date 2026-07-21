@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Filter, Search, RefreshCw, ArrowLeft, Settings } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -33,8 +33,14 @@ const DEFAULT_CONDITIONS: StrategyParam[] = [
 
 export default function ScreenerPage() {
   const navigate = useNavigate();
-  const [results, setResults] = useState<ScreenResult[]>([]);
+  const [results, setResults] = useState<ScreenResult[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('screener_results');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
   const [running, setRunning] = useState(false);
+  useEffect(() => { sessionStorage.setItem('screener_results', JSON.stringify(results)); }, [results]);
   const [isEditing, setIsEditing] = useState(false);
   const [strategyParams, setStrategyParams] = useState({
     maxPrice: 20, shrinkDays: 3, maxVolRatio: 0.6, lowPosDays: 20, lowPosRatio: 0.3,
