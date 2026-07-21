@@ -621,7 +621,10 @@ pub async fn screen_stocks(
     let mut results = Vec::new();
     let batch = a_shares.iter().take(limit as usize);
 
-    for stock in batch {
+    for (i, stock) in batch.enumerate() {
+        if i > 0 && i % 10 == 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
         if let Ok(history) = state.data_service.get_stock_history(&stock.id, 60, "day").await {
             let matches = stock_screener::screen_stock(&history, &conditions);
             if !matches.is_empty() {
