@@ -1,7 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Search, RefreshCw, ArrowLeft } from 'lucide-react';
-import { useStockList } from '@/hooks/useTauriQuery';
+import { Filter, Search, RefreshCw, ArrowLeft, Settings } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface ScreenResult {
@@ -9,104 +8,57 @@ interface ScreenResult {
   change_pct: number; matches: string[];
 }
 
+interface StrategyParam {
+  id: string;
+  label: string;
+  value: number;
+  step: number;
+}
+
 const PRESET_STRATEGIES = [
   {
     id: 'cheap_shrink',
-    name: '低价缩量下跌',
-    desc: '价格<20元 · 连续缩量下跌3日',
+    name: '历史相对低价 + 缩量下跌',
+    desc: '20日低位(30%分位) · 连续3日缩量下跌',
   },
+];
+
+const DEFAULT_CONDITIONS: StrategyParam[] = [
+  { id: 'maxPrice', label: '最高价格(元)', value: 20, step: 1 },
+  { id: 'shrinkDays', label: '缩量下跌天数', value: 3, step: 1 },
+  { id: 'maxVolRatio', label: '最大量比(相对均量)', value: 0.6, step: 0.1 },
+  { id: 'lowPosDays', label: '历史低位周期(日)', value: 20, step: 1 },
+  { id: 'lowPosRatio', label: '历史低位分位比率', value: 0.3, step: 0.1 },
 ];
 
 export default function ScreenerPage() {
   const navigate = useNavigate();
-  const { data: stockList } = useStockList();
   const [results, setResults] = useState<ScreenResult[]>([]);
   const [running, setRunning] = useState(false);
-  const [scannedCount, setScannedCount] = useState(0);
-  const cancelRef = useRef(false);
-  const [selectedStrategy] = useState('cheap_shrink');
+  const [isEditing, setIsEditing] = useState(false);
+  const [strategyParams, setStrategyParams] = useState({
+    maxPrice: 20, shrinkDays: 3, maxVolRatio: 0.6, lowPosDays: 20, lowPosRatio: 0.3,
+  });
 
   const runScreener = async () => {
-    if (!stockList) return;
     setRunning(true);
     setResults([]);
-    setScannedCount(0);
-    cancelRef.current = false;
-
-    const matched: ScreenResult[] = [];
-    const batch = stockList.slice(0, 500);
-    const CONCURRENCY = 10;
-    let index = 0;
-    let processed = 0;
-
-    const processOne = async () => {
-      while (true) {
-        const i = index++;
-        if (i >= batch.length || cancelRef.current) return;
-
-        const stock = batch[i];
-        const id = stock.id || (stock as any).stock_id || '';
-        if (!id) {
-          processed++;
-          if (processed % 5 === 0 || processed === batch.length || cancelRef.current) {
-            setScannedCount(processed);
-            setResults([...matched]);
-            await new Promise(r => setTimeout(r, 0));
-          }
-          continue;
-        }
-        try {
-          const quotesData: any[] = await invoke('get_stock_history', { stockId: id, days: 30, period: 'day' });
-          if (!quotesData || quotesData.length < 5) continue;
-
-          const closes = quotesData.map((q: any) => Number(q.close));
-          const volumes = quotesData.map((q: any) => Number(q.volume));
-          const n = closes.length;
-          const lastClose = closes[n-1];
-          const matches: string[] = [];
-
-          if (lastClose < 20) matches.push('低价');
-
-          if (n >= 4) {
-            let shrinkDrop = true;
-            for (let j = 0; j < 3; j++) {
-              if (closes[n-1-j] >= closes[n-2-j]) { shrinkDrop = false; break; }
-              const ma5 = volumes.slice(0, n-j).reduce((a: number, b: number) => a + b, 0) / Math.min(5, n-j);
-              if (ma5 > 0 && volumes[n-1-j] / ma5 >= 0.6) { shrinkDrop = false; break; }
-            }
-            if (shrinkDrop) matches.push('缩量下跌3日');
-          }
-
-          if (matches.length > 0) {
-            const changePct = n >= 2 ? ((closes[n-1] - closes[n-2]) / closes[n-2]) * 100 : 0;
-            matched.push({
-              id, ticker: stock.ticker || ((stock as any).stock_id?.split('.')[0]) || '', name: stock.name || '',
-              close: lastClose, change_pct: changePct, matches,
-            });
-          }
-        } catch (_) {}
-
-        processed++;
-        if (processed % 5 === 0 || processed === batch.length || cancelRef.current) {
-          setScannedCount(processed);
-          setResults([...matched]);
-          await new Promise(r => setTimeout(r, 0));
-        }
-      }
-    };
-
-    const workers = Array.from({ length: CONCURRENCY }, () => processOne());
-    await Promise.all(workers);
-
-    if (cancelRef.current) {
+    try {
+      const conditions = [
+        { type: 'LowPrice', params: [strategyParams.maxPrice] },
+        { type: 'ShrinkDrop', params: { days: strategyParams.shrinkDays, max_vol_ratio: strategyParams.maxVolRatio } },
+        { type: 'LowPosition', params: { days: strategyParams.lowPosDays, ratio: strategyParams.lowPosRatio } },
+      ];
+      const res: ScreenResult[] = await invoke('screen_stocks', {
+        conditionsJson: JSON.stringify(conditions),
+        limit: 5000,
+      });
+      setResults(res);
+    } catch (e: any) {
+      console.error('选股失败', e);
+    } finally {
       setRunning(false);
-      return;
     }
-
-    matched.sort((a, b) => a.close - b.close);
-    setResults(matched);
-    setScannedCount(batch.length);
-    setRunning(false);
   };
 
   return (
@@ -125,8 +77,8 @@ export default function ScreenerPage() {
               <button key={s.id}
                 className="w-full text-left p-2 rounded-lg transition-all"
                 style={{
-                  background: selectedStrategy === s.id ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-card)',
-                  border: selectedStrategy === s.id ? '1px solid hsl(var(--swiss-accent) / 0.3)' : '1px solid var(--border-subtle)'
+                  background: 'hsl(var(--swiss-accent-ghost))',
+                  border: '1px solid hsl(var(--swiss-accent) / 0.3)'
                 }}>
                 <div className="text-data-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
                 <div className="text-data-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{s.desc}</div>
@@ -134,10 +86,16 @@ export default function ScreenerPage() {
             ))}
           </div>
 
-          <button onClick={runScreener} disabled={running || !stockList}
+          {/* 编辑策略按钮 */}
+          <button onClick={() => setIsEditing(true)}
+            className="btn-secondary w-full text-data-xs">
+            <Settings size={12} /> 编辑策略
+          </button>
+
+          <button onClick={runScreener} disabled={running}
             className="btn-primary w-full flex items-center justify-center gap-2 mt-auto">
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-            {running ? `选股中... (${results.length} 只匹配)` : '运行选股'}
+            {running ? `选股中...` : '运行选股'}
           </button>
         </div>
 
@@ -147,32 +105,18 @@ export default function ScreenerPage() {
               <div className="text-center" style={{ color: 'var(--text-tertiary)' }}>
                 <Filter size={48} className="mx-auto mb-2 opacity-30" />
                 <p className="text-data-sm">选择策略并运行选股</p>
-                <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>系统将从 500 只股票中筛选符合条件的标的</p>
+                <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>系统将从全市场 A 股中筛选符合条件的标的（已过滤 ETF）</p>
               </div>
             </div>
           )}
 
           {running && (
-            <div className="flex flex-col gap-2 shrink-0">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-data-xs">
-                  <span style={{ color: 'var(--text-tertiary)' }}>扫描进度</span>
-                  <span style={{ color: 'var(--text-tertiary)' }}>{scannedCount}/{500}</span>
-                </div>
-                <div className="h-1 rounded-full" style={{ background: 'var(--bg-input)' }}>
-                  <div className="h-full rounded-full transition-all duration-300 ease-out" style={{
-                    width: `${(scannedCount / 500) * 100}%`,
-                    background: 'hsl(var(--swiss-accent))',
-                  }} />
-                </div>
-                <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  已匹配 {results.length} 只
-                </div>
+            <div className="flex items-center justify-center flex-1">
+              <div className="text-center" style={{ color: 'var(--text-tertiary)' }}>
+                <RefreshCw size={32} className="mx-auto mb-3 animate-spin opacity-50" />
+                <p className="text-data-sm">正在扫描全市场 A 股（约 5000 只）...</p>
+                <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>已匹配 {results.length} 只</p>
               </div>
-              <button onClick={() => { cancelRef.current = true; }}
-                className="btn-secondary w-full text-data-xs">
-                取消选股
-              </button>
             </div>
           )}
 
@@ -233,6 +177,31 @@ export default function ScreenerPage() {
           )}
         </div>
       </div>
+
+      {/* 编辑策略弹窗 */}
+      {isEditing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setIsEditing(false)}>
+          <div className="w-[400px] glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 className="text-data-sm font-bold mb-3" style={{ color: 'var(--text-primary)' }}>编辑策略参数</h3>
+            {DEFAULT_CONDITIONS.map(cond => (
+              <div key={cond.id} className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+                <span className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>{cond.label}</span>
+                <input type="number" step={cond.step} defaultValue={strategyParams[cond.id as keyof typeof strategyParams]}
+                  onChange={e => setStrategyParams(prev => ({ ...prev, [cond.id]: parseFloat(e.target.value) }))}
+                  className="input w-24 text-right text-data-xs" />
+              </div>
+            ))}
+            <div className="mt-3 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+              <p>• 涨跌幅由后端计算</p>
+              <p>• ETF 已在后端过滤</p>
+            </div>
+            <button onClick={() => setIsEditing(false)}
+              className="btn-primary w-full mt-3 text-data-xs">完成</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

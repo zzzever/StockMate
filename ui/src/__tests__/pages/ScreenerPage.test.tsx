@@ -19,7 +19,7 @@ describe('ScreenerPage', () => {
   it('renders page title and strategy selector', () => {
     render(<MemoryRouter><ScreenerPage /></MemoryRouter>);
     expect(screen.getByText('选股')).toBeInTheDocument();
-    expect(screen.getByText('低价缩量下跌')).toBeInTheDocument();
+    expect(screen.getByText('历史相对低价 + 缩量下跌')).toBeInTheDocument();
     expect(screen.getByText('运行选股')).toBeInTheDocument();
   });
 
@@ -35,6 +35,6 @@ describe('ScreenerPage', () => {
 
   it('renders strategy description', () => {
     render(<MemoryRouter><ScreenerPage /></MemoryRouter>);
-    expect(screen.getByText(/价格<20元/)).toBeInTheDocument();
+    expect(screen.getByText(/20日低位/)).toBeInTheDocument();
   });
 });
