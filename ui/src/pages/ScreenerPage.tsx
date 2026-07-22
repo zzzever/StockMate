@@ -236,6 +236,14 @@ export default function ScreenerPage() {
     setStrategyConditions(prev => prev.filter((_, i) => i !== idx));
   };
 
+  const moveCondition = (from: number, to: number) => {
+    if (to < 0 || to >= strategyConditions.length) return;
+    const updated = [...strategyConditions];
+    const [moved] = updated.splice(from, 1);
+    updated.splice(to, 0, moved);
+    setStrategyConditions(updated);
+  };
+
   const handleSaveStrategy = async () => {
     if (!activeStrategyId) return;
     try {
@@ -292,6 +300,17 @@ export default function ScreenerPage() {
   useEffect(() => {
     invoke<any[]>('get_all_strategies').then(data => setStrategies(data || [])).catch(() => {});
   }, []);
+  // 从 sessionStorage 恢复上次运行的策略
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('screener_active_strategy');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.id) setActiveStrategyId(parsed.id);
+        if (parsed.conditions) setStrategyConditions(parsed.conditions);
+      }
+    } catch {}
+  }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setIsEditing(false); setDetailStock(null); }
@@ -305,6 +324,7 @@ export default function ScreenerPage() {
   useEffect(() => setPage(0), [results]);
 
   const runScreener = async () => {
+    sessionStorage.setItem('screener_active_strategy', JSON.stringify({ id: activeStrategyId, conditions: strategyConditions }));
     setRunning(true);
     setResults([]);
     try {
@@ -360,11 +380,13 @@ export default function ScreenerPage() {
               <div className="text-data-xs px-2 py-1" style={{ color: 'var(--text-tertiary)' }}>暂无策略</div>
             )}
             {strategies.map((s: any) => (
-              <button key={s[0]} onClick={() => selectStrategy(s[0])}
+              <button key={s[0]} onClick={() => selectStrategy(s[0])} onDoubleClick={() => runScreener()}
                 className="w-full text-left px-2 py-1.5 text-data-xs rounded transition-colors flex items-center justify-between"
                 style={{
                   background: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent-ghost))' : 'transparent',
-                  color: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent))' : 'var(--text-primary)'
+                  color: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent))' : 'var(--text-primary)',
+                  borderLeft: activeStrategyId === s[0] ? '3px solid hsl(var(--swiss-accent))' : '3px solid transparent',
+                  borderRadius: '0 4px 4px 0',
                 }}>
                 <span className="truncate">{s[1]}</span>
                 <button onClick={(e) => { e.stopPropagation(); deleteStrategy(s[0]); }}
@@ -428,7 +450,7 @@ export default function ScreenerPage() {
           <button onClick={runScreener} disabled={running}
             className="btn-primary w-full flex items-center justify-center gap-2">
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
-            {running ? `选股中...` : '运行选股'}
+            {running ? `运行中: ${strategies.find((s: any) => s[0] === activeStrategyId)?.[1] || '选股'}...` : '运行选股'}
           </button>
         </div>
 
@@ -624,10 +646,15 @@ export default function ScreenerPage() {
             {/* 条件列表 */}
             <div className="space-y-2 mb-3">
               {strategyConditions.map((cond, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--bg-card)' }}>
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg cursor-move" style={{ background: 'var(--bg-card)' }}>
+                  <span className="text-data-xs cursor-grab" style={{ color: 'var(--text-tertiary)' }}>⠿</span>
                   <span className="text-data-xs font-bold w-20" style={{ color: 'var(--text-secondary)' }}>{CONDITION_TYPES.find(c => c.id === cond.type)?.label || cond.type}</span>
                   {/* Dynamic params based on type */}
                   {renderConditionParams(cond, i)}
+                  <button onClick={() => moveCondition(i, i - 1)} disabled={i === 0}
+                    className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded disabled:opacity-20" style={{ color: 'var(--text-tertiary)' }}>▲</button>
+                  <button onClick={() => moveCondition(i, i + 1)} disabled={i === strategyConditions.length - 1}
+                    className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded disabled:opacity-20" style={{ color: 'var(--text-tertiary)' }}>▼</button>
                   <button onClick={() => removeCondition(i)}
                     className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] shrink-0" style={{ color: 'hsl(var(--risk-danger))' }}>移除</button>
                 </div>
