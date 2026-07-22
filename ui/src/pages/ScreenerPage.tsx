@@ -56,6 +56,8 @@ export default function ScreenerPage() {
   const [screenerHistory, setScreenerHistory] = useState<any[]>([]);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [strategyParams, setStrategyParams] = useState({
     maxPrice: 20, shrinkDays: 3, maxVolRatio: 0.6, lowPosDays: 20, lowPosRatio: 0.3,
   });
@@ -97,6 +99,54 @@ export default function ScreenerPage() {
     } catch (e) {
       console.error('Save failed:', e);
     }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === pageResults.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pageResults.map(r => r.id)));
+    }
+  };
+
+  const batchAddToWatchlist = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      for (const id of ids) {
+        await invoke('add_to_watchlist', { stockId: id });
+      }
+      setSelectedIds(new Set());
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 2000);
+    } catch (e) {
+      console.error('Batch add failed:', e);
+    }
+  };
+
+  const exportCSV = () => {
+    const headers = ['代码', '名称', '最新价', '涨跌幅', '匹配条件'];
+    const rows = filteredResults.map(r => [r.ticker, r.name, r.close.toFixed(2), (r.change_pct >= 0 ? '+' : '') + r.change_pct.toFixed(2) + '%', r.matches.join(';')]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = '选股结果.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportJSON = () => {
+    const blob = new Blob([JSON.stringify(filteredResults, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = '选股结果.json'; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const loadHistoryResult = async (historyId: string) => {
@@ -237,7 +287,7 @@ export default function ScreenerPage() {
           {results.length === 0 && !running && (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center" style={{ color: 'var(--text-tertiary)' }}>
-                <Filter size={48} className="mx-auto mb-2 opacity-30" />
+                <Filter size={48} className="mx-auto mb-2" style={{ opacity: 0.3, animation: 'bounce 2s infinite' }} />
                 <p className="text-data-sm">选择策略并运行选股</p>
                 <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>系统将从全市场 A 股中筛选符合条件的标的（已过滤 ETF）</p>
               </div>
@@ -279,23 +329,37 @@ export default function ScreenerPage() {
           {results.length > 0 && !running && (
             <div className="flex-1 flex flex-col gap-2 overflow-hidden">
               {/* Stats summary */}
-              <div className="grid grid-cols-3 gap-2 shrink-0">
-                <div className="glass-card-flat p-2 text-center">
-                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>{results.length}</div>
-                  <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配</div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex-1 grid grid-cols-3 gap-2">
+                  <div className="glass-card-flat p-2 text-center">
+                    <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>{results.length}</div>
+                    <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配</div>
+                  </div>
+                  <div className="glass-card-flat p-2 text-center">
+                    <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{(results.reduce((s,r)=>s+r.close,0) / results.length).toFixed(2)}</div>
+                    <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均价</div>
+                  </div>
+                  <div className="glass-card-flat p-2 text-center">
+                    <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Math.min(...results.map(r=>r.close)).toFixed(2)}</div>
+                    <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低价</div>
+                  </div>
                 </div>
-                <div className="glass-card-flat p-2 text-center">
-                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{(results.reduce((s,r)=>s+r.close,0) / results.length).toFixed(2)}</div>
-                  <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均价</div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <div className="flex gap-1">
+                    <button onClick={exportCSV} className="btn-secondary text-[10px] px-2 py-1">CSV</button>
+                    <button onClick={exportJSON} className="btn-secondary text-[10px] px-2 py-1">JSON</button>
+                    <button onClick={handleSaveResult} className="btn-secondary text-[10px] px-2 py-1 flex items-center gap-1"
+                      title="保存选股结果到数据库">
+                      <Save size={10} /> {showSaveSuccess ? '已保存' : '保存'}
+                    </button>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => setViewMode('table')}
+                      className={`text-[10px] px-2 py-1 rounded ${viewMode === 'table' ? 'btn-primary' : 'btn-secondary'}`}>表格</button>
+                    <button onClick={() => setViewMode('card')}
+                      className={`text-[10px] px-2 py-1 rounded ${viewMode === 'card' ? 'btn-primary' : 'btn-secondary'}`}>卡片</button>
+                  </div>
                 </div>
-                <div className="glass-card-flat p-2 text-center">
-                  <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Math.min(...results.map(r=>r.close)).toFixed(2)}</div>
-                  <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低价</div>
-                </div>
-                <button onClick={handleSaveResult} className="btn-secondary text-data-xs px-2 py-1 flex items-center gap-1"
-                  title="保存选股结果到数据库">
-                  <Save size={12} /> {showSaveSuccess ? '已保存' : '保存'}
-                </button>
               </div>
               {/* Search */}
               <div className="relative shrink-0">
@@ -314,6 +378,10 @@ export default function ScreenerPage() {
                 <table className="w-full text-data-sm">
                   <thead className="sticky top-0" style={{ background: 'var(--bg-root)' }}>
                     <tr className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+                      <th className="py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                        <input type="checkbox" checked={selectedIds.size === pageResults.length && pageResults.length > 0}
+                          onChange={selectAll} className="cursor-pointer" />
+                      </th>
                       <th className="text-left py-2 px-2 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>代码</th>
                       <th className="text-left py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => { setSortKey('name'); setSortAsc(sortKey !== 'name' ? true : !sortAsc); }}>
@@ -332,6 +400,10 @@ export default function ScreenerPage() {
                       <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
+                        <td className="py-2 px-2">
+                          <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)}
+                            onClick={e => e.stopPropagation()} className="cursor-pointer" />
+                        </td>
                         <td className="py-2 px-2 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{r.ticker}</td>
                         <td className="py-2 px-2 font-medium text-data-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</td>
                         <td className="py-2 px-2 text-right font-mono-nums text-data-sm" style={{ color: 'var(--text-primary)' }}>¥{r.close.toFixed(2)}</td>
@@ -360,6 +432,14 @@ export default function ScreenerPage() {
                     <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
                       className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
                   </div>
+                </div>
+              )}
+              {selectedIds.size > 0 && (
+                <div className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg"
+                  style={{ background: 'var(--bg-card)', border: '1px solid hsl(var(--swiss-accent) / 0.3)' }}>
+                  <span className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>已选 {selectedIds.size} 只</span>
+                  <button onClick={batchAddToWatchlist} className="btn-primary text-data-xs px-3 py-1">加入自选</button>
+                  <button onClick={() => setSelectedIds(new Set())} className="btn-secondary text-data-xs px-3 py-1">取消</button>
                 </div>
               )}
             </div>

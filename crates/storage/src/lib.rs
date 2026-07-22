@@ -23,6 +23,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0006_add_unique_constraints.sql"),
         include_str!("../migrations/0007_add_prediction_history.sql"),
         include_str!("../migrations/0008_add_screener_results.sql"),
+        include_str!("../migrations/0009_add_screener_strategies.sql"),
     ];
     for mig in migrations {
         // Wrap each migration file in a transaction for atomicity
@@ -151,6 +152,38 @@ pub async fn clear_screener_history(pool: &DbPool) -> Result<()> {
     sqlx::query("DELETE FROM screener_results")
         .execute(pool)
         .await?;
+    Ok(())
+}
+
+pub async fn save_strategy(pool: &DbPool, name: &str, strategy_json: &str, is_preset: bool) -> Result<i64> {
+    let result = sqlx::query(
+        "INSERT INTO screener_strategies (name, strategy_json, is_preset) VALUES (?1, ?2, ?3)"
+    )
+    .bind(name).bind(strategy_json).bind(is_preset)
+    .execute(pool).await?;
+    Ok(result.last_insert_rowid())
+}
+
+pub async fn get_all_strategies(pool: &DbPool) -> Result<Vec<(i64, String, String, bool)>> {
+    #[derive(sqlx::FromRow)]
+    struct Row { id: i64, name: String, strategy_json: String, is_preset: bool }
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, name, strategy_json, is_preset FROM screener_strategies ORDER BY is_preset DESC, id ASC"
+    )
+    .fetch_all(pool).await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.name, r.strategy_json, r.is_preset)).collect())
+}
+
+pub async fn delete_strategy(pool: &DbPool, id: i64) -> Result<()> {
+    sqlx::query("DELETE FROM screener_strategies WHERE id = ?1 AND is_preset = 0")
+        .bind(id).execute(pool).await?;
+    Ok(())
+}
+
+pub async fn update_strategy(pool: &DbPool, id: i64, name: &str, strategy_json: &str) -> Result<()> {
+    sqlx::query("UPDATE screener_strategies SET name = ?1, strategy_json = ?2 WHERE id = ?3 AND is_preset = 0")
+        .bind(name).bind(strategy_json).bind(id)
+        .execute(pool).await?;
     Ok(())
 }
 

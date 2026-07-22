@@ -619,31 +619,32 @@ pub async fn screen_stocks(
     }).collect();
 
     let mut results = Vec::new();
-    let batch = a_shares.iter().take(limit as usize);
-
-    for (i, stock) in batch.enumerate() {
-        if i > 0 && i % 10 == 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-        if let Ok(history) = state.data_service.get_stock_history(&stock.id, 60, "day").await {
-            let matches = stock_screener::screen_stock(&history, &conditions);
-            if !matches.is_empty() {
-                let last = history.last().unwrap();
-                let prev = if history.len() >= 2 { &history[history.len() - 2] } else { last };
-                let change_pct = if prev.close != rust_decimal::Decimal::ZERO {
-                    ((last.close - prev.close) / prev.close * rust_decimal::Decimal::from(100))
-                        .to_f64().unwrap_or(0.0)
-                } else { 0.0 };
-                results.push(stock_screener::ScreenedStock {
-                    id: stock.id.clone(),
-                    ticker: stock.ticker.clone(),
-                    name: stock.name.clone(),
-                    close: last.close.to_f64().unwrap_or(0.0),
-                    change_pct,
-                    matches,
-                });
+    let chunk_size = 10;
+    for chunk in a_shares.chunks(chunk_size).take(500) {
+        let mut batch_results = Vec::new();
+        for stock in chunk {
+            if let Ok(history) = state.data_service.get_stock_history(&stock.id, 60, "day").await {
+                let matches = stock_screener::screen_stock(&history, &conditions);
+                if !matches.is_empty() {
+                    let last = history.last().unwrap();
+                    let prev = if history.len() >= 2 { &history[history.len() - 2] } else { last };
+                    let change_pct = if prev.close != rust_decimal::Decimal::ZERO {
+                        ((last.close - prev.close) / prev.close * rust_decimal::Decimal::from(100)).to_f64().unwrap_or(0.0)
+                    } else { 0.0 };
+                    batch_results.push(stock_screener::ScreenedStock {
+                        id: stock.id.clone(),
+                        ticker: stock.ticker.clone(),
+                        name: stock.name.clone(),
+                        close: last.close.to_f64().unwrap_or(0.0),
+                        change_pct,
+                        matches,
+                    });
+                }
             }
         }
+        results.extend(batch_results);
+        // Rate limit between chunks
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     Ok(results)
 }
@@ -699,6 +700,49 @@ pub async fn clear_screener_history(
     storage::clear_screener_history(&state.db_pool)
         .await
         .map_err(|e| format!("清空失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn save_strategy(
+    state: State<'_, AppState>,
+    name: String,
+    strategy_json: String,
+    is_preset: bool,
+) -> Result<i64, String> {
+    storage::save_strategy(&state.db_pool, &name, &strategy_json, is_preset)
+        .await
+        .map_err(|e| format!("保存策略失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_all_strategies(
+    state: State<'_, AppState>,
+) -> Result<Vec<(i64, String, String, bool)>, String> {
+    storage::get_all_strategies(&state.db_pool)
+        .await
+        .map_err(|e| format!("获取策略失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn delete_strategy(
+    state: State<'_, AppState>,
+    strategy_id: i64,
+) -> Result<(), String> {
+    storage::delete_strategy(&state.db_pool, strategy_id)
+        .await
+        .map_err(|e| format!("删除策略失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn update_strategy(
+    state: State<'_, AppState>,
+    strategy_id: i64,
+    name: String,
+    strategy_json: String,
+) -> Result<(), String> {
+    storage::update_strategy(&state.db_pool, strategy_id, &name, &strategy_json)
+        .await
+        .map_err(|e| format!("更新策略失败: {}", e))
 }
 
 #[cfg(test)]
