@@ -384,6 +384,22 @@ export default function ScreenerPage() {
             <Settings size={12} /> 编辑策略
           </button>
 
+          {/* 当前策略条件摘要 */}
+          {activeStrategyId && strategyConditions.length > 0 && (
+            <div className="px-2 py-1 space-y-0.5">
+              <div className="text-data-xs font-bold mb-0.5" style={{ color: 'var(--text-secondary)' }}>条件：</div>
+              {strategyConditions.map((cond: any, i: number) => {
+                const ct = CONDITION_TYPES.find(c => c.id === cond.type);
+                return (
+                  <div key={i} className="text-[10px] px-1.5 py-0.5 rounded-sm inline-block mr-1 mb-0.5"
+                    style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>
+                    {ct?.label || cond.type}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* History panel */}
           <details className="mt-1">
             <summary className="text-data-xs cursor-pointer select-none px-2 py-1 rounded" style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)' }}>
