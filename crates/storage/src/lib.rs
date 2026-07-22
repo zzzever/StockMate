@@ -127,6 +127,18 @@ pub async fn get_screener_history(pool: &DbPool, limit: u32) -> Result<Vec<(i64,
     Ok(rows.into_iter().map(|r| (r.id, r.strategy_name, r.strategy_params, r.match_count, r.created_at)).collect())
 }
 
+pub async fn get_screener_result_by_id(pool: &DbPool, record_id: i64) -> Result<Option<String>> {
+    #[derive(sqlx::FromRow)]
+    struct Row { results_json: String }
+    let row = sqlx::query_as::<_, Row>(
+        "SELECT results_json FROM screener_results WHERE id = ?1"
+    )
+    .bind(record_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|r| r.results_json))
+}
+
 /// Escape SQL `LIKE` wildcards (`%`, `_`) and the escape character itself so
 /// user input is matched literally. Must be paired with `ESCAPE '\'` in the
 /// `LIKE` clause. Without this, a query of `%` matches every row.

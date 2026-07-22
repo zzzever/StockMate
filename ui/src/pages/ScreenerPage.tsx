@@ -77,8 +77,8 @@ export default function ScreenerPage() {
 
   const loadHistoryResult = async (historyId: string) => {
     try {
-      const res: ScreenResult[] = await invoke('load_screener_history_result', { historyId });
-      setResults(res);
+      const resJson: string = await invoke('load_screener_history_result', { historyId });
+      setResults(JSON.parse(resJson));
     } catch (e) {
       console.error('Load history failed:', e);
     }
@@ -224,8 +224,12 @@ export default function ScreenerPage() {
                       <th className="text-left py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => { setSortKey('name'); setSortAsc(sortKey !== 'name' ? true : !sortAsc); }}>
                         名称 {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}</th>
-                      <th className="text-right py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最新价</th>
-                      <th className="text-right py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>涨跌幅</th>
+                      <th className="text-right py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
+                        onClick={() => { setSortKey('close'); setSortAsc(sortKey !== 'close' ? false : !sortAsc); }}>
+                        最新价 {sortKey === 'close' ? (sortAsc ? '▲' : '▼') : ''}</th>
+                      <th className="text-right py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
+                        onClick={() => { setSortKey('change_pct'); setSortAsc(sortKey !== 'change_pct' ? false : !sortAsc); }}>
+                        涨跌幅 {sortKey === 'change_pct' ? (sortAsc ? '▲' : '▼') : ''}</th>
                       <th className="text-left py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配条件</th>
                     </tr>
                   </thead>

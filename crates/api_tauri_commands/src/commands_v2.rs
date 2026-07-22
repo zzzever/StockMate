@@ -671,6 +671,17 @@ pub async fn get_screener_history(
         .map_err(|e| format!("获取选股历史失败: {}", e))
 }
 
+#[tauri::command]
+pub async fn load_screener_history_result(
+    state: State<'_, AppState>,
+    history_id: i64,
+) -> Result<String, String> {
+    storage::get_screener_result_by_id(&state.db_pool, history_id)
+        .await
+        .map_err(|e| format!("加载选股历史失败: {}", e))?
+        .ok_or_else(|| "未找到该记录".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use domain::MovingAverage;
