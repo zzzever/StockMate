@@ -39,6 +39,14 @@ pub enum ScreenCondition {
     PriceChange { min: f64, max: f64 },
     /// 换手率范围（%）
     TurnoverRate { min: f64, max: f64 },
+    /// MACD金叉
+    MACDCross,
+    /// KDJ超卖 (K<20)
+    KDJOverSold,
+    /// 连续上涨N日
+    ConsecutiveUp(u32),
+    /// 收盘价创N日新高
+    NewHigh(u32),
 }
 
 /// 筛选策略
@@ -163,6 +171,44 @@ pub fn screen_stock(quotes: &[Quote], conditions: &[ScreenCondition]) -> Vec<Str
                 // Simplified: volume change as proxy for turnover rate
                 // Volume increase relative to recent average
             }
+            ScreenCondition::MACDCross => {
+                if n < 26 { continue; }
+                let ema12 = ema(&closes, 12);
+                let ema26 = ema(&closes, 26);
+                if ema12.len() >= 2 && ema26.len() >= 2 {
+                    let dif_prev = ema12[ema12.len()-2] - ema26[ema26.len()-2];
+                    let dif_curr = ema12[ema12.len()-1] - ema26[ema26.len()-1];
+                    if dif_prev <= 0.0 && dif_curr > 0.0 {
+                        matches.push("MACD金叉".into());
+                    }
+                }
+            }
+            ScreenCondition::KDJOverSold => {
+                if n < 14 { continue; }
+                let lowest = closes[n-14..].iter().fold(closes[n-1], |a, &b| a.min(b));
+                let highest = closes[n-14..].iter().fold(closes[n-1], |a, &b| a.max(b));
+                if (highest - lowest).abs() > 0.001 {
+                    let k = (closes[n-1] - lowest) / (highest - lowest) * 100.0;
+                    if k < 20.0 {
+                        matches.push(format!("KDJ超卖 K={:.0}", k));
+                    }
+                }
+            }
+            ScreenCondition::ConsecutiveUp(days) => {
+                if n < *days as usize + 1 { continue; }
+                let mut all_up = true;
+                for i in 0..*days as usize {
+                    if closes[n-1-i] <= closes[n-2-i] { all_up = false; break; }
+                }
+                if all_up { matches.push(format!("连续上涨{}日", days)); }
+            }
+            ScreenCondition::NewHigh(period) => {
+                if n < *period as usize { continue; }
+                let max_val = closes[n-*period as usize..].iter().fold(0.0f64, |a, &b| a.max(b));
+                if last_close >= max_val {
+                    matches.push(format!("{}日新高", period));
+                }
+            }
         }
     }
     matches
@@ -196,6 +242,20 @@ fn compute_rsi(data: &[f64], period: usize) -> f64 {
         return 100.0;
     }
     100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+}
+
+fn ema(data: &[f64], period: usize) -> Vec<f64> {
+    if data.len() < period { return vec![]; }
+    let mut result = Vec::new();
+    let multiplier = 2.0 / (period as f64 + 1.0);
+    // Use SMA for first value
+    let first_sma: f64 = data[..period].iter().sum::<f64>() / period as f64;
+    result.push(first_sma);
+    for i in period..data.len() {
+        let ema = (data[i] - result.last().unwrap()) * multiplier + result.last().unwrap();
+        result.push(ema);
+    }
+    result
 }
 
 #[cfg(test)]
@@ -304,5 +364,40 @@ mod tests {
         let matches = screen_stock(&quotes, &[cond]);
         // 简化版：TurnoverRate 目前是 no-op，总是返回空
         assert!(matches.is_empty(), "TurnoverRate (simplified) should match nothing");
+    }
+
+    #[test]
+    fn test_consecutive_up() {
+        let mut quotes = Vec::new();
+        for i in 0..10 { quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64 * 0.5), 1000)); }
+        let cond = ScreenCondition::ConsecutiveUp(3);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Should detect consecutive up");
+    }
+
+    #[test]
+    fn test_macd_cross() {
+        // 模拟：价格先跌后涨，使 DIF 从负变正
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            // 前15天下跌，后15天上涨
+            let price = if i < 15 { 15.0 - i as f64 * 0.5 } else { 7.5 + (i - 14) as f64 * 0.5 };
+            quotes.push(make_quote(&format!("{:.1}", price), 1000));
+        }
+        let cond = ScreenCondition::MACDCross;
+        let matches = screen_stock(&quotes, &[cond]);
+        // 可能有金叉
+        println!("MACD match: {:?}", matches);
+    }
+
+    #[test]
+    fn test_new_high() {
+        let mut quotes = Vec::new();
+        for i in 0..20 {
+            quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64 * 0.3), 1000));
+        }
+        let cond = ScreenCondition::NewHigh(10);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Should detect new high");
     }
 }

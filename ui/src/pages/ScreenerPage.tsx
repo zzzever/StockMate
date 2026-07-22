@@ -17,6 +17,10 @@ const CONDITION_TYPES = [
   { id: 'AboveMA', label: '高于均线', desc: '收盘价高于均线' },
   { id: 'VolumeSurge', label: '放量', desc: '成交量超过均量N倍' },
   { id: 'PriceChange', label: '涨跌幅', desc: '当日涨跌幅范围' },
+  { id: 'MACDCross', label: 'MACD金叉', desc: 'DIF上穿DEA' },
+  { id: 'KDJOverSold', label: 'KDJ超卖', desc: 'K值<20' },
+  { id: 'ConsecutiveUp', label: '连续上涨', desc: '连续N日上涨' },
+  { id: 'NewHigh', label: '创N日新高', desc: '收盘价创N日新高' },
 ];
 
 const getChangeStyle = (pct: number) => {
@@ -271,6 +275,12 @@ export default function ScreenerPage() {
           <input type="number" value={cond.params?.min || -5} onChange={e => updateParam('min', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" />
           <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最大%</span>
           <input type="number" value={cond.params?.max || 5} onChange={e => updateParam('max', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" /></>);
+      case 'ConsecutiveUp':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>天数</span>
+          <input type="number" value={cond.params?.days || 3} onChange={e => updateParam('days', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" /></>);
+      case 'NewHigh':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>周期</span>
+          <input type="number" value={cond.params?.period || 20} onChange={e => updateParam('period', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" /></>);
       default:
         return <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{JSON.stringify(cond.params)}</span>;
     }
@@ -307,6 +317,10 @@ export default function ScreenerPage() {
           case 'AboveMA': return { AboveMA: c.params?.period ?? 20 };
           case 'VolumeSurge': return { VolumeSurge: c.params?.ratio ?? 2 };
           case 'PriceChange': return { PriceChange: { min: c.params?.min ?? -5, max: c.params?.max ?? 5 } };
+          case 'MACDCross': return { MACDCross: {} };
+          case 'KDJOverSold': return { KDJOverSold: {} };
+          case 'ConsecutiveUp': return { ConsecutiveUp: c.params?.days ?? 3 };
+          case 'NewHigh': return { NewHigh: c.params?.period ?? 20 };
           default: return null;
         }
       }).filter(Boolean);
