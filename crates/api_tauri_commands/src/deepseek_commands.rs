@@ -868,6 +868,60 @@ pub async fn delete_prediction(
         .map_err(|e| format!("删除预测历史失败: {}", e))
 }
 
+
+#[tauri::command]
+pub async fn generate_screener_conditions(
+    description: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let api_key = storage::get_setting(&state.db_pool, "deepseek_api_key")
+        .await
+        .map_err(|e| format!("读取API Key失败: {}", e))?
+        .unwrap_or_default();
+    if api_key.is_empty() {
+        return Err("请先在设置页配置 DeepSeek API Key".into());
+    }
+    let system_prompt = r#"将用户描述转换为选股条件JSON数组。可选类型：
+- LowPrice: {"type":"LowPrice","params":{"maxPrice":20}}
+- ShrinkDrop: {"type":"ShrinkDrop","params":{"days":3,"maxVolRatio":0.6}}
+- LowPosition: {"type":"LowPosition","params":{"days":20,"ratio":0.3}}
+- AboveMA: {"type":"AboveMA","params":{"period":20}}
+- VolumeSurge: {"type":"VolumeSurge","params":{"ratio":2.0}}
+- PriceChange: {"type":"PriceChange","params":{"min":-5,"max":5}}
+- ConsecutiveUp: {"type":"ConsecutiveUp","params":{"days":3}}
+- NewHigh: {"type":"NewHigh","params":{"period":20}}
+- MACDCross: {"type":"MACDCross","params":{}}
+- KDJOverSold: {"type":"KDJOverSold","params":{}}
+只返回JSON数组。"#;
+    let messages = serde_json::json!([
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": format!("描述: {}", description)}
+    ]);
+    let body = serde_json::json!({
+        "model": "deepseek-chat",
+        "messages": messages,
+        "temperature": 0.1,
+        "max_tokens": 2000,
+    });
+    let resp = reqwest::Client::new()
+        .post("https://api.deepseek.com/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send().await
+        .map_err(|e| format!("API请求失败: {}", e))?;
+    let resp_json: serde_json::Value = resp.json().await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+    let content = resp_json["choices"][0]["message"]["content"]
+        .as_str().unwrap_or("[]").to_string();
+    let cleaned = content.trim()
+        .trim_start_matches("```json").trim_end_matches("```")
+        .trim_start_matches("```").trim_end_matches("```")
+        .trim();
+    serde_json::from_str::<serde_json::Value>(cleaned)
+        .map_err(|e| format!("AI返回格式错误: {}", e))?;
+    Ok(cleaned.to_string())
+}
 #[cfg(test)]
 mod tests {
     use super::*;

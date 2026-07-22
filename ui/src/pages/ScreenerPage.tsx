@@ -56,6 +56,8 @@ export default function ScreenerPage() {
   const [trendMap, setTrendMap] = useState<Record<string, number[]>>({});
   const [compareOpen, setCompareOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [aiDescription, setAiDescription] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
 
 
   const sortedResults = useMemo(() => {
@@ -231,6 +233,24 @@ export default function ScreenerPage() {
     const type = e.target.value;
     if (!type) return;
     setStrategyConditions(prev => [...prev, { type, params: {} }]);
+    e.target.value = '';
+  };
+
+  const handleAIGenerate = async () => {
+    if (!aiDescription.trim()) return;
+    setAiLoading(true);
+    try {
+      const resultJson: string = await invoke('generate_screener_conditions', { description: aiDescription });
+      const conditions = JSON.parse(resultJson);
+      if (Array.isArray(conditions) && conditions.length > 0) {
+        setStrategyConditions(prev => [...prev, ...conditions.map((c: any) => ({ type: c.type, params: c.params || {} }))]);
+      }
+    } catch (e: any) {
+      console.error('AI生成失败:', e);
+      alert('AI生成失败: ' + (e?.message || e));
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const removeCondition = (idx: number) => {
@@ -439,6 +459,16 @@ export default function ScreenerPage() {
                 <option key={ct.id} value={ct.id}>{ct.label} — {ct.desc}</option>
               ))}
             </select>
+            {/* AI 生成条件 */}
+            <div className="flex items-center gap-1 mt-1">
+              <input type="text" placeholder="AI描述：低价缩量下跌股..."
+                value={aiDescription} onChange={e => setAiDescription(e.target.value)}
+                className="input flex-1 text-data-xs py-1" />
+              <button onClick={handleAIGenerate} disabled={aiLoading || !aiDescription.trim()}
+                className="btn-secondary text-[10px] px-2 py-1 shrink-0">
+                {aiLoading ? '...' : 'AI生成'}
+              </button>
+            </div>
           </div>
 
           {/* History panel */}
