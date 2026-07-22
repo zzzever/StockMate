@@ -24,8 +24,8 @@ describe('ScreenerPage', () => {
   it('renders page title and strategy selector', async () => {
     render(<MemoryRouter><ScreenerPage /></MemoryRouter>);
     expect(screen.getByText('选股')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText('历史相对低价 + 缩量下跌')).toBeInTheDocument());
     expect(screen.getByText('运行选股')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('筛选条件')).toBeInTheDocument());
   });
 
   it('shows empty state by default', () => {
@@ -40,6 +40,6 @@ describe('ScreenerPage', () => {
 
   it('renders strategy description', async () => {
     render(<MemoryRouter><ScreenerPage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByText('历史相对低价 + 缩量下跌')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('筛选条件')).toBeInTheDocument());
   });
 });

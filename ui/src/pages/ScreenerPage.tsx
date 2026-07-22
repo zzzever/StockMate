@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Search, RefreshCw, ArrowLeft, Settings, Save, BarChart3 } from 'lucide-react';
+import { Filter, Search, RefreshCw, ArrowLeft, Save, BarChart3 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import MiniTrend from '../components/MiniTrend';
 import CompareModal from '../components/CompareModal';
@@ -47,7 +47,7 @@ export default function ScreenerPage() {
   const [detailStock, setDetailStock] = useState<ScreenResult | null>(null);
   const [screenerHistory, setScreenerHistory] = useState<any[]>([]);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [editingConditionIdx, setEditingConditionIdx] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [strategies, setStrategies] = useState<any[]>([]);
@@ -55,6 +55,7 @@ export default function ScreenerPage() {
   const [strategyConditions, setStrategyConditions] = useState<{ type: string; params: any }[]>([]);
   const [trendMap, setTrendMap] = useState<Record<string, number[]>>({});
   const [compareOpen, setCompareOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
 
   const sortedResults = useMemo(() => {
@@ -248,7 +249,6 @@ export default function ScreenerPage() {
     if (!activeStrategyId) return;
     try {
       await invoke('update_strategy', { strategyId: activeStrategyId, name: strategies.find((s: any) => s[0] === activeStrategyId)?.[1] || '', strategyJson: JSON.stringify(strategyConditions) });
-      setIsEditing(false);
     } catch (e) { console.error('Save failed:', e); }
   };
 
@@ -313,7 +313,7 @@ export default function ScreenerPage() {
   }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setIsEditing(false); setDetailStock(null); }
+      if (e.key === 'Escape') { setEditingConditionIdx(null); setDetailStock(null); }
       if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSaveResult(); }
       if ((e.key === 'e' || e.key === 'E') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); exportCSV(); }
       if ((e.key === 'r' || e.key === 'R') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runScreener(); }
@@ -370,57 +370,76 @@ export default function ScreenerPage() {
 
       <div className="flex-1 flex gap-2 overflow-hidden">
         <div className="w-[280px] shrink-0 flex flex-col gap-2">
-          <div className="glass-card-flat p-2 space-y-1">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-data-xs font-bold" style={{ color: 'var(--text-secondary)' }}>我的策略</span>
-              <button onClick={handleAddStrategy} className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)]"
-                style={{ color: 'var(--text-tertiary)' }}>+ 新建</button>
+          <div className="glass-card-flat p-2">
+            <div className="flex items-center gap-2">
+              <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
+                className="select flex-1 text-data-xs">
+                {strategies.length === 0 && <option value="">暂无策略</option>}
+                {strategies.map((s: any) => (
+                  <option key={s[0]} value={s[0]}>{s[3] ? '📌 ' : ''}{s[1]}</option>
+                ))}
+              </select>
+              <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0">+ 新建</button>
             </div>
-            {strategies.length === 0 && (
-              <div className="text-data-xs px-2 py-1" style={{ color: 'var(--text-tertiary)' }}>暂无策略</div>
+            {activeStrategyId && (
+              <div className="flex justify-end mt-1">
+                <button onClick={(e) => { e.stopPropagation(); deleteStrategy(activeStrategyId); }}
+                  className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded"
+                  style={{ color: 'hsl(var(--risk-danger))' }}>删除策略</button>
+              </div>
             )}
-            {strategies.map((s: any) => (
-              <button key={s[0]} onClick={() => selectStrategy(s[0])} onDoubleClick={() => runScreener()}
-                className="w-full text-left px-2 py-1.5 text-data-xs rounded transition-colors flex items-center justify-between"
-                style={{
-                  background: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent-ghost))' : 'transparent',
-                  color: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent))' : 'var(--text-primary)',
-                  borderLeft: activeStrategyId === s[0] ? '3px solid hsl(var(--swiss-accent))' : '3px solid transparent',
-                  borderRadius: '0 4px 4px 0',
-                }}>
-                <span className="truncate">{s[1]}</span>
-                <button onClick={(e) => { e.stopPropagation(); deleteStrategy(s[0]); }}
-                  className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded" style={{ color: 'var(--text-tertiary)' }}>x</button>
-              </button>
-            ))}
           </div>
 
-          {/* 编辑策略按钮 */}
-          <button onClick={() => {
-            if (activeStrategyId === null && strategies.length > 0) {
-              selectStrategy(strategies[0][0]);
-            }
-            setIsEditing(true);
-          }}
-            className="btn-secondary w-full text-data-xs">
-            <Settings size={12} /> 编辑策略
-          </button>
-
-          {/* 当前策略条件摘要 */}
-          {activeStrategyId && strategyConditions.length > 0 && (
-            <div className="px-2 py-1 space-y-0.5">
-              <div className="text-data-xs font-bold mb-0.5" style={{ color: 'var(--text-secondary)' }}>条件：</div>
-              {strategyConditions.map((cond: any, i: number) => {
-                const ct = CONDITION_TYPES.find(c => c.id === cond.type);
-                return (
-                  <div key={i} className="text-[10px] px-1.5 py-0.5 rounded-sm inline-block mr-1 mb-0.5"
-                    style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>
-                    {ct?.label || cond.type}
-                  </div>
-                );
-              })}
+          {/* 条件内联列表 */}
+          <div className="glass-card-flat p-2 flex-1 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-1 shrink-0">
+              <span className="text-data-xs font-bold" style={{ color: 'var(--text-secondary)' }}>筛选条件</span>
             </div>
-          )}
+            {strategyConditions.length === 0 ? (
+              <div className="text-data-xs py-4 text-center shrink-0" style={{ color: 'var(--text-tertiary)' }}>暂无条件，点击添加</div>
+            ) : (
+              <div className="space-y-0.5 overflow-y-auto flex-1">
+                {strategyConditions.map((cond: any, i: number) => {
+                  const ct = CONDITION_TYPES.find(c => c.id === cond.type);
+                  const isEditing = editingConditionIdx === i;
+                  const paramStr = ct?.id === 'LowPrice' ? `< ${cond.params?.maxPrice || 20}` :
+                    ct?.id === 'ShrinkDrop' ? `${cond.params?.days || 3}日 量比<${cond.params?.maxVolRatio || 0.6}` :
+                    ct?.id === 'LowPosition' ? `${cond.params?.days || 20}日 <${(cond.params?.ratio || 0.3) * 100}%分位` :
+                    ct?.id === 'AboveMA' ? `MA${cond.params?.period || 20}` :
+                    ct?.id === 'VolumeSurge' ? `>${cond.params?.ratio || 2}倍` :
+                    ct?.id === 'PriceChange' ? `${cond.params?.min ?? -5}%~${cond.params?.max ?? 5}%` :
+                    ct?.id === 'ConsecutiveUp' ? `${cond.params?.days || 3}日` :
+                    ct?.id === 'NewHigh' ? `${cond.params?.period || 20}日` : '';
+                  return (
+                    <div key={i}>
+                      <div onClick={() => setEditingConditionIdx(isEditing ? null : i)}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-data-xs cursor-pointer"
+                        style={{ background: isEditing ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-card)' }}>
+                        <span className="font-semibold w-20 truncate" style={{ color: 'var(--text-secondary)' }}>{ct?.label || cond.type}</span>
+                        <span className="font-mono truncate text-[10px] shrink min-w-0" style={{ color: 'var(--text-primary)' }}>{paramStr}</span>
+                        <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--text-tertiary)' }}>{isEditing ? '▲' : '▸'}</span>
+                      </div>
+                      {isEditing && (
+                        <div className="px-2 py-2 flex items-center gap-2 flex-wrap rounded-b-lg"
+                          style={{ background: 'var(--bg-card)' }}>
+                          {renderConditionParams(cond, i)}
+                          <button onClick={() => removeCondition(i)} className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] shrink-0"
+                            style={{ color: 'hsl(var(--risk-danger))' }}>移除</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* 添加条件 */}
+            <select onChange={handleAddCondition} value="" className="select w-full text-data-xs mt-2 shrink-0">
+              <option value="">+ 添加筛选条件...</option>
+              {CONDITION_TYPES.map(ct => (
+                <option key={ct.id} value={ct.id}>{ct.label} — {ct.desc}</option>
+              ))}
+            </select>
+          </div>
 
           {/* History panel */}
           <details className="mt-1">
@@ -632,44 +651,36 @@ export default function ScreenerPage() {
         </div>
       </div>
 
-      {/* 编辑策略弹窗 — 条件构建器 */}
+      {/* 编辑策略弹窗 — 参数调优 */}
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setIsEditing(false)}>
-          <div className="w-[500px] max-h-[80vh] overflow-y-auto glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
+          <div className="w-[480px] max-h-[80vh] overflow-y-auto glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-data-sm font-bold" style={{ color: 'var(--text-primary)' }}>编辑策略条件</h3>
+              <h3 className="text-data-sm font-bold" style={{ color: 'var(--text-primary)' }}>参数调优</h3>
               <button onClick={() => setIsEditing(false)} className="text-data-xs px-2 py-0.5 rounded hover:bg-[var(--bg-hover)]"
-                style={{ color: 'var(--text-tertiary)' }}>x</button>
+                style={{ color: 'var(--text-tertiary)' }}>✕</button>
             </div>
-            {/* 条件列表 */}
-            <div className="space-y-2 mb-3">
-              {strategyConditions.map((cond, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 rounded-lg cursor-move" style={{ background: 'var(--bg-card)' }}>
-                  <span className="text-data-xs cursor-grab" style={{ color: 'var(--text-tertiary)' }}>⠿</span>
-                  <span className="text-data-xs font-bold w-20" style={{ color: 'var(--text-secondary)' }}>{CONDITION_TYPES.find(c => c.id === cond.type)?.label || cond.type}</span>
-                  {/* Dynamic params based on type */}
-                  {renderConditionParams(cond, i)}
-                  <button onClick={() => moveCondition(i, i - 1)} disabled={i === 0}
-                    className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded disabled:opacity-20" style={{ color: 'var(--text-tertiary)' }}>▲</button>
-                  <button onClick={() => moveCondition(i, i + 1)} disabled={i === strategyConditions.length - 1}
-                    className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded disabled:opacity-20" style={{ color: 'var(--text-tertiary)' }}>▼</button>
-                  <button onClick={() => removeCondition(i)}
-                    className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] shrink-0" style={{ color: 'hsl(var(--risk-danger))' }}>移除</button>
-                </div>
-              ))}
-              {strategyConditions.length === 0 && (
-                <div className="text-data-xs px-2 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>暂无条件，请添加条件</div>
-              )}
-            </div>
-            {/* 添加条件 */}
-            <select onChange={handleAddCondition} value="" className="select w-full text-data-xs">
-              <option value="">+ 添加条件...</option>
-              {CONDITION_TYPES.map(ct => (
-                <option key={ct.id} value={ct.id}>{ct.label} — {ct.desc}</option>
-              ))}
-            </select>
+            {strategyConditions.length === 0 ? (
+              <div className="text-data-xs px-2 py-4 text-center" style={{ color: 'var(--text-tertiary)' }}>暂无条件，请在左侧添加</div>
+            ) : (
+              <div className="space-y-2 mb-3">
+                {strategyConditions.map((cond, i) => (
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--bg-card)' }}>
+                    <span className="text-data-xs font-bold w-20 shrink-0" style={{ color: 'var(--text-secondary)' }}>{CONDITION_TYPES.find(c => c.id === cond.type)?.label || cond.type}</span>
+                    {/* Dynamic params based on type */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {renderConditionParams(cond, i)}
+                    </div>
+                    <button onClick={() => moveCondition(i, i - 1)} disabled={i === 0}
+                      className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded disabled:opacity-20 ml-auto" style={{ color: 'var(--text-tertiary)' }}>▲</button>
+                    <button onClick={() => moveCondition(i, i + 1)} disabled={i === strategyConditions.length - 1}
+                      className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded disabled:opacity-20" style={{ color: 'var(--text-tertiary)' }}>▼</button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2 mt-3">
               <button onClick={handleSaveStrategy} className="btn-primary flex-1 text-data-xs">保存策略</button>
               <button onClick={() => setIsEditing(false)} className="btn-secondary text-data-xs px-3">取消</button>
