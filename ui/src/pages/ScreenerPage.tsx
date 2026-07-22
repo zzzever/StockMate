@@ -70,6 +70,7 @@ export default function ScreenerPage() {
       });
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 2000);
+      refreshHistory();
     } catch (e) {
       console.error('Save failed:', e);
     }
@@ -98,6 +99,13 @@ export default function ScreenerPage() {
     }
   };
 
+  const refreshHistory = async () => {
+    try {
+      const history = await invoke<any[]>('get_screener_history', { limit: 20 });
+      setScreenerHistory(history);
+    } catch (e) {}
+  };
+
   const clearAllHistory = async () => {
     try {
       await invoke('clear_screener_history');
@@ -108,16 +116,7 @@ export default function ScreenerPage() {
   };
 
   // Load screener history on mount
-  useEffect(() => {
-    (async () => {
-      try {
-        const history = await invoke<any[]>('get_screener_history', { limit: 20 });
-        setScreenerHistory(history);
-      } catch (e) {
-        // backend may not have this command yet
-      }
-    })();
-  }, []);
+  useEffect(() => { refreshHistory(); }, []);
 
   const runScreener = async () => {
     setRunning(true);
