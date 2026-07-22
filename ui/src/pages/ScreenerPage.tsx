@@ -10,27 +10,13 @@ interface ScreenResult {
   change_pct: number; matches: string[];
 }
 
-interface StrategyParam {
-  id: string;
-  label: string;
-  value: number;
-  step: number;
-}
-
-const PRESET_STRATEGIES = [
-  {
-    id: 'cheap_shrink',
-    name: '历史相对低价 + 缩量下跌',
-    desc: '20日低位(30%分位) · 连续3日缩量下跌',
-  },
-];
-
-const DEFAULT_CONDITIONS: StrategyParam[] = [
-  { id: 'maxPrice', label: '最高价格(元)', value: 20, step: 1 },
-  { id: 'shrinkDays', label: '缩量下跌天数', value: 3, step: 1 },
-  { id: 'maxVolRatio', label: '最大量比(相对均量)', value: 0.6, step: 0.1 },
-  { id: 'lowPosDays', label: '历史低位周期(日)', value: 20, step: 1 },
-  { id: 'lowPosRatio', label: '历史低位分位比率', value: 0.3, step: 0.1 },
+const CONDITION_TYPES = [
+  { id: 'LowPrice', label: '低价', desc: '价格低于指定值' },
+  { id: 'ShrinkDrop', label: '缩量下跌', desc: '连续N日缩量下跌' },
+  { id: 'LowPosition', label: '历史低位', desc: '价格处于N日低位' },
+  { id: 'AboveMA', label: '高于均线', desc: '收盘价高于均线' },
+  { id: 'VolumeSurge', label: '放量', desc: '成交量超过均量N倍' },
+  { id: 'PriceChange', label: '涨跌幅', desc: '当日涨跌幅范围' },
 ];
 
 const getChangeStyle = (pct: number) => {
@@ -60,9 +46,9 @@ export default function ScreenerPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
-  const [strategyParams, setStrategyParams] = useState({
-    maxPrice: 20, shrinkDays: 3, maxVolRatio: 0.6, lowPosDays: 20, lowPosRatio: 0.3,
-  });
+  const [strategies, setStrategies] = useState<any[]>([]);
+  const [activeStrategyId, setActiveStrategyId] = useState<number | null>(null);
+  const [strategyConditions, setStrategyConditions] = useState<{ type: string; params: any }[]>([]);
   const [trendMap, setTrendMap] = useState<Record<string, number[]>>({});
   const [compareOpen, setCompareOpen] = useState(false);
 
@@ -102,9 +88,10 @@ export default function ScreenerPage() {
   }, [pageResults]);
   const handleSaveResult = async () => {
     try {
+      const s = strategies.find((s: any) => s[0] === activeStrategyId);
       await invoke('save_screener_result', {
-        strategyName: PRESET_STRATEGIES[0].name,
-        strategyParams: JSON.stringify(strategyParams),
+        strategyName: s ? s[1] : '自定义策略',
+        strategyParams: JSON.stringify(strategyConditions),
         resultsJson: JSON.stringify(results),
         matchCount: results.length,
       });
@@ -204,8 +191,97 @@ export default function ScreenerPage() {
     }
   };
 
+  // --- 策略管理函数 ---
+  const handleAddStrategy = async () => {
+    const name = prompt('输入策略名称:');
+    if (!name) return;
+    try {
+      const id = await invoke<number>('save_strategy', { name, strategyJson: JSON.stringify(strategyConditions), isPreset: false });
+      setStrategies(prev => [...prev, [id, name, JSON.stringify(strategyConditions), false]]);
+      setActiveStrategyId(id);
+    } catch (e) { console.error('Create failed:', e); }
+  };
+
+  const selectStrategy = (id: number) => {
+    setActiveStrategyId(id);
+    const s = strategies.find((s: any) => s[0] === id);
+    if (s) {
+      try {
+        const conds = JSON.parse(s[2]);
+        setStrategyConditions(conds);
+      } catch { setStrategyConditions([]); }
+    }
+  };
+
+  const deleteStrategy = async (id: number) => {
+    if (!confirm('确认删除该策略？')) return;
+    try {
+      await invoke('delete_strategy', { strategyId: id });
+      setStrategies(prev => prev.filter((s: any) => s[0] !== id));
+      if (activeStrategyId === id) setActiveStrategyId(null);
+    } catch (e) { console.error('Delete failed:', e); }
+  };
+
+  const handleAddCondition = (e: any) => {
+    const type = e.target.value;
+    if (!type) return;
+    setStrategyConditions(prev => [...prev, { type, params: {} }]);
+  };
+
+  const removeCondition = (idx: number) => {
+    setStrategyConditions(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveStrategy = async () => {
+    if (!activeStrategyId) return;
+    try {
+      await invoke('update_strategy', { strategyId: activeStrategyId, name: strategies.find((s: any) => s[0] === activeStrategyId)?.[1] || '', strategyJson: JSON.stringify(strategyConditions) });
+      setIsEditing(false);
+    } catch (e) { console.error('Save failed:', e); }
+  };
+
+  const renderConditionParams = (cond: any, idx: number) => {
+    const updateParam = (key: string, val: any) => {
+      const updated = [...strategyConditions];
+      updated[idx] = { ...updated[idx], params: { ...updated[idx].params, [key]: val } };
+      setStrategyConditions(updated);
+    };
+    switch (cond.type) {
+      case 'LowPrice':
+        return <input type="number" value={cond.params?.maxPrice || 20} onChange={e => updateParam('maxPrice', +e.target.value)}
+          className="input w-20 text-right text-data-xs" step="1" />;
+      case 'ShrinkDrop':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>天数</span>
+          <input type="number" value={cond.params?.days || 3} onChange={e => updateParam('days', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" />
+          <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>量比{'<'}</span>
+          <input type="number" value={cond.params?.maxVolRatio || 0.6} onChange={e => updateParam('maxVolRatio', +e.target.value)} className="input w-16 text-right text-data-xs" step="0.1" /></>);
+      case 'LowPosition':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>周期</span>
+          <input type="number" value={cond.params?.days || 20} onChange={e => updateParam('days', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" />
+          <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>分位{'<'}</span>
+          <input type="number" value={cond.params?.ratio || 0.3} onChange={e => updateParam('ratio', +e.target.value)} className="input w-16 text-right text-data-xs" step="0.1" /></>);
+      case 'AboveMA':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均线周期</span>
+          <input type="number" value={cond.params?.period || 20} onChange={e => updateParam('period', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" /></>);
+      case 'VolumeSurge':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>倍率&gt;</span>
+          <input type="number" value={cond.params?.ratio || 2} onChange={e => updateParam('ratio', +e.target.value)} className="input w-16 text-right text-data-xs" step="0.5" /></>);
+      case 'PriceChange':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最小%</span>
+          <input type="number" value={cond.params?.min || -5} onChange={e => updateParam('min', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" />
+          <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最大%</span>
+          <input type="number" value={cond.params?.max || 5} onChange={e => updateParam('max', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" /></>);
+      default:
+        return <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{JSON.stringify(cond.params)}</span>;
+    }
+  };
+
   // Load screener history on mount
   useEffect(() => { refreshHistory(); }, []);
+  // 加载策略列表
+  useEffect(() => {
+    invoke<any[]>('get_all_strategies').then(data => setStrategies(data || [])).catch(() => {});
+  }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setIsEditing(false); setDetailStock(null); }
@@ -222,11 +298,22 @@ export default function ScreenerPage() {
     setRunning(true);
     setResults([]);
     try {
-      const conditions = [
-        { LowPrice: strategyParams.maxPrice },
-        { ShrinkDrop: { days: strategyParams.shrinkDays, max_vol_ratio: strategyParams.maxVolRatio } },
-        { LowPosition: { days: strategyParams.lowPosDays, ratio: strategyParams.lowPosRatio } },
-      ];
+      // 从当前策略条件构建查询
+      const conditions = strategyConditions.map(c => {
+        switch (c.type) {
+          case 'LowPrice': return { LowPrice: c.params?.maxPrice ?? 20 };
+          case 'ShrinkDrop': return { ShrinkDrop: { days: c.params?.days ?? 3, max_vol_ratio: c.params?.maxVolRatio ?? 0.6 } };
+          case 'LowPosition': return { LowPosition: { days: c.params?.days ?? 20, ratio: c.params?.ratio ?? 0.3 } };
+          case 'AboveMA': return { AboveMA: c.params?.period ?? 20 };
+          case 'VolumeSurge': return { VolumeSurge: c.params?.ratio ?? 2 };
+          case 'PriceChange': return { PriceChange: { min: c.params?.min ?? -5, max: c.params?.max ?? 5 } };
+          default: return null;
+        }
+      }).filter(Boolean);
+      if (conditions.length === 0) {
+        console.warn('没有条件，使用默认条件');
+        conditions.push({ LowPrice: 20 }, { ShrinkDrop: { days: 3, max_vol_ratio: 0.6 } }, { LowPosition: { days: 20, ratio: 0.3 } });
+      }
       const res: ScreenResult[] = await invoke('screen_stocks', {
         conditionsJson: JSON.stringify(conditions),
         limit: 5000,
@@ -249,23 +336,36 @@ export default function ScreenerPage() {
 
       <div className="flex-1 flex gap-2 overflow-hidden">
         <div className="w-[280px] shrink-0 flex flex-col gap-2">
-          <div className="glass-card-flat p-2 space-y-2">
-            <div className="text-data-xs font-bold" style={{ color: 'var(--text-secondary)' }}>预设策略</div>
-            {PRESET_STRATEGIES.map(s => (
-              <button key={s.id}
-                className="w-full text-left p-2 rounded-lg transition-all"
+          <div className="glass-card-flat p-2 space-y-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-data-xs font-bold" style={{ color: 'var(--text-secondary)' }}>我的策略</span>
+              <button onClick={handleAddStrategy} className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)]"
+                style={{ color: 'var(--text-tertiary)' }}>+ 新建</button>
+            </div>
+            {strategies.length === 0 && (
+              <div className="text-data-xs px-2 py-1" style={{ color: 'var(--text-tertiary)' }}>暂无策略</div>
+            )}
+            {strategies.map((s: any) => (
+              <button key={s[0]} onClick={() => selectStrategy(s[0])}
+                className="w-full text-left px-2 py-1.5 text-data-xs rounded transition-colors flex items-center justify-between"
                 style={{
-                  background: 'hsl(var(--swiss-accent-ghost))',
-                  border: '1px solid hsl(var(--swiss-accent) / 0.3)'
+                  background: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent-ghost))' : 'transparent',
+                  color: activeStrategyId === s[0] ? 'hsl(var(--swiss-accent))' : 'var(--text-primary)'
                 }}>
-                <div className="text-data-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
-                <div className="text-data-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{s.desc}</div>
+                <span className="truncate">{s[1]}</span>
+                <button onClick={(e) => { e.stopPropagation(); deleteStrategy(s[0]); }}
+                  className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded" style={{ color: 'var(--text-tertiary)' }}>x</button>
               </button>
             ))}
           </div>
 
           {/* 编辑策略按钮 */}
-          <button onClick={() => setIsEditing(true)}
+          <button onClick={() => {
+            if (activeStrategyId === null && strategies.length > 0) {
+              selectStrategy(strategies[0][0]);
+            }
+            setIsEditing(true);
+          }}
             className="btn-secondary w-full text-data-xs">
             <Settings size={12} /> 编辑策略
           </button>
@@ -480,27 +580,43 @@ export default function ScreenerPage() {
         </div>
       </div>
 
-      {/* 编辑策略弹窗 */}
+      {/* 编辑策略弹窗 — 条件构建器 */}
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}
           onClick={() => setIsEditing(false)}>
-          <div className="w-[400px] glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
+          <div className="w-[500px] max-h-[80vh] overflow-y-auto glass-card-flat p-4" style={{ background: 'var(--bg-root)' }}
             onClick={e => e.stopPropagation()}>
-            <h3 className="text-data-sm font-bold mb-3" style={{ color: 'var(--text-primary)' }}>编辑策略参数</h3>
-            {DEFAULT_CONDITIONS.map(cond => (
-              <div key={cond.id} className="flex items-center justify-between py-2 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-                <span className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>{cond.label}</span>
-                <input type="number" step={cond.step} defaultValue={strategyParams[cond.id as keyof typeof strategyParams]}
-                  onChange={e => setStrategyParams(prev => ({ ...prev, [cond.id]: parseFloat(e.target.value) }))}
-                  className="input w-24 text-right text-data-xs" />
-              </div>
-            ))}
-            <div className="mt-3 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-              <p>• 涨跌幅由后端计算</p>
-              <p>• ETF 已在后端过滤</p>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-data-sm font-bold" style={{ color: 'var(--text-primary)' }}>编辑策略条件</h3>
+              <button onClick={() => setIsEditing(false)} className="text-data-xs px-2 py-0.5 rounded hover:bg-[var(--bg-hover)]"
+                style={{ color: 'var(--text-tertiary)' }}>x</button>
             </div>
-            <button onClick={() => setIsEditing(false)}
-              className="btn-primary w-full mt-3 text-data-xs">完成</button>
+            {/* 条件列表 */}
+            <div className="space-y-2 mb-3">
+              {strategyConditions.map((cond, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--bg-card)' }}>
+                  <span className="text-data-xs font-bold w-20" style={{ color: 'var(--text-secondary)' }}>{CONDITION_TYPES.find(c => c.id === cond.type)?.label || cond.type}</span>
+                  {/* Dynamic params based on type */}
+                  {renderConditionParams(cond, i)}
+                  <button onClick={() => removeCondition(i)}
+                    className="text-[10px] px-1.5 py-0.5 rounded hover:bg-[var(--bg-hover)] shrink-0" style={{ color: 'hsl(var(--risk-danger))' }}>移除</button>
+                </div>
+              ))}
+              {strategyConditions.length === 0 && (
+                <div className="text-data-xs px-2 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>暂无条件，请添加条件</div>
+              )}
+            </div>
+            {/* 添加条件 */}
+            <select onChange={handleAddCondition} value="" className="select w-full text-data-xs">
+              <option value="">+ 添加条件...</option>
+              {CONDITION_TYPES.map(ct => (
+                <option key={ct.id} value={ct.id}>{ct.label} — {ct.desc}</option>
+              ))}
+            </select>
+            <div className="flex gap-2 mt-3">
+              <button onClick={handleSaveStrategy} className="btn-primary flex-1 text-data-xs">保存策略</button>
+              <button onClick={() => setIsEditing(false)} className="btn-secondary text-data-xs px-3">取消</button>
+            </div>
           </div>
         </div>
       )}
