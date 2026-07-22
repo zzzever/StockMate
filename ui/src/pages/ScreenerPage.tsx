@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Search, RefreshCw, ArrowLeft, Settings, Save } from 'lucide-react';
+import { Filter, Search, RefreshCw, ArrowLeft, Settings, Save, BarChart3 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import MiniTrend from '../components/MiniTrend';
+import CompareModal from '../components/CompareModal';
 
 interface ScreenResult {
   id: string; ticker: string; name: string; close: number;
@@ -61,6 +63,9 @@ export default function ScreenerPage() {
   const [strategyParams, setStrategyParams] = useState({
     maxPrice: 20, shrinkDays: 3, maxVolRatio: 0.6, lowPosDays: 20, lowPosRatio: 0.3,
   });
+  const [trendMap, setTrendMap] = useState<Record<string, number[]>>({});
+  const [compareOpen, setCompareOpen] = useState(false);
+
 
   const sortedResults = useMemo(() => {
     const sorted = [...results].sort((a, b) => {
@@ -85,6 +90,16 @@ export default function ScreenerPage() {
 
   const totalPages = Math.ceil(filteredResults.length / 50);
 
+  // 懒加载走势数据
+  useEffect(() => {
+    const ids = pageResults.map(r => r.id);
+    ids.forEach(id => {
+      if (trendMap[id]) return;
+      invoke<any[]>('get_stock_history', { stockId: id, days: 20, period: 'day' })
+        .then(data => setTrendMap(prev => ({ ...prev, [id]: data })))
+        .catch(() => {});
+    });
+  }, [pageResults]);
   const handleSaveResult = async () => {
     try {
       await invoke('save_screener_result', {
@@ -138,14 +153,15 @@ export default function ScreenerPage() {
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = '选股结果.csv'; a.click();
+    const a = document.createElement('a'); a.href = url; const today = new Date().toISOString().slice(0, 10); a.download = `选股结果_${today}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
 
   const exportJSON = () => {
+    const today = new Date().toISOString().slice(0, 10);
     const blob = new Blob([JSON.stringify(filteredResults, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = '选股结果.json'; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `选股结果_${today}.json`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -193,6 +209,9 @@ export default function ScreenerPage() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setIsEditing(false); setDetailStock(null); }
+      if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSaveResult(); }
+      if ((e.key === 'e' || e.key === 'E') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); exportCSV(); }
+      if ((e.key === 'r' || e.key === 'R') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runScreener(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -392,6 +411,7 @@ export default function ScreenerPage() {
                       <th className="text-right py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => { setSortKey('change_pct'); setSortAsc(sortKey !== 'change_pct' ? false : !sortAsc); }}>
                         涨跌幅 {sortKey === 'change_pct' ? (sortAsc ? '▲' : '▼') : ''}</th>
+                      <th className="text-center py-2 px-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>走势</th>
                       <th className="text-left py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配条件</th>
                     </tr>
                   </thead>
@@ -410,11 +430,23 @@ export default function ScreenerPage() {
                         <td className='py-2 px-2 text-right font-mono-nums text-data-sm rounded-sm' style={getChangeStyle(r.change_pct)}>
                           {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(2)}%
                         </td>
+                        <td className="py-2 px-1 text-center align-middle">
+                          <MiniTrend prices={trendMap[r.id]} width={64} height={20} />
+                        </td>
                         <td className="py-2 px-2">
                           <div className="flex flex-wrap gap-1">
                             {r.matches.map((m, i) => (
                               <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-sm"
-                                style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>{m}</span>
+                                style={{
+                                  background: m.includes('低价') || m.includes('价格') ? 'hsla(210,80%,50%,0.12)' :
+                                    m.includes('缩量') ? 'hsla(280,70%,55%,0.12)' :
+                                    m.includes('低位') || m.includes('分位') ? 'hsla(160,70%,45%,0.12)' :
+                                    'var(--bg-input)',
+                                  color: m.includes('低价') || m.includes('价格') ? 'hsl(210,80%,60%)' :
+                                    m.includes('缩量') ? 'hsl(280,70%,65%)' :
+                                    m.includes('低位') || m.includes('分位') ? 'hsl(160,70%,55%)' :
+                                    'var(--text-secondary)'
+                                }}>{m}</span>
                             ))}
                           </div>
                         </td>
@@ -439,6 +471,7 @@ export default function ScreenerPage() {
                   style={{ background: 'var(--bg-card)', border: '1px solid hsl(var(--swiss-accent) / 0.3)' }}>
                   <span className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>已选 {selectedIds.size} 只</span>
                   <button onClick={batchAddToWatchlist} className="btn-primary text-data-xs px-3 py-1">加入自选</button>
+                  <button onClick={() => { setCompareOpen(true); }} className="btn-secondary text-data-xs px-3 py-1 flex items-center gap-1"><BarChart3 size={12} />对比</button>
                   <button onClick={() => setSelectedIds(new Set())} className="btn-secondary text-data-xs px-3 py-1">取消</button>
                 </div>
               )}
@@ -470,6 +503,13 @@ export default function ScreenerPage() {
               className="btn-primary w-full mt-3 text-data-xs">完成</button>
           </div>
         </div>
+      )}
+
+      {compareOpen && selectedIds.size > 0 && (
+        <CompareModal
+          stocks={results.filter(r => selectedIds.has(r.id))}
+          onClose={() => setCompareOpen(false)}
+        />
       )}
     </div>
   );
