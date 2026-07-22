@@ -84,6 +84,29 @@ export default function ScreenerPage() {
     }
   };
 
+  const deleteHistoryRecord = async (historyId: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('确认删除该条历史记录？')) return;
+    try {
+      console.log('[ScreenerPage] deleting record:', historyId);
+      await invoke('delete_screener_result', { recordId: +historyId });
+      setScreenerHistory((prev: any[]) => prev.filter((h: any) => String(h[0]) !== String(historyId)));
+      console.log('[ScreenerPage] deleted successfully');
+    } catch (err) {
+      console.error('[ScreenerPage] Delete failed:', err);
+      alert('删除失败: ' + err);
+    }
+  };
+
+  const clearAllHistory = async () => {
+    try {
+      await invoke('clear_screener_history');
+      setScreenerHistory([]);
+    } catch (err) {
+      console.error('Clear failed:', err);
+    }
+  };
+
   // Load screener history on mount
   useEffect(() => {
     (async () => {
@@ -159,11 +182,18 @@ export default function ScreenerPage() {
               )}
               {screenerHistory.map((h: any) => (
                 <div key={h[0]} onClick={() => loadHistoryResult(h[0])}
-                  className="px-2 py-1 text-data-xs rounded cursor-pointer hover:bg-[var(--bg-hover)]"
+                  className="px-2 py-1 text-data-xs rounded cursor-pointer hover:bg-[var(--bg-hover)] flex items-center justify-between"
                   style={{ color: 'var(--text-tertiary)' }}>
-                  {String(h[4]).slice(0, 10)} — {h[3]} 只
+                  <span>{String(h[4]).slice(0, 10)} — {h[3]} 只</span>
+                  <button onClick={(e) => deleteHistoryRecord(h[0], e)}
+                    className="text-[10px] px-1 rounded hover:bg-[var(--bg-hover)]" style={{ color: 'hsl(var(--risk-danger))' }}>✕</button>
                 </div>
               ))}
+              {screenerHistory.length > 0 && (
+                <button onClick={clearAllHistory}
+                  className="w-full text-[10px] py-1 rounded mt-1 hover:bg-[var(--bg-hover)]"
+                  style={{ color: 'hsl(var(--text-tertiary))' }}>清空全部</button>
+              )}
             </div>
           </details>
           <button onClick={runScreener} disabled={running}

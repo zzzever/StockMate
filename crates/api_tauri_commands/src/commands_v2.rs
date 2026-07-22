@@ -615,7 +615,7 @@ pub async fn screen_stocks(
 
     let a_shares: Vec<_> = all_stocks.iter().filter(|s| {
         let id = s.id.as_str();
-        (id.ends_with(".SH") || id.ends_with(".SZ")) && !id.starts_with("51") && !id.starts_with("56") && !id.starts_with("15")
+        (id.ends_with(".SH") || id.ends_with(".SZ")) && !id.starts_with("51") && !id.starts_with("56") && !id.starts_with("15") && !id.starts_with("588") && !id.starts_with("159") && !id.starts_with("511")
     }).collect();
 
     let mut results = Vec::new();
@@ -680,6 +680,25 @@ pub async fn load_screener_history_result(
         .await
         .map_err(|e| format!("加载选股历史失败: {}", e))?
         .ok_or_else(|| "未找到该记录".to_string())
+}
+
+#[tauri::command]
+pub async fn delete_screener_result(
+    state: State<'_, AppState>,
+    record_id: i64,
+) -> Result<(), String> {
+    storage::delete_screener_result(&state.db_pool, record_id)
+        .await
+        .map_err(|e| format!("删除失败: {}", e))
+}
+
+#[tauri::command]
+pub async fn clear_screener_history(
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    storage::clear_screener_history(&state.db_pool)
+        .await
+        .map_err(|e| format!("清空失败: {}", e))
 }
 
 #[cfg(test)]

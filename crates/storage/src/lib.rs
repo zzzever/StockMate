@@ -139,6 +139,21 @@ pub async fn get_screener_result_by_id(pool: &DbPool, record_id: i64) -> Result<
     Ok(row.map(|r| r.results_json))
 }
 
+pub async fn delete_screener_result(pool: &DbPool, record_id: i64) -> Result<()> {
+    sqlx::query("DELETE FROM screener_results WHERE id = ?1")
+        .bind(record_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn clear_screener_history(pool: &DbPool) -> Result<()> {
+    sqlx::query("DELETE FROM screener_results")
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Escape SQL `LIKE` wildcards (`%`, `_`) and the escape character itself so
 /// user input is matched literally. Must be paired with `ESCAPE '\'` in the
 /// `LIKE` clause. Without this, a query of `%` matches every row.
