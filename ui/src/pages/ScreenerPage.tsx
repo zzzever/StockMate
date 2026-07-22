@@ -31,6 +31,12 @@ const DEFAULT_CONDITIONS: StrategyParam[] = [
   { id: 'lowPosRatio', label: '历史低位分位比率', value: 0.3, step: 0.1 },
 ];
 
+const getChangeStyle = (pct: number) => {
+  const abs = Math.min(Math.abs(pct) / 10, 1);
+  if (pct >= 0) return { color: `hsl(0, 80%, ${45 - abs * 20}%)`, background: `hsla(0, 80%, 55%, ${abs * 0.12})` };
+  return { color: `hsl(145, 70%, ${35 - abs * 15}%)`, background: `hsla(145, 70%, 45%, ${abs * 0.12})` };
+};
+
 export default function ScreenerPage() {
   const navigate = useNavigate();
   const [results, setResults] = useState<ScreenResult[]>(() => {
@@ -43,6 +49,10 @@ export default function ScreenerPage() {
   useEffect(() => { sessionStorage.setItem('screener_results', JSON.stringify(results)); }, [results]);
   const [sortKey, setSortKey] = useState<'close' | 'change_pct' | 'name'>('close');
   const [sortAsc, setSortAsc] = useState(true);
+  const [searchText, setSearchText] = useState('');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
+  const [detailStock, setDetailStock] = useState<ScreenResult | null>(null);
   const [screenerHistory, setScreenerHistory] = useState<any[]>([]);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -59,6 +69,19 @@ export default function ScreenerPage() {
     });
     return sorted;
   }, [results, sortKey, sortAsc]);
+
+  const filteredResults = useMemo(() => {
+    if (!searchText.trim()) return sortedResults;
+    const q = searchText.trim().toLowerCase();
+    return sortedResults.filter(r => r.name.toLowerCase().includes(q) || r.ticker.toLowerCase().includes(q));
+  }, [sortedResults, searchText]);
+
+  const pageResults = useMemo(() => {
+    const start = page * 50;
+    return filteredResults.slice(start, start + 50);
+  }, [filteredResults, page]);
+
+  const totalPages = Math.ceil(filteredResults.length / 50);
 
   const handleSaveResult = async () => {
     try {
@@ -117,6 +140,14 @@ export default function ScreenerPage() {
 
   // Load screener history on mount
   useEffect(() => { refreshHistory(); }, []);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setIsEditing(false); setDetailStock(null); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+  useEffect(() => setPage(0), [results]);
 
   const runScreener = async () => {
     setRunning(true);
@@ -210,6 +241,17 @@ export default function ScreenerPage() {
                 <p className="text-data-sm">选择策略并运行选股</p>
                 <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>系统将从全市场 A 股中筛选符合条件的标的（已过滤 ETF）</p>
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
+                    <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -220,6 +262,17 @@ export default function ScreenerPage() {
                 <p className="text-data-sm">正在扫描全市场 A 股（约 5000 只）...</p>
                 <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>已匹配 {results.length} 只</p>
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
+                    <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -244,6 +297,18 @@ export default function ScreenerPage() {
                   <Save size={12} /> {showSaveSuccess ? '已保存' : '保存'}
                 </button>
               </div>
+              {/* Search */}
+              <div className="relative shrink-0">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
+                <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
+                  placeholder="搜索名称或代码..."
+                  className="input w-full pl-8 py-1 text-data-xs" />
+                {searchText && (
+                  <button onClick={() => setSearchText('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] px-1 rounded hover:bg-[var(--bg-hover)]"
+                    style={{ color: 'var(--text-tertiary)' }}>x</button>
+                )}
+              </div>
               {/* Results table */}
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-data-sm">
@@ -263,14 +328,14 @@ export default function ScreenerPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedResults.map(r => (
+                    {pageResults.map(r => (
                       <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
                         <td className="py-2 px-2 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{r.ticker}</td>
                         <td className="py-2 px-2 font-medium text-data-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</td>
                         <td className="py-2 px-2 text-right font-mono-nums text-data-sm" style={{ color: 'var(--text-primary)' }}>¥{r.close.toFixed(2)}</td>
-                        <td className={`py-2 px-2 text-right font-mono-nums text-data-sm ${r.change_pct >= 0 ? 'price-up' : 'price-down'}`}>
+                        <td className='py-2 px-2 text-right font-mono-nums text-data-sm rounded-sm' style={getChangeStyle(r.change_pct)}>
                           {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(2)}%
                         </td>
                         <td className="py-2 px-2">
@@ -286,6 +351,17 @@ export default function ScreenerPage() {
                   </tbody>
                 </table>
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
+                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
+                    <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
+                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
