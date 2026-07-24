@@ -214,6 +214,53 @@ export default function ScreenerPage() {
     } catch (e) { console.error('Create failed:', e); }
   };
 
+  const handleCopyStrategy = async () => {
+    if (activeStrategyId === null) return;
+    const s = strategies.find((s: any) => s[0] === activeStrategyId);
+    if (!s) return;
+    const newName = prompt('输入新策略名称:', `${s[1]} (副本)`);
+    if (!newName) return;
+    try {
+      const id = await invoke<number>('save_strategy', { name: newName, strategyJson: s[2], isPreset: false });
+      setStrategies(prev => [...prev, [id, newName, s[2], false]]);
+      setActiveStrategyId(id);
+      try { setStrategyConditions(JSON.parse(s[2])); } catch {}
+    } catch (e) { console.error('复制失败:', e); }
+  };
+
+  const exportStrategy = () => {
+    if (activeStrategyId === null) return;
+    const s = strategies.find((s: any) => s[0] === activeStrategyId);
+    if (!s) return;
+    const data = { version: 1, name: s[1], conditions: JSON.parse(s[2] || '[]') };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = `${s[1]}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importStrategy = () => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.json';
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!data.conditions || !Array.isArray(data.conditions)) throw new Error('无效格式');
+        const name = data.name || '导入策略';
+        const id = await invoke<number>('save_strategy', { name, strategyJson: JSON.stringify(data.conditions), isPreset: false });
+        setStrategies(prev => [...prev, [id, name, JSON.stringify(data.conditions), false]]);
+        setActiveStrategyId(id);
+        setStrategyConditions(data.conditions);
+      } catch (err) {
+        alert('导入失败: 无效的策略文件');
+      }
+    };
+    input.click();
+  };
+
   const selectStrategy = (id: number) => {
     setActiveStrategyId(id);
     const s = strategies.find((s: any) => s[0] === id);
@@ -351,20 +398,41 @@ export default function ScreenerPage() {
 
   // Load screener history on mount
   useEffect(() => { refreshHistory(); }, []);
-  // 加载策略列表
+  // 加载策略列表（首次运行时创建预设策略）
   useEffect(() => {
-    invoke<any[]>('get_all_strategies').then(data => {
+    invoke<any[]>('get_all_strategies').then(async (data) => {
       const list = data || [];
-      setStrategies(list);
-      // Auto-select first strategy if none selected or saved id not found
-      if (list.length > 0) {
-        const saved = sessionStorage.getItem('screener_active_strategy');
-        const savedId = saved ? JSON.parse(saved).id : null;
-        if (savedId && list.some((s: any) => s[0] === savedId)) {
-          setActiveStrategyId(savedId);
-        } else {
-          setActiveStrategyId(list[0][0]);
-          try { setStrategyConditions(JSON.parse(list[0][2])); } catch {}
+      if (list.length === 0) {
+        // 创建预设策略种子数据
+        const presets = [
+          { name: '放量突破', conditions: [{ type: 'VolumeSurge', params: { ratio: 2 } }, { type: 'AboveMA', params: { period: 20 } }, { type: 'NewHigh', params: { period: 20 } }] },
+          { name: 'MACD金叉', conditions: [{ type: 'MACDCross', params: {} }, { type: 'AboveMA', params: { period: 60 } }] },
+          { name: '超跌反弹', conditions: [{ type: 'LowPosition', params: { days: 20, ratio: 0.2 } }, { type: 'ShrinkDrop', params: { days: 3, maxVolRatio: 0.6 } }] },
+          { name: '强势股', conditions: [{ type: 'NewHigh', params: { period: 20 } }, { type: 'VolumeSurge', params: { ratio: 1.5 } }, { type: 'AboveMA', params: { period: 5 } }] },
+          { name: '缩量企稳', conditions: [{ type: 'ShrinkDrop', params: { days: 5, maxVolRatio: 0.5 } }, { type: 'LowPosition', params: { days: 60, ratio: 0.3 } }] },
+          { name: '历史相对低价 + 缩量下跌', conditions: [{ type: 'LowPrice', params: { maxPrice: 20 } }, { type: 'ShrinkDrop', params: { days: 3, maxVolRatio: 0.6 } }, { type: 'LowPosition', params: { days: 20, ratio: 0.3 } }] },
+        ];
+        const created = [];
+        for (const p of presets) {
+          const id = await invoke<number>('save_strategy', { name: p.name, strategyJson: JSON.stringify(p.conditions), isPreset: true });
+          created.push([id, p.name, JSON.stringify(p.conditions), true]);
+        }
+        setStrategies(created);
+        if (created.length > 0) {
+          setActiveStrategyId(created[0][0] as number);
+          try { setStrategyConditions(JSON.parse(created[0][2] as string)); } catch {}
+        }
+      } else {
+        setStrategies(list);
+        if (list.length > 0) {
+          const saved = sessionStorage.getItem('screener_active_strategy');
+          const savedId = saved ? JSON.parse(saved).id : null;
+          if (savedId && list.some((s: any) => s[0] === savedId)) {
+            setActiveStrategyId(savedId);
+          } else {
+            setActiveStrategyId(list[0][0]);
+            try { setStrategyConditions(JSON.parse(list[0][2])); } catch {}
+          }
         }
       }
     }).catch(() => {});
@@ -471,6 +539,12 @@ export default function ScreenerPage() {
                 ))}
               </select>
               <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0">+ 新建</button>
+              <button onClick={handleCopyStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
+                title="复制当前策略">📋</button>
+              <button onClick={exportStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
+                title="导出策略">↓</button>
+              <button onClick={importStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
+                title="导入策略">↑</button>
               {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId) && (
                 <button onClick={() => deleteStrategy(activeStrategyId!)}
                   className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"

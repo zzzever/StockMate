@@ -630,34 +630,53 @@ pub async fn screen_stocks(
         (id.ends_with(".SH") || id.ends_with(".SZ")) && !id.starts_with("51") && !id.starts_with("56") && !id.starts_with("15") && !id.starts_with("588") && !id.starts_with("159") && !id.starts_with("511")
     }).collect();
 
-    let mut results = Vec::new();
-    let chunk_size = 10;
-    for chunk in a_shares.chunks(chunk_size).take(500) {
-        let mut batch_results = Vec::new();
-        for stock in chunk {
-            if let Ok(history) = state.data_service.get_stock_history(&stock.id, 60, "day").await {
-                let matches = stock_screener::screen_stock(&history, &conditions);
-                if !matches.is_empty() {
-                    let last = history.last().unwrap();
-                    let prev = if history.len() >= 2 { &history[history.len() - 2] } else { last };
-                    let change_pct = if prev.close != rust_decimal::Decimal::ZERO {
-                        ((last.close - prev.close) / prev.close * rust_decimal::Decimal::from(100)).to_f64().unwrap_or(0.0)
-                    } else { 0.0 };
-                    batch_results.push(stock_screener::ScreenedStock {
-                        id: stock.id.clone(),
-                        ticker: stock.ticker.clone(),
-                        name: stock.name.clone(),
-                        close: last.close.to_f64().unwrap_or(0.0),
-                        change_pct,
-                        matches,
-                    });
+    // Parallel processing with concurrency limit
+    let data_service = state.data_service.clone();
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(20));
+
+    let tasks: Vec<_> = a_shares
+        .iter()
+        .take(limit as usize)
+        .map(|stock| {
+            let data_service = data_service.clone();
+            let conditions = conditions.clone();
+            let sem = semaphore.clone();
+            let stock_id = stock.id.clone();
+            let ticker = stock.ticker.clone();
+            let name = stock.name.clone();
+
+            tokio::spawn(async move {
+                let _permit = sem.acquire().await.unwrap();
+                if let Ok(history) = data_service.get_stock_history(&stock_id, 60, "day").await {
+                    let matches = stock_screener::screen_stock(&history, &conditions);
+                    if !matches.is_empty() {
+                        let last = history.last().unwrap();
+                        let prev = if history.len() >= 2 { &history[history.len() - 2] } else { last };
+                        let change_pct = if prev.close != rust_decimal::Decimal::ZERO {
+                            ((last.close - prev.close) / prev.close * rust_decimal::Decimal::from(100))
+                                .to_f64().unwrap_or(0.0)
+                        } else { 0.0 };
+                        return Some(stock_screener::ScreenedStock {
+                            id: stock_id,
+                            ticker,
+                            name,
+                            close: last.close.to_f64().unwrap_or(0.0),
+                            change_pct,
+                            matches,
+                        });
+                    }
                 }
-            }
-        }
-        results.extend(batch_results);
-        // Rate limit between chunks
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
+                None
+            })
+        })
+        .collect();
+
+    let results: Vec<stock_screener::ScreenedStock> = futures::future::join_all(tasks)
+        .await
+        .into_iter()
+        .filter_map(|r| r.ok().and_then(|v| v))
+        .collect();
+
     // Save to cache
     if let Ok(json) = serde_json::to_string(&results) {
         let _ = storage::set_setting(&state.db_pool, &cache_key, &json).await;
