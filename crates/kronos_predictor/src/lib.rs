@@ -54,7 +54,14 @@ pub fn run_kronos_predict(
     let input_json = serde_json::to_string(&input_data)
         .map_err(|e| format!("JSON序列化失败: {}", e))?;
 
-    let output = Command::new("python")
+    // Try python3 first, fall back to python
+    let python_cmd = if Command::new("python3").arg("--version").output().is_ok() {
+        "python3"
+    } else {
+        "python"
+    };
+
+    let output = Command::new(python_cmd)
         .arg(&runner_script)
         .arg(&input_json)
         .env("KRONOS_HOME", &kronos_home)
@@ -74,8 +81,9 @@ pub fn run_kronos_predict(
         })?;
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Kronos预测失败:\n{}", stderr));
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stdout_text = String::from_utf8_lossy(&output.stdout).to_string();
+        return Err(format!("Kronos预测失败:\nSTDERR: {}\nSTDOUT: {}", stderr, stdout_text));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
