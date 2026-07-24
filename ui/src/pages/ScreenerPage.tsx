@@ -322,10 +322,25 @@ export default function ScreenerPage() {
   useEffect(() => { refreshHistory(); }, []);
   // 加载策略列表
   useEffect(() => {
-    invoke<any[]>('get_all_strategies').then(data => setStrategies(data || [])).catch(() => {});
+    invoke<any[]>('get_all_strategies').then(data => {
+      const list = data || [];
+      setStrategies(list);
+      // Auto-select first strategy if none selected or saved id not found
+      if (list.length > 0) {
+        const saved = sessionStorage.getItem('screener_active_strategy');
+        const savedId = saved ? JSON.parse(saved).id : null;
+        if (savedId && list.some((s: any) => s[0] === savedId)) {
+          setActiveStrategyId(savedId);
+        } else {
+          setActiveStrategyId(list[0][0]);
+          try { setStrategyConditions(JSON.parse(list[0][2])); } catch {}
+        }
+      }
+    }).catch(() => {});
   }, []);
-  // 从 sessionStorage 恢复上次运行的策略
+  // 从 sessionStorage 恢复上次运行的策略（备选，主逻辑在加载策略时）
   useEffect(() => {
+    if (activeStrategyId !== null) return;
     try {
       const saved = sessionStorage.getItem('screener_active_strategy');
       if (saved) {
