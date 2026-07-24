@@ -767,7 +767,7 @@ export default function ScreenerPage() {
               {/* Stats + toolbar */}
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex gap-2 flex-1">
-                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2">
+                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2 shrink-0">
                     <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配</span>
                     <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>{results.length}</span>
                   </div>
@@ -788,9 +788,9 @@ export default function ScreenerPage() {
                 )}
                 <div className="flex flex-col gap-1 shrink-0">
                   <div className="flex gap-1">
-                    <button onClick={exportCSV} className="btn-secondary text-[10px] px-2 py-1">CSV</button>
-                    <button onClick={exportJSON} className="btn-secondary text-[10px] px-2 py-1">JSON</button>
-                    <button onClick={handleSaveResult} className="btn-secondary text-[10px] px-2 py-1 flex items-center gap-1"
+                    <button onClick={exportCSV} className="btn-secondary text-[11px] px-3 py-1.5">CSV</button>
+                    <button onClick={exportJSON} className="btn-secondary text-[11px] px-3 py-1.5">JSON</button>
+                    <button onClick={handleSaveResult} className="btn-secondary text-[11px] px-3 py-1.5 flex items-center gap-1"
                       title="保存选股结果到数据库">
                       <Save size={10} /> {showSaveSuccess ? '已保存' : '保存'}
                     </button>
@@ -853,12 +853,12 @@ export default function ScreenerPage() {
                 <table className="w-full text-data-sm">
                   <thead className="sticky top-0" style={{ background: 'var(--bg-root)' }}>
                     <tr className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <th className="py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      <th className="py-2 px-1 w-8 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
                         <input type="checkbox" checked={selectedIds.size === pageResults.length && pageResults.length > 0}
                           onChange={selectAll} className="cursor-pointer" />
                       </th>
-                      <th className="text-left py-2 px-2 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>代码</th>
-                      <th className="text-left py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
+                      <th className="text-left py-2 px-1 w-16 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>代码</th>
+                      <th className="text-left py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)', minWidth: 80 }}
                         onClick={() => { setSortKey('name'); setSortAsc(sortKey !== 'name' ? true : !sortAsc); }}>
                         名称 {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}</th>
                       <th className="text-right py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
@@ -876,7 +876,7 @@ export default function ScreenerPage() {
                       <tr key={r.id} onClick={() => setDetailStock(r)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
-                        <td className="py-2 px-2">
+                        <td className="py-2 px-1 w-8">
                           <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)}
                             onClick={e => e.stopPropagation()} className="cursor-pointer" />
                         </td>
