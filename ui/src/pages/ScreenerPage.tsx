@@ -764,20 +764,20 @@ export default function ScreenerPage() {
 
           {results.length > 0 && !running && (
             <div className="flex-1 flex flex-col gap-2 overflow-hidden">
-              {/* Stats summary */}
+              {/* Stats + toolbar */}
               <div className="flex items-center gap-2 shrink-0">
-                <div className="flex-1 grid grid-cols-3 gap-2">
-                  <div className="glass-card-flat p-2 text-center">
-                    <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>{results.length}</div>
-                    <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配</div>
+                <div className="flex gap-2 flex-1">
+                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2">
+                    <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配</span>
+                    <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>{results.length}</span>
                   </div>
-                  <div className="glass-card-flat p-2 text-center">
-                    <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{(results.reduce((s,r)=>s+r.close,0) / results.length).toFixed(2)}</div>
-                    <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均价</div>
+                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2">
+                    <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均价</span>
+                    <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{(results.reduce((s,r)=>s+r.close,0) / results.length).toFixed(2)}</span>
                   </div>
-                  <div className="glass-card-flat p-2 text-center">
-                    <div className="text-heading-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Math.min(...results.map(r=>r.close)).toFixed(2)}</div>
-                    <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低价</div>
+                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2">
+                    <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低</span>
+                    <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Math.min(...results.map(r=>r.close)).toFixed(2)}</span>
                   </div>
                 </div>
                 {showSaveSuccess && (
@@ -815,7 +815,40 @@ export default function ScreenerPage() {
                     style={{ color: 'var(--text-tertiary)' }}>x</button>
                 )}
               </div>
-              {/* Results table */}
+              {/* Card view */}
+              {viewMode === 'card' && (
+                <div className="flex-1 overflow-auto">
+                  <div className="grid grid-cols-2 gap-2">
+                    {pageResults.map(r => (
+                      <div key={r.id} onClick={() => setDetailStock(r)}
+                        className="glass-card-flat p-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)}
+                              onClick={e => e.stopPropagation()} className="cursor-pointer" />
+                            <span className="font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{r.ticker}</span>
+                          </div>
+                          <span className="font-medium text-data-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{r.close.toFixed(2)}</span>
+                          <span className="text-data-xs font-mono-nums rounded-sm px-1.5 py-0.5" style={getChangeStyle(r.change_pct)}>
+                            {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(2)}%
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {r.matches.map((m, i) => (
+                            <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>{m}</span>
+                          ))}
+                        </div>
+                        <div className="mt-1"><MiniTrend prices={trendMap[r.id]} width={120} height={20} /></div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Table view */}
+              {viewMode === 'table' && (
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-data-sm">
                   <thead className="sticky top-0" style={{ background: 'var(--bg-root)' }}>
@@ -878,6 +911,7 @@ export default function ScreenerPage() {
                   </tbody>
                 </table>
               </div>
+              )}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
                   <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
