@@ -31,8 +31,9 @@ const CONDITION_TYPES = [
 
 const getChangeStyle = (pct: number) => {
   const abs = Math.min(Math.abs(pct) / 10, 1);
-  if (pct >= 0) return { color: `hsl(0, 80%, ${45 - abs * 20}%)`, background: `hsla(0, 80%, 55%, ${abs * 0.12})` };
-  return { color: `hsl(145, 70%, ${35 - abs * 15}%)`, background: `hsla(145, 70%, 45%, ${abs * 0.12})` };
+  const strength = 0.35 + abs * 0.65;
+  if (pct >= 0) return { color: `hsl(var(--price-up) / ${strength})`, background: `hsl(var(--price-up-bg) / ${abs * 0.15 + 0.05})` };
+  return { color: `hsl(var(--price-down) / ${strength})`, background: `hsl(var(--price-down-bg) / ${abs * 0.15 + 0.05})` };
 };
 
 function StatPill({ label, value, color }: { label: string; value: string | number; color?: string }) {
@@ -803,7 +804,7 @@ export default function ScreenerPage() {
                 {/* showSaveSuccess indicator */}
                 {showSaveSuccess && (
                   <div className="flex items-center shrink-0 px-2 py-1 rounded-md text-data-xs font-medium"
-                    style={{ background: 'hsla(145, 70%, 45%, 0.12)', color: 'hsl(145, 70%, 40%)' }}>
+                    style={{ background: 'hsl(var(--price-down-bg) / 0.3)', color: 'hsl(var(--price-down))' }}>
                     ✓ 已自动保存
                   </div>
                 )}
@@ -840,8 +841,9 @@ export default function ScreenerPage() {
                 <div className="flex-1 overflow-auto">
                   <div className="grid grid-cols-2 gap-2">
                     {pageResults.map(r => (
-                      <div key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
-                        className="glass-card-flat p-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
+                      <div key={r.id} onClick={() => navigate(`/stock?code=${r.id}&name=${encodeURIComponent(r.name)}`)}
+                        className="glass-card-flat p-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                        style={selectedIds.has(r.id) ? { borderColor: 'hsl(var(--swiss-accent))', borderWidth: '1.5px' } : undefined}>
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
                             <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)}
@@ -864,7 +866,7 @@ export default function ScreenerPage() {
                             <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-sm" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>{m}</span>
                           ))}
                         </div>
-                        <div className="mt-1"><MiniTrend prices={trendMap[r.id]} width={120} height={20} /></div>
+                        <div className="mt-1"><MiniTrend prices={trendMap[r.id]} width={140} height={28} /></div>
                       </div>
                     ))}
                   </div>
@@ -896,7 +898,7 @@ export default function ScreenerPage() {
                   </thead>
                   <tbody>
                     {pageResults.map(r => (
-                      <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
+                      <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}&name=${encodeURIComponent(r.name)}`)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
                         <td className="text-center py-2 px-1 w-8">
@@ -910,20 +912,22 @@ export default function ScreenerPage() {
                           {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(2)}%
                         </td>
                         <td className="py-2 px-1 text-center align-middle">
-                          <MiniTrend prices={trendMap[r.id]} width={64} height={20} />
+                          <div className="rounded-sm inline-flex" style={{ background: 'var(--bg-card)' }}>
+                            <MiniTrend prices={trendMap[r.id]} width={80} height={24} />
+                          </div>
                         </td>
                         <td className="py-2 px-2">
                           <div className="flex flex-wrap gap-1">
                             {r.matches.map((m, i) => (
                               <span key={i} className="text-[10px] px-1.5 py-0.5 rounded-sm"
                                 style={{
-                                  background: m.includes('低价') || m.includes('价格') ? 'hsla(210,80%,50%,0.12)' :
-                                    m.includes('缩量') ? 'hsla(280,70%,55%,0.12)' :
-                                    m.includes('低位') || m.includes('分位') ? 'hsla(160,70%,45%,0.12)' :
+                                  background: m.includes('低价') || m.includes('价格') ? 'hsl(var(--swiss-accent-ghost))' :
+                                    m.includes('缩量') ? 'hsl(var(--price-down-bg))' :
+                                    m.includes('低位') || m.includes('分位') ? 'hsl(var(--price-up-bg))' :
                                     'var(--bg-input)',
-                                  color: m.includes('低价') || m.includes('价格') ? 'hsl(210,80%,60%)' :
-                                    m.includes('缩量') ? 'hsl(280,70%,65%)' :
-                                    m.includes('低位') || m.includes('分位') ? 'hsl(160,70%,55%)' :
+                                  color: m.includes('低价') || m.includes('价格') ? 'hsl(var(--swiss-accent))' :
+                                    m.includes('缩量') ? 'hsl(var(--price-down))' :
+                                    m.includes('低位') || m.includes('分位') ? 'hsl(var(--price-up))' :
                                     'var(--text-secondary)'
                                 }}>{m}</span>
                             ))}
