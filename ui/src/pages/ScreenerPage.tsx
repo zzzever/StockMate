@@ -547,20 +547,30 @@ export default function ScreenerPage() {
         }
       }
       if (currentGroup.length > 0) groups.push(currentGroup);
-      // 构建 ConditionGroup payload
-      let conditionsPayload: any[];
-      if (groups.length === 1) {
-        conditionsPayload = [{ ConditionGroup: { logic: "AND", conditions: groups[0] } }];
-      } else {
-        conditionsPayload = [{
-          ConditionGroup: {
-            logic: "OR",
-            conditions: groups.map(g => ({ ConditionGroup: { logic: "AND", conditions: g } }))
-          }
-        }];
-      }
+      // 构建 ConditionGroup payload — flat serde format for Rust
+      const flatConditions: any[] = groups.flatMap(g => g.map((cond: any) => {
+        const p = cond.params || {};
+        switch (cond.type) {
+          case 'LowPrice': return { LowPrice: Number(p.maxPrice) || 0 };
+          case 'ShrinkDrop': return { ShrinkDrop: { days: Number(p.days) || 3, maxVolRatio: Number(p.maxVolRatio) || 0.6 } };
+          case 'LowVolume': return { LowVolume: Number(p.ratio) || 0.6 };
+          case 'ConsecutiveDrop': return { ConsecutiveDrop: Number(p.days) || 3 };
+          case 'BelowMA': return { BelowMA: Number(p.period) || 20 };
+          case 'RsiBelow': return { RsiBelow: [Number(p.period) || 14, Number(p.threshold) || 30] };
+          case 'LowPosition': return { LowPosition: { days: Number(p.days) || 20, ratio: Number(p.ratio) || 0.3 } };
+          case 'AboveMA': return { AboveMA: Number(p.period) || 20 };
+          case 'VolumeSurge': return { VolumeSurge: Number(p.ratio) || 2.0 };
+          case 'PriceChange': return { PriceChange: { min: Number(p.min) || -5, max: Number(p.max) || 5 } };
+          case 'TurnoverRate': return { TurnoverRate: { min: Number(p.min) || 0, max: Number(p.max) || 20 } };
+          case 'MACDCross': return { MACDCross: {} };
+          case 'KDJOverSold': return { KDJOverSold: {} };
+          case 'ConsecutiveUp': return { ConsecutiveUp: Number(p.days) || 3 };
+          case 'NewHigh': return { NewHigh: Number(p.period) || 20 };
+          default: return { [cond.type]: p };
+        }
+      }));
       const res: ScreenResult[] = await invoke('screen_stocks', {
-        conditionsJson: JSON.stringify(conditionsPayload),
+        conditionsJson: JSON.stringify(flatConditions),
         limit: 5000,
       });
       // 保存当前策略条件
