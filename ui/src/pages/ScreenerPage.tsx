@@ -604,29 +604,26 @@ export default function ScreenerPage() {
           <div className="glass-card-flat p-2">
             <div className="flex items-center gap-1.5">
               <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
-                className="select flex-1 text-data-xs">
+                className="select flex-1 text-[11px] py-1">
                 {strategies.length === 0 && <option value="">暂无策略</option>}
                 {strategies.map((s: any) => (
                   <option key={s[0]} value={s[0]}>{s[3] ? '📌 ' : ''}{s[1]}</option>
                 ))}
               </select>
-              <button onClick={handleAddStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0">+ 新建</button>
-              <button onClick={handleCopyStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0"
-                title="复制当前策略">📋</button>
-              <button onClick={exportStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0"
-                title="导出策略">↓</button>
-              <button onClick={importStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0"
-                title="导入策略">↑</button>
+              <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0">+新建</button>
+              <button onClick={handleCopyStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0" title="复制">📋</button>
+              <button onClick={exportStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0" title="导出">↓</button>
+              <button onClick={importStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0" title="导入">↑</button>
               {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId) && (
                 <>
                   <button onClick={() => toggleLock(activeStrategyId!)}
-                    className="text-[11px] px-2.5 py-1.5 hover:bg-[var(--bg-hover)] rounded"
+                    className="text-[10px] px-1.5 py-1 hover:bg-[var(--bg-hover)] rounded"
                     style={{ color: lockedStrategies.has(activeStrategyId!) ? 'hsl(var(--risk-warning))' : 'var(--text-tertiary)' }}>
                     {lockedStrategies.has(activeStrategyId!) ? '🔒' : '🔓'}
                   </button>
                   {!lockedStrategies.has(activeStrategyId!) && (
                     <button onClick={() => deleteStrategy(activeStrategyId!)}
-                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] shrink-0"
+                      className="text-[10px] px-1.5 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"
                       style={{ color: 'hsl(var(--risk-danger))' }}>删除</button>
                   )}
                 </>
