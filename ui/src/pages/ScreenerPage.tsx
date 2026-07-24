@@ -575,7 +575,7 @@ export default function ScreenerPage() {
       </div>
 
       <div className="flex-1 flex gap-2 overflow-hidden">
-        <div className="w-[320px] shrink-0 flex flex-col gap-2">
+        <div className="w-[360px] shrink-0 flex flex-col gap-2">
           <div className="glass-card-flat p-2">
             <div className="flex items-center gap-2">
               <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
