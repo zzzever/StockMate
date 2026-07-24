@@ -21,6 +21,11 @@ const CONDITION_TYPES = [
   { id: 'KDJOverSold', label: 'KDJ超卖', desc: 'K值<20' },
   { id: 'ConsecutiveUp', label: '连续上涨', desc: '连续N日上涨' },
   { id: 'NewHigh', label: '创N日新高', desc: '收盘价创N日新高' },
+  { id: 'LowVolume', label: '缩量', desc: '成交量低于5日均量' },
+  { id: 'ConsecutiveDrop', label: '连续下跌', desc: '连续N日下跌' },
+  { id: 'BelowMA', label: '低于均线', desc: '收盘价低于均线' },
+  { id: 'RsiBelow', label: 'RSI超卖', desc: 'RSI低于阈值' },
+  { id: 'TurnoverRate', label: '换手率', desc: '换手率范围' },
 ];
 
 const getChangeStyle = (pct: number) => {
@@ -313,6 +318,32 @@ export default function ScreenerPage() {
       case 'NewHigh':
         return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>周期</span>
           <input type="number" value={cond.params?.period || 20} onChange={e => updateParam('period', +e.target.value)} className="input w-16 text-right text-data-xs" step="1" /></>);
+      case 'LowVolume':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>量比&lt;</span>
+          <input type="number" value={cond.params?.ratio || 0.5} onChange={e => updateParam('ratio', +e.target.value)}
+            className="input w-16 text-right text-data-xs" step="0.1" min="0" /></>);
+      case 'ConsecutiveDrop':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>天数</span>
+          <input type="number" value={cond.params?.days || 3} onChange={e => updateParam('days', +e.target.value)}
+            className="input w-16 text-right text-data-xs" step="1" min="1" /></>);
+      case 'BelowMA':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均线周期</span>
+          <input type="number" value={cond.params?.period || 20} onChange={e => updateParam('period', +e.target.value)}
+            className="input w-16 text-right text-data-xs" step="1" min="2" /></>);
+      case 'RsiBelow':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>周期</span>
+          <input type="number" value={cond.params?.period || 14} onChange={e => updateParam('period', +e.target.value)}
+            className="input w-14 text-right text-data-xs" step="1" min="2" />
+          <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>阈值&lt;</span>
+          <input type="number" value={cond.params?.threshold || 30} onChange={e => updateParam('threshold', +e.target.value)}
+            className="input w-14 text-right text-data-xs" step="1" min="0" max="100" /></>);
+      case 'TurnoverRate':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最小%</span>
+          <input type="number" value={cond.params?.min ?? 0} onChange={e => updateParam('min', +e.target.value)}
+            className="input w-16 text-right text-data-xs" step="0.5" min="0" />
+          <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最大%</span>
+          <input type="number" value={cond.params?.max ?? 10} onChange={e => updateParam('max', +e.target.value)}
+            className="input w-16 text-right text-data-xs" step="0.5" min="0" /></>);
       default:
         return <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{JSON.stringify(cond.params)}</span>;
     }
@@ -380,6 +411,11 @@ export default function ScreenerPage() {
           case 'KDJOverSold': return { KDJOverSold: {} };
           case 'ConsecutiveUp': return { ConsecutiveUp: c.params?.days ?? 3 };
           case 'NewHigh': return { NewHigh: c.params?.period ?? 20 };
+          case 'LowVolume': return { LowVolume: c.params?.ratio ?? 0.5 };
+          case 'ConsecutiveDrop': return { ConsecutiveDrop: c.params?.days ?? 3 };
+          case 'BelowMA': return { BelowMA: c.params?.period ?? 20 };
+          case 'RsiBelow': return { RsiBelow: [c.params?.period ?? 14, c.params?.threshold ?? 30] };
+          case 'TurnoverRate': return { TurnoverRate: { min: c.params?.min ?? 0, max: c.params?.max ?? 10 } };
           default: return null;
         }
       }).filter(Boolean);
@@ -392,6 +428,22 @@ export default function ScreenerPage() {
         limit: 5000,
       });
       setResults(res);
+      // 自动保存结果
+      if (res && res.length > 0) {
+        try {
+          await invoke('save_screener_result', {
+            strategyName: strategies.find((s: any) => s[0] === activeStrategyId)?.[1] || '选股',
+            strategyParams: JSON.stringify(strategyConditions),
+            resultsJson: JSON.stringify(res),
+            matchCount: res.length,
+          });
+          setShowSaveSuccess(true);
+          setTimeout(() => setShowSaveSuccess(false), 2000);
+          refreshHistory();
+        } catch (e) {
+          console.error('自动保存失败:', e);
+        }
+      }
     } catch (e: any) {
       console.error('选股失败', e);
     } finally {
@@ -446,7 +498,13 @@ export default function ScreenerPage() {
                     ct?.id === 'VolumeSurge' ? `>${cond.params?.ratio || 2}倍` :
                     ct?.id === 'PriceChange' ? `${cond.params?.min ?? -5}%~${cond.params?.max ?? 5}%` :
                     ct?.id === 'ConsecutiveUp' ? `${cond.params?.days || 3}日` :
-                    ct?.id === 'NewHigh' ? `${cond.params?.period || 20}日` : '';
+                    ct?.id === 'NewHigh' ? `${cond.params?.period || 20}日` :
+                    ct?.id === 'LowVolume' ? `< ${cond.params?.ratio || 0.5}` :
+                    ct?.id === 'ConsecutiveDrop' ? `${cond.params?.days || 3}日` :
+                    ct?.id === 'BelowMA' ? `MA${cond.params?.period || 20}` :
+                    ct?.id === 'RsiBelow' ? `${cond.params?.period || 14}<${cond.params?.threshold || 30}` :
+                    ct?.id === 'TurnoverRate' ? `${cond.params?.min ?? 0}%~${cond.params?.max ?? 10}%` :
+                    '';
                   return (
                     <div key={i}>
                       <div onClick={() => setEditingConditionIdx(isEditing ? null : i)}
@@ -581,6 +639,12 @@ export default function ScreenerPage() {
                     <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低价</div>
                   </div>
                 </div>
+                {showSaveSuccess && (
+                  <div className="flex items-center shrink-0 px-2 py-1 rounded-md text-data-xs font-medium"
+                    style={{ background: 'hsla(145, 70%, 45%, 0.12)', color: 'hsl(145, 70%, 40%)' }}>
+                    ✓ 已自动保存
+                  </div>
+                )}
                 <div className="flex flex-col gap-1 shrink-0">
                   <div className="flex gap-1">
                     <button onClick={exportCSV} className="btn-secondary text-[10px] px-2 py-1">CSV</button>

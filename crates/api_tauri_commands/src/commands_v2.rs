@@ -606,6 +606,18 @@ pub async fn screen_stocks(
     conditions_json: String,
     limit: u32,
 ) -> Result<Vec<stock_screener::ScreenedStock>, String> {
+    // Check cache: same day + same conditions
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let cache_key = format!("screener_cache_{}_{}", today, conditions_json.len()); // simplified
+
+    if let Ok(Some(cached)) = storage::get_setting(&state.db_pool, &cache_key).await {
+        if !cached.is_empty() {
+            if let Ok(cached_results) = serde_json::from_str::<Vec<stock_screener::ScreenedStock>>(&cached) {
+                return Ok(cached_results);
+            }
+        }
+    }
+
     let conditions: Vec<stock_screener::ScreenCondition> = serde_json::from_str(&conditions_json)
         .map_err(|e| format!("策略解析失败: {}", e))?;
 
@@ -645,6 +657,10 @@ pub async fn screen_stocks(
         results.extend(batch_results);
         // Rate limit between chunks
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    // Save to cache
+    if let Ok(json) = serde_json::to_string(&results) {
+        let _ = storage::set_setting(&state.db_pool, &cache_key, &json).await;
     }
     Ok(results)
 }
