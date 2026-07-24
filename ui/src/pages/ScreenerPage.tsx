@@ -825,7 +825,7 @@ export default function ScreenerPage() {
                 <div className="flex-1 overflow-auto">
                   <div className="grid grid-cols-2 gap-2">
                     {pageResults.map(r => (
-                      <div key={r.id} onClick={() => setDetailStock(r)}
+                      <div key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
                         className="glass-card-flat p-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors">
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
@@ -833,7 +833,10 @@ export default function ScreenerPage() {
                               onClick={e => e.stopPropagation()} className="cursor-pointer" />
                             <span className="font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{r.ticker}</span>
                           </div>
-                          <span className="font-medium text-data-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="font-medium text-data-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</span>
+                            <button onClick={e => { e.stopPropagation(); setDetailStock(r); }} className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded" style={{ color: 'var(--text-tertiary)' }}>i</button>
+                          </div>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{r.close.toFixed(2)}</span>
@@ -878,7 +881,7 @@ export default function ScreenerPage() {
                   </thead>
                   <tbody>
                     {pageResults.map(r => (
-                      <tr key={r.id} onClick={() => setDetailStock(r)}
+                      <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
                         <td className="text-center py-2 px-1 w-8">
