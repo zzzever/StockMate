@@ -400,6 +400,11 @@ export default function ScreenerPage() {
                 ))}
               </select>
               <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0">+ 新建</button>
+              {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId && !s[3]) && (
+                <button onClick={() => deleteStrategy(activeStrategyId)}
+                  className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"
+                  style={{ color: 'hsl(var(--risk-danger))' }}>删除</button>
+              )}
             </div>
           </div>
 
