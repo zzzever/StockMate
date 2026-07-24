@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Filter, Search, RefreshCw, ArrowLeft, Save, BarChart3 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
@@ -353,6 +353,17 @@ export default function ScreenerPage() {
     } catch (e) { console.error('Save failed:', e); }
   };
 
+  // Auto-save strategy conditions when they change (debounced)
+  const saveTimerRef = useRef<any>(null);
+  useEffect(() => {
+    if (!activeStrategyId || strategyConditions.length === 0) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      handleSaveStrategy();
+    }, 1500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [strategyConditions, activeStrategyId]);
+
   const renderConditionParams = (cond: any, idx: number) => {
     const updateParam = (key: string, val: any) => {
       const updated = [...strategyConditions];
@@ -551,6 +562,10 @@ export default function ScreenerPage() {
         conditionsJson: JSON.stringify(conditionsPayload),
         limit: 5000,
       });
+      // 保存当前策略条件
+      if (activeStrategyId) {
+        handleSaveStrategy();
+      }
       setResults(res);
       // 自动保存结果
       if (res && res.length > 0) {
