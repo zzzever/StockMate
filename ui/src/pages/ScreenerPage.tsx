@@ -531,13 +531,19 @@ export default function ScreenerPage() {
           default: return null;
         }
       }).filter(Boolean);
+      // Strip invalid conditions
+      const validTypes = ['LowPrice','ShrinkDrop','LowVolume','ConsecutiveDrop','BelowMA','RsiBelow','LowPosition','AboveMA','VolumeSurge','PriceChange','TurnoverRate','MACDCross','KDJOverSold','ConsecutiveUp','NewHigh','SSLangExpr'];
+      while (conditions.some(c => c && !Object.keys(c).some(k => validTypes.includes(k)))) {
+        const idx = conditions.findIndex(c => c && !Object.keys(c).some(k => validTypes.includes(k)));
+        if (idx >= 0) { console.warn('Removing invalid condition:', conditions[idx]); conditions.splice(idx, 1); } else break;
+      }
       if (conditions.length === 0) {
         console.warn('没有条件，使用默认条件');
         conditions.push({ LowPrice: 20 }, { ShrinkDrop: { days: 3, max_vol_ratio: 0.6 } }, { LowPosition: { days: 20, ratio: 0.3 } });
       }
       // AND/OR 分组：连续的 AND 在同一组，OR 分隔组
       const groups: any[][] = [];
-      let currentGroup: any[] = [conditions[0]];
+      let currentGroup: any[] = conditions.length > 0 ? [conditions[0]] : [];
       for (let i = 1; i < conditions.length; i++) {
         if (strategyConditions[i]?.logic === 'OR') {
           groups.push(currentGroup);
@@ -548,44 +554,7 @@ export default function ScreenerPage() {
       }
       if (currentGroup.length > 0) groups.push(currentGroup);
       // 构建 ConditionGroup payload — flat serde format for Rust
-      const flatConditions: any[] = groups.flatMap(g => g.map((cond: any) => {
-        // Skip invalid conditions
-        if (!cond) return null;
-        // Support both { type, params } format and direct serde format
-        if (!cond.type) {
-          // If it has a single key matching a known variant, use as serde format
-          const keys = Object.keys(cond);
-          const validVariants = ['LowPrice','ShrinkDrop','LowVolume','ConsecutiveDrop','BelowMA','RsiBelow','LowPosition','AboveMA','VolumeSurge','PriceChange','TurnoverRate','MACDCross','KDJOverSold','ConsecutiveUp','NewHigh','ConditionGroup','SSLangExpr'];
-          if (keys.some(k => validVariants.includes(k))) {
-            return cond; // Already in serde format
-          }
-          // Clean up: remove non-variant keys (type, params, logic from stale objects)
-          const clean: any = {};
-          for (const k of keys) {
-            if (validVariants.includes(k)) { clean[k] = cond[k]; }
-          }
-          return Object.keys(clean).length > 0 ? clean : null;
-        }
-        const p = cond.params || {};
-        switch (cond.type) {
-          case 'LowPrice': return { LowPrice: Number(p.maxPrice) || 0 };
-          case 'ShrinkDrop': return { ShrinkDrop: { days: Number(p.days) || 3, maxVolRatio: Number(p.maxVolRatio) || 0.6 } };
-          case 'LowVolume': return { LowVolume: Number(p.ratio) || 0.6 };
-          case 'ConsecutiveDrop': return { ConsecutiveDrop: Number(p.days) || 3 };
-          case 'BelowMA': return { BelowMA: Number(p.period) || 20 };
-          case 'RsiBelow': return { RsiBelow: [Number(p.period) || 14, Number(p.threshold) || 30] };
-          case 'LowPosition': return { LowPosition: { days: Number(p.days) || 20, ratio: Number(p.ratio) || 0.3 } };
-          case 'AboveMA': return { AboveMA: Number(p.period) || 20 };
-          case 'VolumeSurge': return { VolumeSurge: Number(p.ratio) || 2.0 };
-          case 'PriceChange': return { PriceChange: { min: Number(p.min) || -5, max: Number(p.max) || 5 } };
-          case 'TurnoverRate': return { TurnoverRate: { min: Number(p.min) || 0, max: Number(p.max) || 20 } };
-          case 'MACDCross': return { MACDCross: {} };
-          case 'KDJOverSold': return { KDJOverSold: {} };
-          case 'ConsecutiveUp': return { ConsecutiveUp: Number(p.days) || 3 };
-          case 'NewHigh': return { NewHigh: Number(p.period) || 20 };
-          default: return { [cond.type]: p };
-        }
-      }));
+      const flatConditions = conditions;
       const res: ScreenResult[] = await invoke('screen_stocks', {
         conditionsJson: JSON.stringify(flatConditions),
         limit: 5000,
