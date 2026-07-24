@@ -599,6 +599,27 @@ pub async fn predict_with_lnn(
 }
 
 use screener::stock_screener;
+use kronos_predictor;
+
+#[tauri::command]
+pub async fn predict_with_kronos(
+    state: State<'_, AppState>,
+    stock_id: String,
+    days: u32,
+    horizon: u32,
+) -> Result<kronos_predictor::KronosForecast, String> {
+    let history = state.data_service.get_stock_history(&stock_id, days, "day")
+        .await
+        .map_err(|e| format!("获取历史数据失败: {}", e))?;
+    if history.is_empty() {
+        return Err("暂无历史数据".into());
+    }
+    let prices: Vec<f64> = history.iter().map(|q| q.close.to_f64().unwrap_or(0.0)).collect();
+    let dates: Vec<String> = history.iter().map(|q| q.date.to_string()).collect();
+
+    kronos_predictor::forecast(&prices, &dates, horizon as usize)
+        .ok_or_else(|| "Kronos 预测失败: 数据不足".into())
+}
 
 #[tauri::command]
 pub async fn screen_stocks(

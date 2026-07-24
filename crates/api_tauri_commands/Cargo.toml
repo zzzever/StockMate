@@ -18,5 +18,6 @@ deepseek = { path = "../deepseek" }
 screener = { path = "../screener" }
 backtest = { path = "../backtest" }
 lnn_predictor = { path = "../lnn_predictor" }
+kronos_predictor = { path = "../kronos_predictor" }
 reqwest = { version = "0.12", features = ["json"] }
 tracing = "0.1"

@@ -87,6 +87,7 @@ dependencies = [
  "deepseek",
  "domain",
  "futures",
+ "kronos_predictor",
  "lnn_predictor",
  "reqwest 0.12.28",
  "rust_decimal",
@@ -2201,6 +2202,18 @@ checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
 dependencies = [
  "log",
  "zeroize",
+]
+
+[[package]]
+name = "kronos_predictor"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "data_fetcher",
+ "domain",
+ "serde",
+ "serde_json",
+ "tauri",
 ]
 
 [[package]]

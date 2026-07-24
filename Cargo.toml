@@ -8,6 +8,7 @@ members = [
     "crates/deepseek",
     "crates/api_tauri_commands",
     "crates/lnn_predictor",
+    "crates/kronos_predictor",
     "src-tauri",
 ]
 resolver = "2"

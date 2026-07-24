@@ -16,6 +16,7 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
   rules: { group: '分析預測', label: '交易規則' },
   settings: { group: '系統', label: '設置' },
   screener: { group: '行情', label: '選股' },
+  kronos: { group: '分析預測', label: 'Kronos 预测' },
 };
 
 const pageIdFromPath: Record<string, string> = {
@@ -23,6 +24,7 @@ const pageIdFromPath: Record<string, string> = {
   '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
   '/lnn': 'lnn',
   '/screener': 'screener',
+  '/kronos': 'kronos',
 };
 
 /** A‑share trading session based on Beijing time (UTC+8). */
