@@ -144,7 +144,14 @@ fn find_kronos_home() -> String {
             return home;
         }
     }
-    // Look for kronos_src relative to project root or current dir
+    // Check relative to project root
+    if let Some(root) = find_project_root() {
+        let path = root.join("kronos_src");
+        if path.exists() {
+            return path.to_string_lossy().to_string();
+        }
+    }
+    // Look for kronos_src relative to current dir
     let candidates = vec![
         "kronos_src",
         "../kronos_src",
@@ -176,7 +183,33 @@ fn find_kronos_home() -> String {
     std::env::var("KRONOS_HOME").unwrap_or_else(|_| ".".to_string())
 }
 
+fn find_project_root() -> Option<std::path::PathBuf> {
+    // Check for known parent markers
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut dir = cwd.clone();
+        loop {
+            let marker = dir.join("crates");
+            if marker.exists() && marker.is_dir() {
+                return Some(dir);
+            }
+            if let Some(parent) = dir.parent() {
+                dir = parent.to_path_buf();
+            } else {
+                break;
+            }
+        }
+    }
+    None
+}
+
 fn find_runner_script() -> Result<String, String> {
+    // Check relative to project root
+    if let Some(root) = find_project_root() {
+        let path = root.join("scripts").join("kronos_runner.py");
+        if path.exists() {
+            return Ok(path.to_string_lossy().to_string());
+        }
+    }
     // Check common locations relative to executable
     let candidates = vec![
         "kronos_runner.py",
