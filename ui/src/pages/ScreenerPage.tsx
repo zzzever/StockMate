@@ -549,6 +549,23 @@ export default function ScreenerPage() {
       if (currentGroup.length > 0) groups.push(currentGroup);
       // 构建 ConditionGroup payload — flat serde format for Rust
       const flatConditions: any[] = groups.flatMap(g => g.map((cond: any) => {
+        // Skip invalid conditions
+        if (!cond) return null;
+        // Support both { type, params } format and direct serde format
+        if (!cond.type) {
+          // If it has a single key matching a known variant, use as serde format
+          const keys = Object.keys(cond);
+          const validVariants = ['LowPrice','ShrinkDrop','LowVolume','ConsecutiveDrop','BelowMA','RsiBelow','LowPosition','AboveMA','VolumeSurge','PriceChange','TurnoverRate','MACDCross','KDJOverSold','ConsecutiveUp','NewHigh','ConditionGroup','SSLangExpr'];
+          if (keys.some(k => validVariants.includes(k))) {
+            return cond; // Already in serde format
+          }
+          // Clean up: remove non-variant keys (type, params, logic from stale objects)
+          const clean: any = {};
+          for (const k of keys) {
+            if (validVariants.includes(k)) { clean[k] = cond[k]; }
+          }
+          return Object.keys(clean).length > 0 ? clean : null;
+        }
         const p = cond.params || {};
         switch (cond.type) {
           case 'LowPrice': return { LowPrice: Number(p.maxPrice) || 0 };
