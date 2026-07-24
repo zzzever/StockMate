@@ -93,10 +93,10 @@ export default function ScreenerPage() {
 
   const pageResults = useMemo(() => {
     const start = page * 50;
-    return filteredResults.slice(start, start + 50);
+    return filteredResults.slice(start, start + PAGE_SIZE);
   }, [filteredResults, page]);
 
-  const totalPages = Math.ceil(filteredResults.length / 50);
+  const totalPages = Math.ceil(filteredResults.length / PAGE_SIZE);
 
   // 懒加载走势数据
   useEffect(() => {
@@ -475,8 +475,8 @@ export default function ScreenerPage() {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setEditingConditionIdx(null); setDetailStock(null); }
       if ((e.key === 's' || e.key === 'S') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSaveResult(); }
-      if ((e.key === 'e' || e.key === 'E') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); exportCSV(); }
-      if ((e.key === 'r' || e.key === 'R') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runScreener(); }
+      if ((e.key === 'e' || e.key === 'E') && (e.ctrlKey || e.metaKey) && e.shiftKey) { e.preventDefault(); exportCSV(); }
+      if ((e.key === 'r' || e.key === 'R') && (e.ctrlKey || e.metaKey) && e.shiftKey) { e.preventDefault(); runScreener(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -569,7 +569,7 @@ export default function ScreenerPage() {
   return (
     <div className="h-full flex flex-col gap-2 p-2">
       <div className="flex items-center gap-2 shrink-0">
-        <button onClick={() => navigate(-1)} className="btn-ghost p-1"><ArrowLeft size={18} /></button>
+        <button onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/'); }} className="btn-ghost p-1"><ArrowLeft size={18} /></button>
         <Filter size={18} className="text-[hsl(var(--swiss-accent))]" />
         <h1 className="text-heading-sm font-bold">选股</h1>
       </div>
@@ -677,7 +677,7 @@ export default function ScreenerPage() {
             </select>
             {/* AI 生成条件 */}
             <div className="flex items-center gap-1 mt-1">
-              <input type="text" placeholder="AI描述：低价缩量下跌股..."
+              <input type="text" placeholder="用自然语言描述筛选条件..."
                 value={aiDescription} onChange={e => setAiDescription(e.target.value)}
                 className="input flex-1 text-data-xs py-1" />
               <button onClick={handleAIGenerate} disabled={aiLoading || !aiDescription.trim()}
@@ -840,7 +840,7 @@ export default function ScreenerPage() {
                   </thead>
                   <tbody>
                     {pageResults.map(r => (
-                      <tr key={r.id} onClick={() => navigate(`/stock?code=${r.id}`)}
+                      <tr key={r.id} onClick={() => setDetailStock(r)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
                         <td className="py-2 px-2">
