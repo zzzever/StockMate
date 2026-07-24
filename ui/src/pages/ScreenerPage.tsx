@@ -35,6 +35,15 @@ const getChangeStyle = (pct: number) => {
   return { color: `hsl(145, 70%, ${35 - abs * 15}%)`, background: `hsla(145, 70%, 45%, ${abs * 0.12})` };
 };
 
+function StatPill({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2 shrink-0">
+      <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{label}</span>
+      <span className={`text-data-sm font-bold font-mono-nums ${color || ''}`} style={{ color: color ? undefined : 'var(--text-primary)' }}>{value}</span>
+    </div>
+  );
+}
+
 export default function ScreenerPage() {
   const navigate = useNavigate();
   const [results, setResults] = useState<ScreenResult[]>(() => {
@@ -765,42 +774,38 @@ export default function ScreenerPage() {
           {results.length > 0 && !running && (
             <div className="flex-1 flex flex-col gap-2 overflow-hidden">
               {/* Stats + toolbar */}
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex gap-2 flex-1">
-                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2 shrink-0">
-                    <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配</span>
-                    <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>{results.length}</span>
-                  </div>
-                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2">
-                    <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>均价</span>
-                    <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'var(--text-primary)' }}>¥{(results.reduce((s,r)=>s+r.close,0) / results.length).toFixed(2)}</span>
-                  </div>
-                  <div className="glass-card-flat px-3 py-1.5 flex items-center gap-2">
-                    <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最低</span>
-                    <span className="text-data-sm font-bold font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>¥{Math.min(...results.map(r=>r.close)).toFixed(2)}</span>
-                  </div>
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {/* Stats: inline pills */}
+                <div className="flex gap-2">
+                  <StatPill label="匹配" value={results.length} />
+                  <StatPill label="均价" value={`¥${(results.reduce((s,r)=>s+r.close,0) / results.length).toFixed(2)}`} />
+                  <StatPill label="最低" value={`¥${Math.min(...results.map(r=>r.close)).toFixed(2)}`} color="price-down" />
                 </div>
+                
+                {/* Spacer */}
+                <div className="flex-1" />
+                
+                {/* showSaveSuccess indicator */}
                 {showSaveSuccess && (
                   <div className="flex items-center shrink-0 px-2 py-1 rounded-md text-data-xs font-medium"
                     style={{ background: 'hsla(145, 70%, 45%, 0.12)', color: 'hsl(145, 70%, 40%)' }}>
                     ✓ 已自动保存
                   </div>
                 )}
-                <div className="flex flex-col gap-1 shrink-0">
-                  <div className="flex gap-1">
-                    <button onClick={exportCSV} className="btn-secondary text-[11px] px-3 py-1.5">CSV</button>
-                    <button onClick={exportJSON} className="btn-secondary text-[11px] px-3 py-1.5">JSON</button>
-                    <button onClick={handleSaveResult} className="btn-secondary text-[11px] px-3 py-1.5 flex items-center gap-1"
-                      title="保存选股结果到数据库">
-                      <Save size={10} /> {showSaveSuccess ? '已保存' : '保存'}
-                    </button>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => setViewMode('table')}
-                      className={`text-[10px] px-2 py-1 rounded ${viewMode === 'table' ? 'btn-primary' : 'btn-secondary'}`}>表格</button>
-                    <button onClick={() => setViewMode('card')}
-                      className={`text-[10px] px-2 py-1 rounded ${viewMode === 'card' ? 'btn-primary' : 'btn-secondary'}`}>卡片</button>
-                  </div>
+                
+                {/* Action buttons */}
+                <div className="flex items-center gap-1">
+                  <button onClick={exportCSV} className="btn-secondary text-[11px] px-3 py-1.5">CSV</button>
+                  <button onClick={exportJSON} className="btn-secondary text-[11px] px-3 py-1.5">JSON</button>
+                  <button onClick={handleSaveResult} className="btn-secondary text-[11px] px-3 py-1.5 flex items-center gap-1"
+                    title="保存选股结果到数据库">
+                    <Save size={12} /> {showSaveSuccess ? '已保存' : '保存'}
+                  </button>
+                  <div className="w-px h-4 mx-1" style={{ background: 'var(--border-subtle)' }} />
+                  <button onClick={() => setViewMode('table')}
+                    className={`text-[11px] px-2.5 py-1.5 rounded ${viewMode === 'table' ? 'btn-primary' : 'btn-secondary'}`}>表</button>
+                  <button onClick={() => setViewMode('card')}
+                    className={`text-[11px] px-2.5 py-1.5 rounded ${viewMode === 'card' ? 'btn-primary' : 'btn-secondary'}`}>卡</button>
                 </div>
               </div>
               {/* Search */}
@@ -853,21 +858,21 @@ export default function ScreenerPage() {
                 <table className="w-full text-data-sm">
                   <thead className="sticky top-0" style={{ background: 'var(--bg-root)' }}>
                     <tr className="border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-                      <th className="py-2 px-1 w-8 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      <th className="text-center py-2 px-1 w-8 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
                         <input type="checkbox" checked={selectedIds.size === pageResults.length && pageResults.length > 0}
                           onChange={selectAll} className="cursor-pointer" />
                       </th>
-                      <th className="text-left py-2 px-1 w-16 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>代码</th>
-                      <th className="text-left py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)', minWidth: 80 }}
+                      <th className="text-left py-2 px-2 w-16 font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>代码</th>
+                      <th className="text-left py-2 px-2 min-w-[80px] font-medium text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => { setSortKey('name'); setSortAsc(sortKey !== 'name' ? true : !sortAsc); }}>
                         名称 {sortKey === 'name' ? (sortAsc ? '▲' : '▼') : ''}</th>
-                      <th className="text-right py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
+                      <th className="text-right py-2 px-2 w-20 font-mono-nums text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => { setSortKey('close'); setSortAsc(sortKey !== 'close' ? false : !sortAsc); }}>
                         最新价 {sortKey === 'close' ? (sortAsc ? '▲' : '▼') : ''}</th>
-                      <th className="text-right py-2 px-2 text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
+                      <th className="text-right py-2 px-2 w-16 font-mono-nums text-data-xs cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }}
                         onClick={() => { setSortKey('change_pct'); setSortAsc(sortKey !== 'change_pct' ? false : !sortAsc); }}>
                         涨跌幅 {sortKey === 'change_pct' ? (sortAsc ? '▲' : '▼') : ''}</th>
-                      <th className="text-center py-2 px-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>走势</th>
+                      <th className="text-center py-2 px-2 w-16 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>走势</th>
                       <th className="text-left py-2 px-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>匹配条件</th>
                     </tr>
                   </thead>
@@ -876,7 +881,7 @@ export default function ScreenerPage() {
                       <tr key={r.id} onClick={() => setDetailStock(r)}
                         className="border-b cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
                         style={{ borderColor: 'var(--border-subtle)' }}>
-                        <td className="py-2 px-1 w-8">
+                        <td className="text-center py-2 px-1 w-8">
                           <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)}
                             onClick={e => e.stopPropagation()} className="cursor-pointer" />
                         </td>
@@ -913,23 +918,41 @@ export default function ScreenerPage() {
               </div>
               )}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
-                  <div className="flex gap-1">
+                <div className="flex items-center justify-between shrink-0 px-1 py-2 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  <div className="flex items-center gap-2">
+                    <span>共 <b className="font-mono-nums" style={{ color: 'var(--text-primary)' }}>{filteredResults.length}</b> 只</span>
+                    <span className="w-px h-3" style={{ background: 'var(--border-subtle)' }} />
+                    <span>第 <b className="font-mono-nums" style={{ color: 'var(--text-primary)' }}>{page + 1}</b> / {totalPages} 页</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setPage(0)} disabled={page === 0}
+                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">«</button>
                     <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
+                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">‹</button>
+                    <span className="px-2 py-1 rounded text-data-xs font-mono-nums" style={{ background: 'var(--bg-card)' }}>{page + 1}</span>
                     <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
+                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">›</button>
+                    <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}
+                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">»</button>
                   </div>
                 </div>
               )}
               {selectedIds.size > 0 && (
-                <div className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg"
-                  style={{ background: 'var(--bg-card)', border: '1px solid hsl(var(--swiss-accent) / 0.3)' }}>
-                  <span className="text-data-xs" style={{ color: 'var(--text-secondary)' }}>已选 {selectedIds.size} 只</span>
-                  <button onClick={batchAddToWatchlist} className="btn-primary text-data-xs px-3 py-1">加入自选</button>
-                  <button onClick={() => { setCompareOpen(true); }} className="btn-secondary text-data-xs px-3 py-1 flex items-center gap-1"><BarChart3 size={12} />对比</button>
-                  <button onClick={() => setSelectedIds(new Set())} className="btn-secondary text-data-xs px-3 py-1">取消</button>
+                <div className="shrink-0 flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                  style={{ background: 'hsl(var(--swiss-accent-ghost))', border: '1px solid hsl(var(--swiss-accent) / 0.2)' }}>
+                  <span className="text-data-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                    已选 <span className="font-bold font-mono-nums">{selectedIds.size}</span> 只
+                  </span>
+                  <div className="w-px h-4" style={{ background: 'var(--border-subtle)' }} />
+                  <button onClick={batchAddToWatchlist} className="btn-primary text-[11px] px-3 py-1.5">
+                    + 加入自选
+                  </button>
+                  <button onClick={exportCSV} className="btn-secondary text-[11px] px-3 py-1.5">
+                    导出选中
+                  </button>
+                  <button onClick={() => setSelectedIds(new Set())} className="btn-secondary text-[11px] px-3 py-1.5">
+                    取消
+                  </button>
                 </div>
               )}
             </div>
