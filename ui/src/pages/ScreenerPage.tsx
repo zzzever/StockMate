@@ -602,9 +602,9 @@ export default function ScreenerPage() {
       <div className="flex-1 flex gap-3 overflow-hidden">
         <div className="w-[400px] shrink-0 flex flex-col gap-3">
           <div className="glass-card-flat p-2">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
-                className="select flex-1 text-[11px] py-1">
+                className="select flex-1 text-[11px] py-1 min-w-0">
                 {strategies.length === 0 && <option value="">暂无策略</option>}
                 {strategies.map((s: any) => (
                   <option key={s[0]} value={s[0]}>{s[3] ? '📌 ' : ''}{s[1]}</option>
@@ -807,7 +807,7 @@ export default function ScreenerPage() {
                 )}
                 
                 {/* Action buttons */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap">
                   <button onClick={exportCSV} className="btn-secondary text-[11px] px-2.5 py-1.5">CSV</button>
                   <button onClick={exportJSON} className="btn-secondary text-[11px] px-2.5 py-1.5">JSON</button>
                   <button onClick={handleSaveResult} className="btn-secondary text-[11px] px-2.5 py-1.5 flex items-center gap-1"
@@ -847,7 +847,7 @@ export default function ScreenerPage() {
                               onClick={e => e.stopPropagation()} className="cursor-pointer" />
                             <span className="font-mono text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{r.ticker}</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap">
                             <span className="font-medium text-data-sm" style={{ color: 'var(--text-primary)' }}>{r.name}</span>
                             <button onClick={e => { e.stopPropagation(); setDetailStock(r); }} className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded" style={{ color: 'var(--text-tertiary)' }}>i</button>
                           </div>
@@ -943,7 +943,7 @@ export default function ScreenerPage() {
                     <span className="w-px h-3" style={{ background: 'var(--border-subtle)' }} />
                     <span>第 <b className="font-mono-nums" style={{ color: 'var(--text-primary)' }}>{page + 1}</b> / {totalPages} 页</span>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
                     <button onClick={() => setPage(0)} disabled={page === 0}
                       className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">«</button>
                     <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
