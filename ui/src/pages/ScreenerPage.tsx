@@ -26,6 +26,7 @@ const CONDITION_TYPES = [
   { id: 'BelowMA', label: '低于均线', desc: '收盘价低于均线' },
   { id: 'RsiBelow', label: 'RSI超卖', desc: 'RSI低于阈值' },
   { id: 'TurnoverRate', label: '换手率', desc: '换手率范围' },
+  { id: 'SSLangExpr', label: 'SSLang', desc: '自定义SSLang表达式' },
 ];
 
 const getChangeStyle = (pct: number) => {
@@ -57,12 +58,21 @@ export default function ScreenerPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
   const [strategies, setStrategies] = useState<any[]>([]);
   const [activeStrategyId, setActiveStrategyId] = useState<number | null>(null);
-  const [strategyConditions, setStrategyConditions] = useState<{ type: string; params: any }[]>([]);
+  const [strategyConditions, setStrategyConditions] = useState<{ type: string; params: any; logic?: string }[]>([]);
   const [trendMap, setTrendMap] = useState<Record<string, number[]>>({});
   const [compareOpen, setCompareOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [aiDescription, setAiDescription] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [lockedStrategies, setLockedStrategies] = useState<Set<number>>(new Set());
+
+  const toggleLock = (id: number) => {
+    setLockedStrategies(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
 
   const sortedResults = useMemo(() => {
@@ -288,7 +298,7 @@ export default function ScreenerPage() {
   const handleAddCondition = (e: any) => {
     const type = e.target.value;
     if (!type) return;
-    setStrategyConditions(prev => [...prev, { type, params: {} }]);
+    setStrategyConditions(prev => [...prev, { type, params: {}, logic: 'AND' }]);
     e.target.value = '';
   };
 
@@ -299,7 +309,7 @@ export default function ScreenerPage() {
       const resultJson: string = await invoke('generate_screener_conditions', { description: aiDescription });
       const conditions = JSON.parse(resultJson);
       if (Array.isArray(conditions) && conditions.length > 0) {
-        setStrategyConditions(prev => [...prev, ...conditions.map((c: any) => ({ type: c.type, params: c.params || {} }))]);
+        setStrategyConditions(prev => [...prev, ...conditions.map((c: any) => ({ type: c.type, params: c.params || {}, logic: 'AND' }))]);
       }
     } catch (e: any) {
       console.error('AI生成失败:', e);
@@ -319,6 +329,12 @@ export default function ScreenerPage() {
     const [moved] = updated.splice(from, 1);
     updated.splice(to, 0, moved);
     setStrategyConditions(updated);
+  };
+
+  const toggleConditionLogic = (idx: number) => {
+    setStrategyConditions(prev => prev.map((c, i) =>
+      i === idx ? { ...c, logic: c.logic === 'OR' ? 'AND' : 'OR' } : c
+    ));
   };
 
   const handleSaveStrategy = async () => {
@@ -391,6 +407,12 @@ export default function ScreenerPage() {
           <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最大%</span>
           <input type="number" value={cond.params?.max ?? 10} onChange={e => updateParam('max', +e.target.value)}
             className="input w-16 text-right text-data-xs" step="0.5" min="0" /></>);
+      case 'SSLangExpr':
+        return (
+          <textarea value={cond.params?.expression || ''} onChange={e => updateParam('expression', e.target.value)}
+            placeholder="例: close(i) < 20 AND down(i,3)"
+            className="input flex-1 text-[10px] font-mono py-1" rows={2} />
+        );
       default:
         return <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{JSON.stringify(cond.params)}</span>;
     }
@@ -484,6 +506,7 @@ export default function ScreenerPage() {
           case 'BelowMA': return { BelowMA: c.params?.period ?? 20 };
           case 'RsiBelow': return { RsiBelow: [c.params?.period ?? 14, c.params?.threshold ?? 30] };
           case 'TurnoverRate': return { TurnoverRate: { min: c.params?.min ?? 0, max: c.params?.max ?? 10 } };
+          case 'SSLangExpr': return { SSLangExpr: c.params?.expression || '' };
           default: return null;
         }
       }).filter(Boolean);
@@ -491,8 +514,32 @@ export default function ScreenerPage() {
         console.warn('没有条件，使用默认条件');
         conditions.push({ LowPrice: 20 }, { ShrinkDrop: { days: 3, max_vol_ratio: 0.6 } }, { LowPosition: { days: 20, ratio: 0.3 } });
       }
+      // AND/OR 分组：连续的 AND 在同一组，OR 分隔组
+      const groups: any[][] = [];
+      let currentGroup: any[] = [conditions[0]];
+      for (let i = 1; i < conditions.length; i++) {
+        if (strategyConditions[i]?.logic === 'OR') {
+          groups.push(currentGroup);
+          currentGroup = [conditions[i]];
+        } else {
+          currentGroup.push(conditions[i]);
+        }
+      }
+      if (currentGroup.length > 0) groups.push(currentGroup);
+      // 构建 ConditionGroup payload
+      let conditionsPayload: any[];
+      if (groups.length === 1) {
+        conditionsPayload = [{ ConditionGroup: { logic: "AND", conditions: groups[0] } }];
+      } else {
+        conditionsPayload = [{
+          ConditionGroup: {
+            logic: "OR",
+            conditions: groups.map(g => ({ ConditionGroup: { logic: "AND", conditions: g } }))
+          }
+        }];
+      }
       const res: ScreenResult[] = await invoke('screen_stocks', {
-        conditionsJson: JSON.stringify(conditions),
+        conditionsJson: JSON.stringify(conditionsPayload),
         limit: 5000,
       });
       setResults(res);
@@ -546,9 +593,18 @@ export default function ScreenerPage() {
               <button onClick={importStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
                 title="导入策略">↑</button>
               {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId) && (
-                <button onClick={() => deleteStrategy(activeStrategyId!)}
-                  className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"
-                  style={{ color: 'hsl(var(--risk-danger))' }}>删除</button>
+                <>
+                  <button onClick={() => toggleLock(activeStrategyId!)}
+                    className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded"
+                    style={{ color: lockedStrategies.has(activeStrategyId!) ? 'hsl(var(--risk-warning))' : 'var(--text-tertiary)' }}>
+                    {lockedStrategies.has(activeStrategyId!) ? '🔒' : '🔓'}
+                  </button>
+                  {!lockedStrategies.has(activeStrategyId!) && (
+                    <button onClick={() => deleteStrategy(activeStrategyId!)}
+                      className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"
+                      style={{ color: 'hsl(var(--risk-danger))' }}>删除</button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -578,12 +634,23 @@ export default function ScreenerPage() {
                     ct?.id === 'BelowMA' ? `MA${cond.params?.period || 20}` :
                     ct?.id === 'RsiBelow' ? `${cond.params?.period || 14}<${cond.params?.threshold || 30}` :
                     ct?.id === 'TurnoverRate' ? `${cond.params?.min ?? 0}%~${cond.params?.max ?? 10}%` :
+                    ct?.id === 'SSLangExpr' ? (cond.params?.expression || '').substring(0, 20) :
                     '';
                   return (
                     <div key={i}>
                       <div onClick={() => setEditingConditionIdx(isEditing ? null : i)}
                         className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-data-xs cursor-pointer"
                         style={{ background: isEditing ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-card)' }}>
+                        {i > 0 && (
+                          <button onClick={(e) => { e.stopPropagation(); toggleConditionLogic(i); }}
+                            className="text-[10px] font-bold px-1 py-0.5 rounded mr-1 shrink-0"
+                            style={{
+                              background: cond.logic === 'OR' ? 'hsla(280,70%,55%,0.15)' : 'var(--bg-input)',
+                              color: cond.logic === 'OR' ? 'hsl(280,70%,65%)' : 'var(--text-secondary)',
+                            }}>
+                            {cond.logic || 'AND'}
+                          </button>
+                        )}
                         <span className="font-semibold w-20 truncate" style={{ color: 'var(--text-secondary)' }}>{ct?.label || cond.type}</span>
                         <span className="font-mono truncate text-[10px] shrink min-w-0" style={{ color: 'var(--text-primary)' }}>{paramStr}</span>
                         <span className="ml-auto text-[10px] shrink-0" style={{ color: 'var(--text-tertiary)' }}>{isEditing ? '▲' : '▸'}</span>

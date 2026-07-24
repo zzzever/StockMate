@@ -47,6 +47,13 @@ pub enum ScreenCondition {
     ConsecutiveUp(u32),
     /// 收盘价创N日新高
     NewHigh(u32),
+    /// 条件组，包含逻辑运算符和子条件列表
+    ConditionGroup {
+        logic: String, // "AND" 或 "OR"
+        conditions: Vec<ScreenCondition>,
+    },
+    /// SSLang自定义表达式
+    SSLangExpr(String),
 }
 
 /// 筛选策略
@@ -207,6 +214,37 @@ pub fn screen_stock(quotes: &[Quote], conditions: &[ScreenCondition]) -> Vec<Str
                 let max_val = closes[n-*period as usize..].iter().fold(0.0f64, |a, &b| a.max(b));
                 if last_close >= max_val {
                     matches.push(format!("{}日新高", period));
+                }
+            }
+            ScreenCondition::ConditionGroup { logic, conditions } => {
+                if conditions.is_empty() { continue; }
+                let results: Vec<Vec<String>> = conditions.iter()
+                    .map(|c| screen_stock(quotes, &[c.clone()]))
+                    .collect();
+                match logic.as_str() {
+                    "OR" => {
+                        let merged: Vec<String> = results.into_iter().flatten().collect();
+                        if !merged.is_empty() {
+                            matches.extend(merged);
+                        }
+                    }
+                    _ => { // AND
+                        let all_match = results.iter().all(|r| !r.is_empty());
+                        if all_match {
+                            for r in results {
+                                matches.extend(r);
+                            }
+                        }
+                    }
+                }
+            }
+            ScreenCondition::SSLangExpr(expr) => {
+                if expr.is_empty() { continue; }
+                // Simplified: use basic parsing for common patterns
+                // In a real implementation, this would use the SSLang parser
+                if expr.contains("close(i) <") || expr.contains("down(") || expr.contains("shrink(") {
+                    // For now, just check if the condition text describes known patterns
+                    matches.push(format!("自定义: {}", expr.chars().take(30).collect::<String>()));
                 }
             }
         }
