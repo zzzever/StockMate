@@ -175,7 +175,7 @@ pub async fn get_all_strategies(pool: &DbPool) -> Result<Vec<(i64, String, Strin
 }
 
 pub async fn delete_strategy(pool: &DbPool, id: i64) -> Result<()> {
-    sqlx::query("DELETE FROM screener_strategies WHERE id = ?1 AND is_preset = 0")
+    sqlx::query("DELETE FROM screener_strategies WHERE id = ?1")
         .bind(id).execute(pool).await?;
     Ok(())
 }

@@ -222,7 +222,10 @@ export default function ScreenerPage() {
 
   const deleteStrategy = async (id: number | null) => {
     if (id == null) return;
-    if (!confirm('确认删除该策略？')) return;
+    const s = strategies.find((s: any) => s[0] === id);
+    if (!s) return;
+    if (s[3] && !confirm('该策略为预设策略，确定要删除吗？（可在设置中重新创建）')) return;
+    if (!s[3] && !confirm('确认删除该策略？')) return;
     try {
       await invoke('delete_strategy', { strategyId: id });
       setStrategies(prev => prev.filter((s: any) => s[0] !== id));
@@ -401,7 +404,7 @@ export default function ScreenerPage() {
                 ))}
               </select>
               <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0">+ 新建</button>
-              {activeStrategyId !== null && strategies.find((s: any) => s[0] === activeStrategyId)?.[3] ? null : (
+              {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId) && (
                 <button onClick={() => deleteStrategy(activeStrategyId!)}
                   className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"
                   style={{ color: 'hsl(var(--risk-danger))' }}>删除</button>
