@@ -592,17 +592,17 @@ export default function ScreenerPage() {
   };
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2">
+    <div className="h-full flex flex-col gap-3 p-2">
       <div className="flex items-center gap-2 shrink-0">
         <button onClick={() => { if (window.history.length > 1) navigate(-1); else navigate('/'); }} className="btn-ghost p-1"><ArrowLeft size={18} /></button>
         <Filter size={18} className="text-[hsl(var(--swiss-accent))]" />
         <h1 className="text-heading-sm font-bold">选股</h1>
       </div>
 
-      <div className="flex-1 flex gap-2 overflow-hidden">
-        <div className="w-[400px] shrink-0 flex flex-col gap-2">
+      <div className="flex-1 flex gap-3 overflow-hidden">
+        <div className="w-[400px] shrink-0 flex flex-col gap-3">
           <div className="glass-card-flat p-2">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
                 className="select flex-1 text-data-xs">
                 {strategies.length === 0 && <option value="">暂无策略</option>}
@@ -610,23 +610,23 @@ export default function ScreenerPage() {
                   <option key={s[0]} value={s[0]}>{s[3] ? '📌 ' : ''}{s[1]}</option>
                 ))}
               </select>
-              <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0">+ 新建</button>
-              <button onClick={handleCopyStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
+              <button onClick={handleAddStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0">+ 新建</button>
+              <button onClick={handleCopyStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0"
                 title="复制当前策略">📋</button>
-              <button onClick={exportStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
+              <button onClick={exportStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0"
                 title="导出策略">↓</button>
-              <button onClick={importStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0"
+              <button onClick={importStrategy} className="btn-secondary text-[11px] px-2.5 py-1.5 shrink-0"
                 title="导入策略">↑</button>
               {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId) && (
                 <>
                   <button onClick={() => toggleLock(activeStrategyId!)}
-                    className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded"
+                    className="text-[11px] px-2.5 py-1.5 hover:bg-[var(--bg-hover)] rounded"
                     style={{ color: lockedStrategies.has(activeStrategyId!) ? 'hsl(var(--risk-warning))' : 'var(--text-tertiary)' }}>
                     {lockedStrategies.has(activeStrategyId!) ? '🔒' : '🔓'}
                   </button>
                   {!lockedStrategies.has(activeStrategyId!) && (
                     <button onClick={() => deleteStrategy(activeStrategyId!)}
-                      className="text-[10px] px-2 py-1 rounded hover:bg-[var(--bg-hover)] shrink-0"
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] shrink-0"
                       style={{ color: 'hsl(var(--risk-danger))' }}>删除</button>
                   )}
                 </>
@@ -664,14 +664,14 @@ export default function ScreenerPage() {
                   return (
                     <div key={i}>
                       <div onClick={() => setEditingConditionIdx(isEditing ? null : i)}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-data-xs cursor-pointer"
+                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg text-data-xs cursor-pointer"
                         style={{ background: isEditing ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-card)' }}>
                         {i > 0 && (
                           <button onClick={(e) => { e.stopPropagation(); toggleConditionLogic(i); }}
-                            className="text-[10px] font-bold px-1 py-0.5 rounded mr-1 shrink-0"
+                            className="text-[10px] font-bold w-10 text-center py-0.5 rounded mr-1 shrink-0"
                             style={{
-                              background: cond.logic === 'OR' ? 'hsla(280,70%,55%,0.15)' : 'var(--bg-input)',
-                              color: cond.logic === 'OR' ? 'hsl(280,70%,65%)' : 'var(--text-secondary)',
+                              background: cond.logic === 'OR' ? 'hsl(var(--accent-purple) / 0.15)' : 'var(--bg-input)',
+                              color: cond.logic === 'OR' ? 'hsl(var(--accent-purple))' : 'var(--text-secondary)',
                             }}>
                             {cond.logic || 'AND'}
                           </button>
@@ -701,7 +701,7 @@ export default function ScreenerPage() {
               ))}
             </select>
             {/* AI 生成条件 */}
-            <div className="flex items-center gap-1 mt-1">
+            <div className="flex items-center gap-1 mt-auto">
               <input type="text" placeholder="用自然语言描述筛选条件..."
                 value={aiDescription} onChange={e => setAiDescription(e.target.value)}
                 className="input flex-1 text-data-xs py-1" />
@@ -738,7 +738,7 @@ export default function ScreenerPage() {
             </div>
           </details>
           <button onClick={runScreener} disabled={running}
-            className="btn-primary w-full flex items-center justify-center gap-2">
+            className="btn-primary w-full text-data-sm px-4 py-2 flex items-center justify-center gap-2">
             {running ? <RefreshCw size={14} className="animate-spin" /> : <Search size={14} />}
             {running ? `运行中: ${strategies.find((s: any) => s[0] === activeStrategyId)?.[1] || '选股'}...` : '运行选股'}
           </button>
@@ -757,9 +757,9 @@ export default function ScreenerPage() {
                   <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
                   <div className="flex gap-1">
                     <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
                     <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
                   </div>
                 </div>
               )}
@@ -778,9 +778,9 @@ export default function ScreenerPage() {
                   <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
                   <div className="flex gap-1">
                     <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
                     <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                      className="px-2 py-0.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
                   </div>
                 </div>
               )}
@@ -811,9 +811,9 @@ export default function ScreenerPage() {
                 
                 {/* Action buttons */}
                 <div className="flex items-center gap-1">
-                  <button onClick={exportCSV} className="btn-secondary text-[11px] px-3 py-1.5">CSV</button>
-                  <button onClick={exportJSON} className="btn-secondary text-[11px] px-3 py-1.5">JSON</button>
-                  <button onClick={handleSaveResult} className="btn-secondary text-[11px] px-3 py-1.5 flex items-center gap-1"
+                  <button onClick={exportCSV} className="btn-secondary text-[11px] px-2.5 py-1.5">CSV</button>
+                  <button onClick={exportJSON} className="btn-secondary text-[11px] px-2.5 py-1.5">JSON</button>
+                  <button onClick={handleSaveResult} className="btn-secondary text-[11px] px-2.5 py-1.5 flex items-center gap-1"
                     title="保存选股结果到数据库">
                     <Save size={12} /> {showSaveSuccess ? '已保存' : '保存'}
                   </button>
@@ -948,14 +948,14 @@ export default function ScreenerPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button onClick={() => setPage(0)} disabled={page === 0}
-                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">«</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">«</button>
                     <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">‹</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">‹</button>
                     <span className="px-2 py-1 rounded text-data-xs font-mono-nums" style={{ background: 'var(--bg-card)' }}>{page + 1}</span>
                     <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">›</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">›</button>
                     <button onClick={() => setPage(totalPages - 1)} disabled={page >= totalPages - 1}
-                      className="px-2 py-1 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30 text-data-xs">»</button>
+                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">»</button>
                   </div>
                 </div>
               )}
