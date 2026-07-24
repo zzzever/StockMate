@@ -602,7 +602,7 @@ export default function ScreenerPage() {
       <div className="flex-1 flex gap-3 overflow-hidden">
         <div className="w-[400px] shrink-0 flex flex-col gap-3">
           <div className="glass-card-flat p-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
                 className="select flex-1 text-[11px] py-1">
                 {strategies.length === 0 && <option value="">暂无策略</option>}
@@ -610,10 +610,10 @@ export default function ScreenerPage() {
                   <option key={s[0]} value={s[0]}>{s[3] ? '📌 ' : ''}{s[1]}</option>
                 ))}
               </select>
-              <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0">+新建</button>
-              <button onClick={handleCopyStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0" title="复制">📋</button>
-              <button onClick={exportStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0" title="导出">↓</button>
-              <button onClick={importStrategy} className="btn-secondary text-[10px] px-1.5 py-1 shrink-0" title="导入">↑</button>
+              <button onClick={handleAddStrategy} className="btn-secondary text-[9px] px-1 py-0.5 shrink-0">+新建</button>
+              <button onClick={handleCopyStrategy} className="btn-secondary text-[9px] px-1 py-0.5 shrink-0" title="复制">📋</button>
+              <button onClick={exportStrategy} className="btn-secondary text-[9px] px-1 py-0.5 shrink-0" title="导出">↓</button>
+              <button onClick={importStrategy} className="btn-secondary text-[9px] px-1 py-0.5 shrink-0" title="导入">↑</button>
               {activeStrategyId !== null && strategies.some((s: any) => s[0] === activeStrategyId) && (
                 <>
                   <button onClick={() => toggleLock(activeStrategyId!)}
