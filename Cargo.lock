@@ -2208,7 +2208,6 @@ dependencies = [
 name = "kronos_predictor"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "data_fetcher",
  "domain",
  "serde",

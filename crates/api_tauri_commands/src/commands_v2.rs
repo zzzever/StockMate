@@ -615,10 +615,10 @@ pub async fn predict_with_kronos(
         return Err("暂无历史数据".into());
     }
     let prices: Vec<f64> = history.iter().map(|q| q.close.to_f64().unwrap_or(0.0)).collect();
+    let volumes: Vec<u64> = history.iter().map(|q| q.volume).collect();
     let dates: Vec<String> = history.iter().map(|q| q.date.to_string()).collect();
 
-    kronos_predictor::forecast(&prices, &dates, horizon as usize)
-        .ok_or_else(|| "Kronos 预测失败: 数据不足".into())
+    kronos_predictor::run_kronos_predict(&prices, &volumes, &dates, horizon as usize, "NeoQuasar/Kronos-small")
 }
 
 #[tauri::command]
