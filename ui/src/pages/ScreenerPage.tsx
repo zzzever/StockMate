@@ -401,13 +401,6 @@ export default function ScreenerPage() {
               </select>
               <button onClick={handleAddStrategy} className="btn-secondary text-[10px] px-2 py-1 shrink-0">+ 新建</button>
             </div>
-            {activeStrategyId && (
-              <div className="flex justify-end mt-1">
-                <button onClick={(e) => { e.stopPropagation(); deleteStrategy(activeStrategyId); }}
-                  className="text-[10px] px-1 hover:bg-[var(--bg-hover)] rounded"
-                  style={{ color: 'hsl(var(--risk-danger))' }}>删除策略</button>
-              </div>
-            )}
           </div>
 
           {/* 条件内联列表 */}
