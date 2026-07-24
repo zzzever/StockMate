@@ -220,7 +220,8 @@ export default function ScreenerPage() {
     }
   };
 
-  const deleteStrategy = async (id: number) => {
+  const deleteStrategy = async (id: number | null) => {
+    if (id == null) return;
     if (!confirm('确认删除该策略？')) return;
     try {
       await invoke('delete_strategy', { strategyId: id });
@@ -389,7 +390,7 @@ export default function ScreenerPage() {
       </div>
 
       <div className="flex-1 flex gap-2 overflow-hidden">
-        <div className="w-[280px] shrink-0 flex flex-col gap-2">
+        <div className="w-[320px] shrink-0 flex flex-col gap-2">
           <div className="glass-card-flat p-2">
             <div className="flex items-center gap-2">
               <select value={activeStrategyId ?? ''} onChange={e => selectStrategy(+e.target.value)}
