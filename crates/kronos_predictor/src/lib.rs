@@ -50,12 +50,15 @@ pub fn run_kronos_predict(
 
     // Try to find kronos_runner.py in the project
     let runner_script = find_runner_script()?;
+    let kronos_home = find_kronos_home();
     let input_json = serde_json::to_string(&input_data)
         .map_err(|e| format!("JSON序列化失败: {}", e))?;
 
     let output = Command::new("python")
         .arg(&runner_script)
         .arg(&input_json)
+        .env("KRONOS_HOME", &kronos_home)
+        .current_dir(&kronos_home)
         .output()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -128,6 +131,45 @@ pub fn run_kronos_predict(
         signal: signal.to_string(),
         expected_return,
     })
+}
+
+fn find_kronos_home() -> String {
+    // Check KRONOS_HOME env var first
+    if let Ok(home) = std::env::var("KRONOS_HOME") {
+        if std::path::Path::new(&home).exists() {
+            return home;
+        }
+    }
+    // Look for kronos_src relative to project root or current dir
+    let candidates = vec![
+        "kronos_src",
+        "../kronos_src",
+        "../../kronos_src",
+    ];
+    if let Ok(cwd) = std::env::current_dir() {
+        for candidate in &candidates {
+            let full = cwd.join(candidate);
+            if full.exists() {
+                return full.to_string_lossy().to_string();
+            }
+        }
+    }
+    // Check parent directories
+    if let Ok(cwd) = std::env::current_dir() {
+        let mut dir = cwd.clone();
+        for _ in 0..5 {
+            let kronos = dir.join("kronos_src");
+            if kronos.exists() {
+                return kronos.to_string_lossy().to_string();
+            }
+            if let Some(parent) = dir.parent() {
+                dir = parent.to_path_buf();
+            } else {
+                break;
+            }
+        }
+    }
+    std::env::var("KRONOS_HOME").unwrap_or_else(|_| ".".to_string())
 }
 
 fn find_runner_script() -> Result<String, String> {
