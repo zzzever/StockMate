@@ -54,12 +54,8 @@ pub fn run_kronos_predict(
     let input_json = serde_json::to_string(&input_data)
         .map_err(|e| format!("JSON序列化失败: {}", e))?;
 
-    // Try python3 first, fall back to python
-    let python_cmd = if Command::new("python3").arg("--version").output().is_ok() {
-        "python3"
-    } else {
-        "python"
-    };
+    // Use python (Python 3.14 with working torch) — python3 may have broken deps
+    let python_cmd = "python";
 
     let output = Command::new(python_cmd)
         .arg(&runner_script)
