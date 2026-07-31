@@ -26,12 +26,15 @@ interface KronosHistoryItem {
   result: KronosForecast;
 }
 
-// Pure SVG line chart — history (blue) + forecast (red dashed) + confidence band.
+// Pure SVG line chart with zoom (wheel) + pan (drag).
 // Avoids lightweight-charts issues in Tauri WebView2.
 function KronosChart({ forecast }: { forecast: KronosForecast }) {
   const W = 780;
   const H = 280;
   const PAD = { top: 16, right: 64, bottom: 24, left: 8 };
+  const [view, setView] = useState<{ start: number; end: number } | null>(null);
+  const dragRef = useRef<{ x0: number; start0: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   const all = [
     ...forecast.history.map(p => ({ x: p.date, y: p.value, kind: 'hist' as const })),
@@ -40,59 +43,104 @@ function KronosChart({ forecast }: { forecast: KronosForecast }) {
       lower: p.lower ?? p.value, upper: p.upper ?? p.value, kind: 'fcst' as const,
     })),
   ];
+  const N = all.length;
 
-  const ys = all.map(d => d.y);
-  const lows = all.filter((d: any) => d.lower != null).map((d: any) => d.lower);
-  const highs = all.filter((d: any) => d.upper != null).map((d: any) => d.upper);
+  // Visible index range (null = show all)
+  const vStart = view?.start ?? 0;
+  const vEnd = view?.end ?? N - 1;
+  const vCount = Math.max(vEnd - vStart, 2);
+
+  // Y scale from visible range only (auto-fit current view)
+  const vis = all.slice(vStart, vEnd + 1);
+  const ys = vis.map(d => d.y);
+  const lows = vis.filter((d: any) => d.lower != null).map((d: any) => d.lower);
+  const highs = vis.filter((d: any) => d.upper != null).map((d: any) => d.upper);
   const min = Math.min(...ys, ...lows);
   const max = Math.max(...ys, ...highs);
   const range = (max - min) || 1;
   const padY = range * 0.15;
 
-  const xAt = (i: number) => PAD.left + (i / Math.max(all.length - 1, 1)) * (W - PAD.left - PAD.right);
+  const xAt = (i: number) => PAD.left + ((i - vStart) / vCount) * (W - PAD.left - PAD.right);
   const yAt = (v: number) => PAD.top + (1 - (v - (min - padY)) / (range + 2 * padY)) * (H - PAD.top - PAD.bottom);
 
-  const histPts = forecast.history.map((_, i) => `${xAt(i)},${yAt(all[i].y)}`).join(' ');
-  const fcstPts = all.slice(forecast.history.length).map((_, i) =>
-    `${xAt(forecast.history.length + i)},${yAt(all[forecast.history.length + i].y)}`).join(' ');
+  // Build visible points only (clip outside range)
+  const visPts: { x: number; y: number; kind: string; lower?: number; upper?: number; idx: number }[] = [];
+  for (let i = vStart; i <= vEnd && i < N; i++) {
+    const d: any = all[i];
+    visPts.push({ x: xAt(i), y: yAt(d.y), kind: d.kind, lower: d.lower != null ? yAt(d.lower) : undefined, upper: d.upper != null ? yAt(d.upper) : undefined, idx: i });
+  }
 
-  // Confidence band polygon (forecast only)
-  const fcstStart = forecast.history.length;
+  const histPts = visPts.filter(p => p.kind === 'hist').map(p => `${p.x},${p.y}`).join(' ');
+  const fcstPts = visPts.filter(p => p.kind === 'fcst').map(p => `${p.x},${p.y}`).join(' ');
+
+  // Confidence band polygon (forecast only, visible)
   const bandPts: string[] = [];
-  for (let i = fcstStart; i < all.length; i++) {
-    const d = all[i] as any;
-    if (d.upper != null) bandPts.push(`${xAt(i)},${yAt(d.upper)}`);
-  }
-  for (let i = all.length - 1; i >= fcstStart; i--) {
-    const d = all[i] as any;
-    if (d.lower != null) bandPts.push(`${xAt(i)},${yAt(d.lower)}`);
-  }
+  visPts.forEach(p => { if (p.upper != null) bandPts.push(`${p.x},${p.upper}`); });
+  [...visPts].reverse().forEach(p => { if (p.lower != null) bandPts.push(`${p.x},${p.lower}`); });
 
   // Grid lines
   const gridYs = [0.25, 0.5, 0.75].map(f => PAD.top + f * (H - PAD.top - PAD.bottom));
 
+  // Wheel zoom around cursor
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (N <= 10) return;
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const px = (e.clientX - rect.left) / rect.width; // 0..1 cursor pos
+    const curStart = view?.start ?? 0;
+    const curEnd = view?.end ?? N - 1;
+    const curLen = curEnd - curStart;
+    const factor = e.deltaY > 0 ? 1.25 : 0.8; // zoom out / in
+    const newLen = Math.min(Math.max(curLen * factor, 10), N - 1);
+    // keep cursor-relative anchor
+    const anchorIdx = curStart + px * curLen;
+    let newStart = anchorIdx - px * newLen;
+    let newEnd = newStart + newLen;
+    if (newStart < 0) { newStart = 0; newEnd = newLen; }
+    if (newEnd > N - 1) { newEnd = N - 1; newStart = newEnd - newLen; }
+    setView({ start: Math.max(0, Math.round(newStart)), end: Math.min(N - 1, Math.round(newEnd)) });
+  };
+
+  // Drag pan
+  const onMouseDown = (e: React.MouseEvent) => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || N <= 10) return;
+    const curStart = view?.start ?? 0;
+    const curEnd = view?.end ?? N - 1;
+    dragRef.current = { x0: e.clientX, start0: curStart };
+    (e.currentTarget as SVGSVGElement).setPointerCapture?.((e as any).pointerId);
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current) return;
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const curLen = (view?.end ?? N - 1) - (view?.start ?? 0);
+    const dx = (dragRef.current.x0 - e.clientX) / rect.width; // px→idx (drag right → view left)
+    let newStart = dragRef.current.start0 + dx * curLen;
+    newStart = Math.max(0, Math.min(newStart, N - 1 - curLen));
+    setView({ start: Math.round(newStart), end: Math.round(newStart + curLen) });
+  };
+  const endDrag = () => { dragRef.current = null; };
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full h-full cursor-grab select-none touch-none"
+      onWheel={onWheel} onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+      onMouseUp={endDrag} onMouseLeave={endDrag}>
       {gridYs.map((gy, i) => (
         <line key={i} x1={PAD.left} x2={W - PAD.right} y1={gy} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
       ))}
       {bandPts.length > 2 && (
         <polygon points={bandPts.join(' ')} fill="rgba(239,68,68,0.10)" stroke="none" />
       )}
-      <polyline points={histPts} fill="none" stroke="#3b82f6" strokeWidth="1.8" />
-      {fcstPts && (
-        <polyline points={fcstPts} fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" />
-      )}
-      {/* Last history point → forecast start connector */}
-      {forecast.history.length > 0 && forecast.forecast.length > 0 && (
-        <line x1={xAt(fcstStart - 1)} x2={xAt(fcstStart)} y1={yAt(all[fcstStart - 1].y)} y2={yAt(all[fcstStart].y)}
-          stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" />
-      )}
+      {histPts && <polyline points={histPts} fill="none" stroke="#3b82f6" strokeWidth="1.8" />}
+      {fcstPts && <polyline points={fcstPts} fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" />}
       {/* Forecast start marker */}
-      {fcstStart < all.length && (
-        <circle cx={xAt(fcstStart)} cy={yAt(all[fcstStart].y)} r="4" fill="#ef4444" />
-      )}
-      {/* Y-axis labels */}
+      {visPts.some(p => p.kind === 'fcst') && (() => {
+        const first = visPts.find(p => p.kind === 'fcst');
+        return first ? <circle cx={first.x} cy={first.y} r="4" fill="#ef4444" /> : null;
+      })()}
+      {/* Y-axis labels (visible range) */}
       {[0, 0.5, 1].map(f => {
         const v = min - padY + (1 - f) * (range + 2 * padY);
         return (
@@ -100,6 +148,8 @@ function KronosChart({ forecast }: { forecast: KronosForecast }) {
             fontSize="10" fill="#8b8b8b">{v.toFixed(2)}</text>
         );
       })}
+      {/* Zoom hint */}
+      <text x={PAD.left} y={H - 6} fontSize="9" fill="#6b7280">滚轮缩放 · 拖拽平移</text>
     </svg>
   );
 }
