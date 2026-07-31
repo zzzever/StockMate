@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::process::Command;
 
 pub const MIN_PYTHON_VERSION: &str = "3.10";
 
@@ -26,23 +25,26 @@ pub struct KronosForecast {
 
 /// Run the Kronos Python model via subprocess.
 /// Input: OHLCV data as CSV, Output: JSON forecast.
-pub fn run_kronos_predict(
-    prices: &[f64],
+pub async fn run_kronos_predict(
+    opens: &[f64],
+    highs: &[f64],
+    lows: &[f64],
+    closes: &[f64],
     volumes: &[u64],
     dates: &[String],
     horizon: usize,
     model_name: &str,
 ) -> Result<KronosForecast, String> {
-    // Build input JSON for the Python script
+    // Build input JSON for the Python script — real OHLCV (no fake data)
     let input_data = serde_json::json!({
-        "lookback": prices.len(),
+        "lookback": closes.len(),
         "pred_len": horizon,
         "model": model_name,
         "data": {
-            "open": prices,
-            "high": prices.iter().map(|p| p * 1.01).collect::<Vec<_>>(),
-            "low": prices.iter().map(|p| p * 0.99).collect::<Vec<_>>(),
-            "close": prices,
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
             "volume": volumes,
         },
         "timestamps": dates,
@@ -57,12 +59,14 @@ pub fn run_kronos_predict(
     // Use python (Python 3.14 with working torch) — python3 may have broken deps
     let python_cmd = "python";
 
-    let output = Command::new(python_cmd)
+    let mut child = tokio::process::Command::new(python_cmd)
         .arg(&runner_script)
         .arg(&input_json)
         .env("KRONOS_HOME", &kronos_home)
         .current_dir(&kronos_home)
-        .output()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 format!(
@@ -76,15 +80,44 @@ pub fn run_kronos_predict(
             }
         })?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let stdout_text = String::from_utf8_lossy(&output.stdout).to_string();
+    // Timeout: model first-load/download may take up to 10 min
+    use tokio::io::AsyncReadExt;
+    let (status, stdout_bytes, stderr_bytes) = tokio::select! {
+        status = child.wait() => {
+            let mut out = Vec::new();
+            let mut err = Vec::new();
+            if let Some(stdout) = child.stdout.as_mut() { let _ = stdout.read_to_end(&mut out).await; }
+            if let Some(stderr) = child.stderr.as_mut() { let _ = stderr.read_to_end(&mut err).await; }
+            (status, out, err)
+        }
+        _ = tokio::time::sleep(std::time::Duration::from_secs(600)) => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Err("Kronos 预测超时(10分钟)。可能是首次下载模型或网络不可达，请重试。".into());
+        }
+    };
+
+    // On failure, prefer the structured error from the script's stdout
+    let exit_ok = match &status {
+        Ok(s) => s.success(),
+        Err(e) => return Err(format!("Python执行失败: {}", e)),
+    };
+    if !exit_ok {
+        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&stdout_bytes) {
+            if let Some(msg) = v.get("error").and_then(|x| x.as_str()) {
+                return Err(format!("Kronos 预测失败: {}", msg));
+            }
+        }
+        let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
+        let stdout_text = String::from_utf8_lossy(&stdout_bytes).to_string();
         return Err(format!("Kronos预测失败:\nSTDERR: {}\nSTDOUT: {}", stderr, stdout_text));
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let result: serde_json::Value = serde_json::from_str(&stdout)
-        .map_err(|e| format!("解析预测结果失败: {}", e))?;
+    let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
+    let result: serde_json::Value = serde_json::from_str(&stdout).map_err(|e| {
+        let preview: String = stdout.chars().take(800).collect();
+        format!("解析预测结果失败: {}。stdout前800字符: {}", e, preview)
+    })?;
 
     // Build response
     let pred_values: Vec<f64> = result["forecast"]
@@ -92,7 +125,7 @@ pub fn run_kronos_predict(
         .map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect())
         .unwrap_or_default();
 
-    let history_points: Vec<ForecastPoint> = prices.iter().enumerate().map(|(i, &p)| {
+    let history_points: Vec<ForecastPoint> = closes.iter().enumerate().map(|(i, &p)| {
         ForecastPoint {
             date: dates.get(i).cloned().unwrap_or_default(),
             value: p,
@@ -110,7 +143,7 @@ pub fn run_kronos_predict(
         }
     }).collect();
 
-    let last_price = prices.last().copied().unwrap_or(0.0);
+    let last_price = closes.last().copied().unwrap_or(0.0);
     let final_fcst = pred_values.last().copied().unwrap_or(last_price);
     let expected_return = if last_price > 0.0 {
         (final_fcst - last_price) / last_price * 100.0

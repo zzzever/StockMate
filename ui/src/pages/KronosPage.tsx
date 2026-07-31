@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { BrainCircuit, Search, ArrowLeft, TrendingUp, TrendingDown, Minus, RefreshCw, Activity } from 'lucide-react';
+import { BrainCircuit, Search, ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useStockList } from '@/hooks/useTauriQuery';
 import { createChart, IChartApi, ISeriesApi, LineStyle } from 'lightweight-charts';
-import { fmtPrice } from '@/lib/format';
 
 interface ForecastPoint {
   date: string;
@@ -22,8 +21,16 @@ interface KronosForecast {
   expected_return: number;
 }
 
+// Simulated staged progress for long-running model inference
+const STAGES = [
+  { label: '获取历史行情数据', pct: 12, ms: 1000 },
+  { label: '初始化 Kronos 模型（首次需下载权重）', pct: 45, ms: 8000 },
+  { label: '推理预测中（PyTorch 计算）', pct: 80, ms: 8000 },
+];
+
 export default function KronosPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: stockList } = useStockList();
   const [searchText, setSearchText] = useState('');
   const [selectedStock, setSelectedStock] = useState<{ id: string; name: string; ticker: string } | null>(null);
@@ -31,41 +38,63 @@ export default function KronosPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [horizon, setHorizon] = useState(10);
+  const [stage, setStage] = useState<{ label: string; pct: number } | null>(null);
+  const runIdRef = useRef(0);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const forecastSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
 
-  const filteredStocks = (stockList || [])
-    .filter((s: any) => {
-      const id = s.id || s.stock_id || '';
-      return (id.endsWith('.SH') || id.endsWith('.SZ')) && !id.startsWith('51') && !id.startsWith('56');
-    })
-    .filter((s: any) => {
-      if (!searchText.trim()) return false;
-      const q = searchText.toLowerCase();
-      return (s.name || '').toLowerCase().includes(q) || (s.ticker || '').toLowerCase().includes(q) || (s.id || '').toLowerCase().includes(q);
-    })
-    .slice(0, 20);
+  const codeParam = searchParams.get('code') || '';
+
+  // Support navigation from stock detail via URL param
+  useEffect(() => {
+    if (codeParam && stockList && stockList.length > 0) {
+      const hit = (stockList as any[]).find((s: any) =>
+        (s.id || s.stock_id) === codeParam || s.ticker === codeParam);
+      if (hit) setSelectedStock({ id: hit.id || hit.stock_id, name: hit.name, ticker: hit.ticker || '' });
+    }
+  }, [codeParam, stockList]);
+
+  const isAShare = (id: string) => id.endsWith('.SH') || id.endsWith('.SZ');
+
+  // Show default list when no search text
+  const visibleStocks = searchText.trim()
+    ? (stockList || []).filter((s: any) => {
+        const id = s.id || s.stock_id || '';
+        if (!isAShare(id) || id.startsWith('51') || id.startsWith('56')) return false;
+        const q = searchText.toLowerCase();
+        return (s.name || '').toLowerCase().includes(q) || (s.ticker || '').toLowerCase().includes(q) || id.toLowerCase().includes(q);
+      }).slice(0, 20)
+    : (stockList || []).filter((s: any) => {
+        const id = s.id || s.stock_id || '';
+        return isAShare(id) && !id.startsWith('51') && !id.startsWith('56');
+      }).slice(0, 20);
 
   const runForecast = async () => {
     if (!selectedStock) return;
-    setLoading(true);
-    setError('');
+    const runId = ++runIdRef.current;
+    setLoading(true); setError(''); setForecast(null); setStage(null);
+    // Staged progress timers
+    const timers = STAGES.map((s, i) => setTimeout(() => {
+      if (runIdRef.current === runId) setStage(s);
+    }, STAGES.slice(0, i).reduce((a, x) => a + x.ms, 0)));
     try {
       const res: KronosForecast = await invoke('predict_with_kronos', {
         stockId: selectedStock.id,
-        days: 120,
+        days: 512,
         horizon,
       });
-      setForecast(res);
+      if (runIdRef.current === runId) setForecast(res);
     } catch (e: any) {
-      setError(typeof e === 'string' ? e : e.message || '预测失败');
+      if (runIdRef.current === runId) setError(typeof e === 'string' ? e : e.message || '预测失败');
+    } finally {
+      if (runIdRef.current === runId) { setLoading(false); setStage(null); }
+      timers.forEach(clearTimeout);
     }
-    setLoading(false);
   };
 
-  // Chart rendering
+  // Chart rendering — history area + forecast dashed line + confidence band
   useEffect(() => {
     if (!chartContainerRef.current || !forecast) return;
     if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
@@ -80,30 +109,55 @@ export default function KronosPage() {
       });
       chartRef.current = chart;
 
-      // Historical price (area)
       seriesRef.current = chart.addAreaSeries({
         topColor: 'rgba(59,130,246,0.25)', bottomColor: 'rgba(59,130,246,0.01)',
         lineColor: '#3b82f6', lineWidth: 1 as any,
       });
-
-      // Forecast (line with confidence band)
       forecastSeriesRef.current = chart.addLineSeries({
         color: '#ef4444', lineWidth: 2, lineStyle: LineStyle.Dashed,
       });
 
-      // Build data
-      const allPoints = [...forecast.history.map(p => ({ time: p.date as any, value: p.value }))];
-      const fcst = forecast.forecast.map(p => ({ time: p.date as any, value: p.value }));
-      allPoints.push(...fcst);
+      // Historical prices
+      const histData = forecast.history.map(p => ({ time: p.date as any, value: p.value }));
+      seriesRef.current.setData(histData);
 
-      seriesRef.current.setData(allPoints.slice(0, forecast.history.length));
-      forecastSeriesRef.current.setData(allPoints);
+      // Forecast — real dates computed from last history date
+      const lastHist = histData[histData.length - 1];
+      const lastDate = new Date(forecast.history[forecast.history.length - 1]?.date);
+      const fcstData = forecast.forecast.map((p, i) => {
+        const d = new Date(lastDate); d.setDate(d.getDate() + i + 1);
+        return { time: d.toISOString().slice(0, 10) as any, value: p.value, lower: p.lower, upper: p.upper };
+      });
+
+      // Forecast line: only the segment from last history point onward
+      const fcstLineData = lastHist ? [{ ...lastHist }, ...fcstData] : fcstData;
+      forecastSeriesRef.current.setData(fcstLineData);
+      if (lastHist) {
+        forecastSeriesRef.current.setMarkers([{
+          time: lastHist.time, position: 'aboveBar' as const,
+          shape: 'circle' as const, color: '#ef4444', text: '预测开始', size: 1,
+        }]);
+      }
+
+      // Confidence band: upper area + lower dotted line
+      const upper = fcstData.filter(p => p.upper != null).map(p => ({ time: p.time, value: p.upper! }));
+      const lower = fcstData.filter(p => p.lower != null).map(p => ({ time: p.time, value: p.lower! }));
+      if (upper.length > 1) {
+        chart.addAreaSeries({
+          topColor: 'rgba(239,68,68,0.12)', bottomColor: 'rgba(239,68,68,0.02)',
+          lineColor: 'transparent', lineWidth: 1,
+        }).setData(upper);
+        chart.addLineSeries({ color: 'rgba(239,68,68,0.45)', lineWidth: 1, lineStyle: LineStyle.Dotted }).setData(lower);
+      }
+
       chart.timeScale().fitContent();
     } catch (e) {
       console.error('Chart creation failed:', e);
     }
     return () => { try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
   }, [forecast]);
+
+  const isEnvError = /Python|torch|KRONOS_HOME|kronos_runner|pip install/i.test(error);
 
   return (
     <div className="h-full flex flex-col gap-2 p-2">
@@ -112,6 +166,9 @@ export default function KronosPage() {
         <button onClick={() => navigate(-1)} className="btn-ghost p-1"><ArrowLeft size={18} /></button>
         <BrainCircuit size={18} className="text-[hsl(var(--swiss-accent))]" />
         <h1 className="text-heading-sm font-bold">Kronos 时序预测</h1>
+        <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+          Kronos 深度时序模型 · 长周期趋势 + 置信区间 · 耗时约 1–5 分钟
+        </p>
       </div>
 
       <div className="flex-1 flex gap-2 overflow-hidden">
@@ -124,18 +181,19 @@ export default function KronosPage() {
               <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
                 placeholder="搜索股票..." className="input w-full pl-8 py-1 text-data-xs" />
             </div>
-            {searchText && (
-              <div className="max-h-[200px] overflow-auto space-y-0.5">
-                {filteredStocks.map((s: any) => (
-                  <div key={s.id || s.stock_id} onClick={() => { setSelectedStock({ id: s.id || s.stock_id, name: s.name, ticker: s.ticker || '' }); setSearchText(''); }}
-                    className="px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--bg-hover)] text-data-xs"
-                    style={{ background: selectedStock?.id === (s.id || s.stock_id) ? 'var(--bg-hover)' : 'transparent' }}>
-                    <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</span>
-                    <span className="ml-2 font-mono" style={{ color: 'var(--text-tertiary)' }}>{s.ticker || s.id?.split('.')[0]}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="max-h-[200px] overflow-auto space-y-0.5">
+              {visibleStocks.map((s: any) => (
+                <div key={s.id || s.stock_id} onClick={() => { setSelectedStock({ id: s.id || s.stock_id, name: s.name, ticker: s.ticker || '' }); setSearchText(''); }}
+                  className="px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--bg-hover)] text-data-xs"
+                  style={{ background: selectedStock?.id === (s.id || s.stock_id) ? 'var(--bg-hover)' : 'transparent' }}>
+                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{s.name}</span>
+                  <span className="ml-2 font-mono" style={{ color: 'var(--text-tertiary)' }}>{s.ticker || s.id?.split('.')[0]}</span>
+                </div>
+              ))}
+              {visibleStocks.length === 0 && (
+                <div className="text-data-xs py-3 text-center" style={{ color: 'var(--text-tertiary)' }}>未找到匹配股票</div>
+              )}
+            </div>
           </div>
 
           {/* Selected stock info */}
@@ -162,6 +220,7 @@ export default function KronosPage() {
 
           {/* Run button */}
           <button onClick={runForecast} disabled={!selectedStock || loading}
+            title={!selectedStock ? '请先选择一只股票' : undefined}
             className="btn-primary w-full flex items-center justify-center gap-2 mt-auto">
             {loading ? <RefreshCw size={14} className="animate-spin" /> : <BrainCircuit size={14} />}
             {loading ? '预测中...' : '运行 Kronos 预测'}
@@ -170,11 +229,28 @@ export default function KronosPage() {
 
         {/* Right panel */}
         <div className="flex-1 flex flex-col gap-2 overflow-hidden">
+          {/* Error card */}
           {error && (
-            <div className="px-3 py-2 rounded text-data-xs" style={{ background: 'var(--price-down-bg)', color: 'hsl(var(--price-down))' }}>{error}</div>
+            <div className="glass-card-flat p-3 space-y-2 border-l-4"
+              style={{ borderColor: 'hsl(var(--risk-danger))', background: 'hsl(var(--price-down-bg) / 0.35)' }}>
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={15} style={{ color: 'hsl(var(--risk-danger))' }} />
+                <span className="text-data-sm font-bold" style={{ color: 'hsl(var(--risk-danger))' }}>预测失败</span>
+                <button onClick={runForecast} disabled={loading}
+                  className="ml-auto btn-primary text-data-xs px-3 py-1">重试</button>
+              </div>
+              <pre className="text-data-xs font-mono whitespace-pre-wrap break-all max-h-44 overflow-auto"
+                style={{ color: 'var(--text-secondary)' }}>{error}</pre>
+              {isEnvError && (
+                <p className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  环境提示：需 Python 3.10+，执行 <code>pip install torch pandas numpy transformers</code>，
+                  并配置 KRONOS_HOME 指向 Kronos 目录。
+                </p>
+              )}
+            </div>
           )}
 
-          {!forecast && !loading && (
+          {!forecast && !loading && !error && (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center" style={{ color: 'var(--text-tertiary)' }}>
                 <BrainCircuit size={48} className="mx-auto mb-2 opacity-30" />
@@ -183,12 +259,22 @@ export default function KronosPage() {
             </div>
           )}
 
+          {/* Loading: staged progress + cancel */}
           {loading && (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="flex items-center gap-2">
-                <RefreshCw size={16} className="animate-spin text-[hsl(var(--swiss-accent))]" />
-                <span className="text-data-sm" style={{ color: 'var(--text-tertiary)' }}>计算预测中...</span>
+            <div className="flex-1 flex flex-col items-center justify-center gap-4">
+              <div className="h-16 w-16 rounded-full border-2 animate-spin"
+                style={{ borderColor: 'var(--border-default)', borderTopColor: 'hsl(var(--swiss-accent))' }} />
+              <div className="text-center space-y-2">
+                <p className="text-data-sm" style={{ color: 'var(--text-primary)' }}>{stage?.label ?? '计算预测中...'}</p>
+                <div className="w-72 h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
+                  <div className="h-full transition-all duration-700" style={{ width: `${stage?.pct ?? 8}%`, background: 'hsl(var(--swiss-accent))' }} />
+                </div>
+                <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                  模型推理通常需要 1–5 分钟，请勿关闭窗口；预测天数越大耗时越长
+                </p>
               </div>
+              <button onClick={() => { runIdRef.current++; setLoading(false); setStage(null); }}
+                className="btn-secondary text-data-xs">取消预测</button>
             </div>
           )}
 

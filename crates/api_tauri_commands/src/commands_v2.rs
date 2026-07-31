@@ -608,17 +608,26 @@ pub async fn predict_with_kronos(
     days: u32,
     horizon: u32,
 ) -> Result<kronos_predictor::KronosForecast, String> {
+    // Clamp days to Kronos max_context bounds
+    let days = days.clamp(64, 512);
     let history = state.data_service.get_stock_history(&stock_id, days, "day")
         .await
         .map_err(|e| format!("获取历史数据失败: {}", e))?;
     if history.is_empty() {
         return Err("暂无历史数据".into());
     }
-    let prices: Vec<f64> = history.iter().map(|q| q.close.to_f64().unwrap_or(0.0)).collect();
+    // Pass real OHLCV (no fake data)
+    let opens: Vec<f64> = history.iter().map(|q| q.open.to_f64().unwrap_or(0.0)).collect();
+    let highs: Vec<f64> = history.iter().map(|q| q.high.to_f64().unwrap_or(0.0)).collect();
+    let lows: Vec<f64> = history.iter().map(|q| q.low.to_f64().unwrap_or(0.0)).collect();
+    let closes: Vec<f64> = history.iter().map(|q| q.close.to_f64().unwrap_or(0.0)).collect();
     let volumes: Vec<u64> = history.iter().map(|q| q.volume).collect();
     let dates: Vec<String> = history.iter().map(|q| q.date.to_string()).collect();
 
-    kronos_predictor::run_kronos_predict(&prices, &volumes, &dates, horizon as usize, "NeoQuasar/Kronos-small")
+    kronos_predictor::run_kronos_predict(
+        &opens, &highs, &lows, &closes, &volumes, &dates,
+        horizon as usize, "NeoQuasar/Kronos-small",
+    ).await
 }
 
 #[tauri::command]
