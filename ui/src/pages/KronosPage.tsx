@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, Channel } from '@tauri-apps/api/core';
 import { BrainCircuit, Search, ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useStockList } from '@/hooks/useTauriQuery';
 import { createChart, IChartApi, ISeriesApi, LineStyle } from 'lightweight-charts';
@@ -21,12 +21,17 @@ interface KronosForecast {
   expected_return: number;
 }
 
-// Simulated staged progress for long-running model inference
-const STAGES = [
-  { label: '获取历史行情数据', pct: 12, ms: 1000 },
-  { label: '初始化 Kronos 模型（首次需下载权重）', pct: 45, ms: 8000 },
-  { label: '推理预测中（PyTorch 计算）', pct: 80, ms: 8000 },
-];
+interface KronosHistoryItem {
+  id: number;
+  created_at: string;
+  result: KronosForecast;
+}
+
+// Real-time progress pushed from Rust (parsed from Python subprocess stderr)
+interface KronosProgress {
+  stage: string;
+  pct: number;
+}
 
 export default function KronosPage() {
   const navigate = useNavigate();
@@ -35,6 +40,8 @@ export default function KronosPage() {
   const [searchText, setSearchText] = useState('');
   const [selectedStock, setSelectedStock] = useState<{ id: string; name: string; ticker: string } | null>(null);
   const [forecast, setForecast] = useState<KronosForecast | null>(null);
+  const [history, setHistory] = useState<KronosHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [horizon, setHorizon] = useState(10);
@@ -58,6 +65,18 @@ export default function KronosPage() {
 
   const isAShare = (id: string) => id.endsWith('.SH') || id.endsWith('.SZ');
 
+  // Load prediction history when selected stock changes
+  useEffect(() => {
+    if (!selectedStock?.id) { setHistory([]); return; }
+    let cancelled = false;
+    setHistoryLoading(true);
+    invoke('get_kronos_history', { stockId: selectedStock.id })
+      .then((items: any) => { if (!cancelled) setHistory(items || []); })
+      .catch(() => { if (!cancelled) setHistory([]); })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedStock?.id]);
+
   // Show default list when no search text
   const visibleStocks = searchText.trim()
     ? (stockList || []).filter((s: any) => {
@@ -75,22 +94,28 @@ export default function KronosPage() {
     if (!selectedStock) return;
     const runId = ++runIdRef.current;
     setLoading(true); setError(''); setForecast(null); setStage(null);
-    // Staged progress timers
-    const timers = STAGES.map((s, i) => setTimeout(() => {
-      if (runIdRef.current === runId) setStage(s);
-    }, STAGES.slice(0, i).reduce((a, x) => a + x.ms, 0)));
+    // Real progress from Python via Rust: channel events drive the progress bar
+    const progressChannel = new Channel<KronosProgress>();
+    progressChannel.onmessage = (msg) => {
+      if (runIdRef.current === runId) setStage({ label: msg.stage, pct: msg.pct });
+    };
     try {
       const res: KronosForecast = await invoke('predict_with_kronos', {
         stockId: selectedStock.id,
         days: 512,
         horizon,
+        onProgress: progressChannel,
       });
       if (runIdRef.current === runId) setForecast(res);
+      // The forecast was just persisted on the backend — refresh history list
+      try {
+        const items: KronosHistoryItem[] = await invoke('get_kronos_history', { stockId: selectedStock.id });
+        if (runIdRef.current === runId) setHistory(items || []);
+      } catch { /* keep existing history on refresh failure */ }
     } catch (e: any) {
       if (runIdRef.current === runId) setError(typeof e === 'string' ? e : e.message || '预测失败');
     } finally {
       if (runIdRef.current === runId) { setLoading(false); setStage(null); }
-      timers.forEach(clearTimeout);
     }
   };
 
@@ -218,10 +243,46 @@ export default function KronosPage() {
             </div>
           </div>
 
+          {/* Prediction history */}
+          <div className="glass-card-flat p-2 flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="text-data-xs font-bold mb-1" style={{ color: 'var(--text-secondary)' }}>
+              预测历史 {history.length > 0 && `(${history.length})`}
+            </div>
+            <div className="flex-1 overflow-auto space-y-1 min-h-0">
+              {historyLoading && (
+                <div className="text-data-xs py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>加载中...</div>
+              )}
+              {!historyLoading && history.length === 0 && (
+                <div className="text-data-xs py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>暂无历史预测</div>
+              )}
+              {history.map((h: KronosHistoryItem) => {
+                const r = h.result;
+                const dirColor = r.signal === 'up' ? 'hsl(var(--price-up))' : r.signal === 'down' ? 'hsl(var(--price-down))' : 'hsl(var(--risk-warning))';
+                const dirLabel = r.signal === 'up' ? '涨' : r.signal === 'down' ? '跌' : '震荡';
+                return (
+                  <div key={h.id} onClick={() => setForecast(r)}
+                    className="px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--bg-hover)] text-data-xs"
+                    style={{ border: '1px solid var(--border-subtle)' }}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono" style={{ color: 'var(--text-tertiary)' }}>{h.created_at?.slice(0, 10)}</span>
+                      <span className="font-bold" style={{ color: dirColor }}>{dirLabel}</span>
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span style={{ color: 'var(--text-tertiary)' }}>预期</span>
+                      <span className="font-mono-nums font-bold" style={{ color: r.expected_return >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>
+                        {r.expected_return >= 0 ? '+' : ''}{r.expected_return.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Run button */}
           <button onClick={runForecast} disabled={!selectedStock || loading}
             title={!selectedStock ? '请先选择一只股票' : undefined}
-            className="btn-primary w-full flex items-center justify-center gap-2 mt-auto">
+            className="btn-primary w-full flex items-center justify-center gap-2 shrink-0">
             {loading ? <RefreshCw size={14} className="animate-spin" /> : <BrainCircuit size={14} />}
             {loading ? '预测中...' : '运行 Kronos 预测'}
           </button>

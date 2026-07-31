@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::OnceLock;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
+use tokio::sync::Mutex;
 
 pub const MIN_PYTHON_VERSION: &str = "3.10";
 
@@ -23,8 +27,126 @@ pub struct KronosForecast {
     pub expected_return: f64,
 }
 
-/// Run the Kronos Python model via subprocess.
+/// Real-time progress pushed from the Python subprocess to the frontend
+/// via a Tauri Channel (`{"stage": ..., "pct": ...}` on stderr).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KronosProgress {
+    pub stage: String,
+    pub pct: u32,
+}
+
+// ============================================================================
+// 常驻 Python worker
+//
+// 单个 Python 子进程持有模型常驻内存：首次调用 spawn，之后复用；
+// 进程崩溃后下次调用自动重启；全局 Mutex 保证同一时刻只有一个请求，
+// 避免快速连点启动多个 torch 进程（各占 1.5-3GB 内存）。
+// ============================================================================
+
+const FRESH_SPAWN_TIMEOUT_SECS: u64 = 600; // 首次启动含模型加载/下载，放宽到 10 分钟
+const WARM_TIMEOUT_SECS: u64 = 120; // 模型已加载，正常应秒级；120s 足够且防卡死
+const PYTHON_CMD: &str = "python";
+
+struct KronosWorker {
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+    stdout: Option<BufReader<ChildStdout>>,
+    stderr: Option<BufReader<ChildStderr>>,
+    runner_script: String,
+    kronos_home: String,
+}
+
+fn worker() -> &'static Mutex<KronosWorker> {
+    static WORKER: OnceLock<Mutex<KronosWorker>> = OnceLock::new();
+    WORKER.get_or_init(|| {
+        Mutex::new(KronosWorker {
+            child: None,
+            stdin: None,
+            stdout: None,
+            stderr: None,
+            runner_script: String::new(),
+            kronos_home: String::new(),
+        })
+    })
+}
+
+/// spawn 一个新的 Python worker 进程，接管其 stdin/stdout/stderr。
+async fn spawn_worker(guard: &mut KronosWorker) -> Result<(), String> {
+    let mut child = Command::new(PYTHON_CMD)
+        .arg(&guard.runner_script)
+        .env("KRONOS_HOME", &guard.kronos_home)
+        .current_dir(&guard.kronos_home)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!(
+                    "找不到 Python。请安装 Python {} 并安装依赖:\n\
+                     pip install torch pandas numpy transformers huggingface-hub\n\
+                     然后下载模型: https://huggingface.co/NeoQuasar/Kronos-small",
+                    MIN_PYTHON_VERSION
+                )
+            } else {
+                format!("Python执行失败: {}", e)
+            }
+        })?;
+
+    guard.stdin = child.stdin.take();
+    guard.stdout = child.stdout.take().map(BufReader::new);
+    guard.stderr = child.stderr.take().map(BufReader::new);
+    guard.child = Some(child);
+    Ok(())
+}
+
+/// 丢弃 worker 持有的进程与管道，并强杀残留子进程。
+async fn reset_worker(guard: &mut KronosWorker) {
+    let mut child = guard.child.take();
+    guard.stdin.take();
+    guard.stdout = None;
+    guard.stderr = None;
+    if let Some(mut c) = child {
+        let _ = c.kill().await;
+        let _ = c.wait().await;
+    }
+}
+
+/// 进程已退出时读取其 stderr 残留内容用于诊断（进程已死，read 不会阻塞）。
+async fn read_stderr(guard: &mut KronosWorker) -> String {
+    if let Some(mut err) = guard.stderr.take() {
+        let mut buf = Vec::new();
+        if err.read_to_end(&mut buf).await.is_ok() {
+            return String::from_utf8_lossy(&buf).to_string();
+        }
+    }
+    String::new()
+}
+
+/// 确保 worker 进程存活。返回 true 表示本次调用刚完成 spawn（含模型加载）。
+async fn ensure_alive(guard: &mut KronosWorker) -> Result<bool, String> {
+    if let Some(child) = guard.child.as_mut() {
+        match child.try_wait() {
+            Ok(None) => return Ok(false), // 进程存活，直接复用
+            _ => {
+                // 已退出或无法检查：清理，下面重新 spawn（崩溃自动重启）
+                guard.child = None;
+                guard.stdin = None;
+                guard.stdout = None;
+                guard.stderr = None;
+            }
+        }
+    }
+    spawn_worker(guard).await?;
+    Ok(true)
+}
+
+/// Run the Kronos Python model via a resident subprocess.
 /// Input: OHLCV data as CSV, Output: JSON forecast.
+///
+/// `progress` (optional) receives real-time `KronosProgress` events parsed
+/// from the Python process's stderr JSON lines.
 pub async fn run_kronos_predict(
     opens: &[f64],
     highs: &[f64],
@@ -34,6 +156,7 @@ pub async fn run_kronos_predict(
     dates: &[String],
     horizon: usize,
     model_name: &str,
+    progress: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<KronosForecast, String> {
     // Build input JSON for the Python script — real OHLCV (no fake data)
     let input_data = serde_json::json!({
@@ -49,78 +172,84 @@ pub async fn run_kronos_predict(
         },
         "timestamps": dates,
     });
-
-    // Try to find kronos_runner.py in the project
-    let runner_script = find_runner_script()?;
-    let kronos_home = find_kronos_home();
     let input_json = serde_json::to_string(&input_data)
         .map_err(|e| format!("JSON序列化失败: {}", e))?;
 
-    // Use python (Python 3.14 with working torch) — python3 may have broken deps
-    let python_cmd = "python";
+    // 全局并发锁：同一时刻只有一个请求进出 worker 进程
+    let result_json: serde_json::Value = {
+        let mut guard = worker().lock().await;
 
-    let mut child = tokio::process::Command::new(python_cmd)
-        .arg(&runner_script)
-        .arg(&input_json)
-        .env("KRONOS_HOME", &kronos_home)
-        .current_dir(&kronos_home)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                format!(
-                    "找不到 Python。请安装 Python {} 并安装依赖:\n\
-                     pip install torch pandas numpy transformers\n\
-                     然后下载模型: https://huggingface.co/NeoQuasar/Kronos-small",
-                    MIN_PYTHON_VERSION
-                )
-            } else {
-                format!("Python执行失败: {}", e)
+        // 首次调用时解析脚本/仓库路径
+        if guard.runner_script.is_empty() {
+            guard.runner_script = find_runner_script()?;
+            guard.kronos_home = find_kronos_home();
+        }
+
+        // 进程不存在或已崩溃：spawn（并触发 Python 侧一次性模型加载）
+        let is_fresh = ensure_alive(&mut guard).await?;
+
+        // 进度节点：模型加载 / 推理中 / 完成
+        let _ = progress.send(serde_json::json!({
+            "stage": if is_fresh { "初始化 Kronos 模型（首次需加载权重）" } else { "模型已就绪" },
+            "pct": if is_fresh { 40 } else { 60 },
+        }));
+
+        // 写一行请求到 stdin
+        {
+            let stdin = guard.stdin.as_mut().ok_or("Kronos 进程未初始化")?;
+            let req_line = format!("{}\n", input_json);
+            stdin
+                .write_all(req_line.as_bytes())
+                .await
+                .map_err(|e| format!("写入 Kronos 请求失败: {}", e))?;
+            stdin
+                .flush()
+                .await
+                .map_err(|e| format!("刷新 Kronos 输入失败: {}", e))?;
+        }
+
+        let _ = progress.send(serde_json::json!({
+            "stage": "推理预测中（PyTorch 计算）",
+            "pct": 80,
+        }));
+
+        // 读一行响应（带超时；超时则重置进程，下次调用自动重启）。
+        let (line, timed_out) = {
+            let stdout = guard.stdout.as_mut().ok_or("Kronos 进程 stdout 未初始化")?;
+            let mut line = String::new();
+            let timeout_secs = if is_fresh { FRESH_SPAWN_TIMEOUT_SECS } else { WARM_TIMEOUT_SECS };
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(timeout_secs),
+                stdout.read_line(&mut line),
+            ).await {
+                Ok(Ok(_)) => (line, false),
+                Ok(Err(e)) => return Err(format!("读取 Kronos 输出失败: {}", e)),
+                Err(_) => (line, true),
             }
-        })?;
+        };
 
-    // Timeout: model first-load/download may take up to 10 min
-    use tokio::io::AsyncReadExt;
-    let (status, stdout_bytes, stderr_bytes) = tokio::select! {
-        status = child.wait() => {
-            let mut out = Vec::new();
-            let mut err = Vec::new();
-            if let Some(stdout) = child.stdout.as_mut() { let _ = stdout.read_to_end(&mut out).await; }
-            if let Some(stderr) = child.stderr.as_mut() { let _ = stderr.read_to_end(&mut err).await; }
-            (status, out, err)
+        if timed_out {
+            reset_worker(&mut guard).await;
+            return Err("Kronos 预测超时。进程已重置，请重试。".into());
         }
-        _ = tokio::time::sleep(std::time::Duration::from_secs(600)) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err("Kronos 预测超时(10分钟)。可能是首次下载模型或网络不可达，请重试。".into());
+        if line.trim().is_empty() {
+            // stdout EOF：worker 进程意外退出
+            let stderr_text = read_stderr(&mut guard).await;
+            reset_worker(&mut guard).await;
+            return Err(format!("Kronos 进程意外退出:\n{}", stderr_text));
         }
+
+        serde_json::from_str::<serde_json::Value>(&line)
+            .map_err(|e| format!("解析预测结果失败: {}。stdout: {}", e, line))?
     };
 
-    // On failure, prefer the structured error from the script's stdout
-    let exit_ok = match &status {
-        Ok(s) => s.success(),
-        Err(e) => return Err(format!("Python执行失败: {}", e)),
-    };
-    if !exit_ok {
-        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&stdout_bytes) {
-            if let Some(msg) = v.get("error").and_then(|x| x.as_str()) {
-                return Err(format!("Kronos 预测失败: {}", msg));
-            }
-        }
-        let stderr = String::from_utf8_lossy(&stderr_bytes).to_string();
-        let stdout_text = String::from_utf8_lossy(&stdout_bytes).to_string();
-        return Err(format!("Kronos预测失败:\nSTDERR: {}\nSTDOUT: {}", stderr, stdout_text));
+    // worker 返回结构化错误
+    if let Some(msg) = result_json.get("error").and_then(|x| x.as_str()) {
+        return Err(format!("Kronos 预测失败: {}", msg));
     }
 
-    let stdout = String::from_utf8_lossy(&stdout_bytes).to_string();
-    let result: serde_json::Value = serde_json::from_str(&stdout).map_err(|e| {
-        let preview: String = stdout.chars().take(800).collect();
-        format!("解析预测结果失败: {}。stdout前800字符: {}", e, preview)
-    })?;
-
     // Build response
-    let pred_values: Vec<f64> = result["forecast"]
+    let pred_values: Vec<f64> = result_json["forecast"]
         .as_array()
         .map(|arr| arr.iter().map(|v| v.as_f64().unwrap_or(0.0)).collect())
         .unwrap_or_default();

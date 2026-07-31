@@ -9,7 +9,7 @@ serde_json = "1"
 domain = { path = "../domain" }
 data_fetcher = { path = "../data_fetcher" }
 tauri = { version = "2", features = [] }
-tokio = { version = "1", features = ["process", "time", "sync"] }
+tokio = { version = "1", features = ["process", "time", "sync", "io-util", "macros"] }
 
 [lib]
 name = "kronos_predictor"

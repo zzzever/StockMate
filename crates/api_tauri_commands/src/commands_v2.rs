@@ -607,6 +607,7 @@ pub async fn predict_with_kronos(
     stock_id: String,
     days: u32,
     horizon: u32,
+    on_progress: tauri::ipc::Channel<serde_json::Value>,
 ) -> Result<kronos_predictor::KronosForecast, String> {
     // Clamp days to Kronos max_context bounds
     let days = days.clamp(64, 512);
@@ -624,10 +625,45 @@ pub async fn predict_with_kronos(
     let volumes: Vec<u64> = history.iter().map(|q| q.volume).collect();
     let dates: Vec<String> = history.iter().map(|q| q.date.to_string()).collect();
 
-    kronos_predictor::run_kronos_predict(
+    let result = kronos_predictor::run_kronos_predict(
         &opens, &highs, &lows, &closes, &volumes, &dates,
         horizon as usize, "NeoQuasar/Kronos-small",
-    ).await
+        on_progress,
+    ).await?;
+
+    // Persist the forecast into prediction_history (model = 'kronos') so users
+    // can review past predictions. Persistence failure must not fail the call.
+    if let Ok(result_json) = serde_json::to_string(&result) {
+        if let Err(e) = storage::save_kronos_prediction_history(&state.db_pool, &stock_id, &result_json).await {
+            tracing::warn!("[CMD] predict_with_kronos: 保存预测历史失败: {}", e);
+        }
+    }
+
+    Ok(result)
+}
+
+/// Kronos forecast history for a stock (newest 20), each item:
+/// `{ "id": i64, "created_at": string, "result": KronosForecast }`.
+#[tauri::command]
+pub async fn get_kronos_history(
+    state: State<'_, AppState>,
+    stock_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    validate_stock_id(&stock_id).map_err(|e| e.message)?;
+    let rows = storage::get_kronos_prediction_history(&state.db_pool, &stock_id)
+        .await
+        .map_err(|e| format!("获取 Kronos 预测历史失败: {}", e))?;
+    let mut out = Vec::with_capacity(rows.len());
+    for (id, created_at, result_json) in rows {
+        let result: serde_json::Value = serde_json::from_str(&result_json)
+            .unwrap_or(serde_json::Value::Null);
+        out.push(serde_json::json!({
+            "id": id,
+            "created_at": created_at,
+            "result": result,
+        }));
+    }
+    Ok(out)
 }
 
 #[tauri::command]

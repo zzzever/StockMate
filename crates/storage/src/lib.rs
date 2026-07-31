@@ -24,6 +24,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0007_add_prediction_history.sql"),
         include_str!("../migrations/0008_add_screener_results.sql"),
         include_str!("../migrations/0009_add_screener_strategies.sql"),
+        include_str!("../migrations/0010_add_model_to_prediction_history.sql"),
     ];
     for mig in migrations {
         // Wrap each migration file in a transaction for atomicity
@@ -95,6 +96,46 @@ pub async fn delete_prediction_history(pool: &DbPool, stock_id: &str, date: &str
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Save a Kronos forecast into `prediction_history` (model = 'kronos').
+/// Reuses the same table as DeepSeek, distinguished by the `model` column.
+/// The `date` column is set to today (local time) so history lists stay tidy;
+/// note the table's UNIQUE(stock_id, date) means a DeepSeek + Kronos forecast
+/// for the same stock on the same day will overwrite each other.
+pub async fn save_kronos_prediction_history(
+    pool: &DbPool,
+    stock_id: &str,
+    result_json: &str,
+) -> Result<()> {
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    sqlx::query(
+        "INSERT OR REPLACE INTO prediction_history (stock_id, date, prediction_json, model) VALUES (?1, ?2, ?3, 'kronos')"
+    )
+    .bind(stock_id)
+    .bind(&date)
+    .bind(result_json)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Latest Kronos forecasts for a stock (newest first, capped at 20).
+/// Returns (id, created_at, result_json).
+pub async fn get_kronos_prediction_history(pool: &DbPool, stock_id: &str) -> Result<Vec<(i64, String, String)>> {
+    #[derive(Debug, sqlx::FromRow)]
+    struct Row {
+        id: i64,
+        created_at: String,
+        prediction_json: String,
+    }
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT id, created_at, prediction_json FROM prediction_history WHERE stock_id = ?1 AND model = 'kronos' ORDER BY created_at DESC, id DESC LIMIT 20"
+    )
+    .bind(stock_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.id, r.created_at, r.prediction_json)).collect())
 }
 
 pub async fn save_screener_result(
