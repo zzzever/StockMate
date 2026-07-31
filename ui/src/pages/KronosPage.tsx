@@ -124,13 +124,15 @@ export default function KronosPage() {
     if (!chartContainerRef.current || !forecast) return;
     if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
     try {
-      const chart = createChart(chartContainerRef.current, {
+      const container = chartContainerRef.current;
+      const chart = createChart(container, {
+        width: container.clientWidth || 600,
+        height: container.clientHeight || 320,
         layout: { background: { color: 'transparent' }, textColor: '#8b8b8b', attributionLogo: false },
         grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
         crosshair: { mode: 1 },
         rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
         timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true },
-        autoSize: true,
       });
       chartRef.current = chart;
 
@@ -176,10 +178,25 @@ export default function KronosPage() {
       }
 
       chart.timeScale().fitContent();
+
+      // Handle window resize (autoSize unreliable in Tauri WebView)
+      const onResize = () => {
+        try {
+          chart.applyOptions({
+            width: container.clientWidth || 600,
+            height: container.clientHeight || 320,
+          });
+        } catch (_) {}
+      };
+      window.addEventListener('resize', onResize);
+      return () => {
+        window.removeEventListener('resize', onResize);
+        try { chart.remove(); } catch (_) {}
+        chartRef.current = null;
+      };
     } catch (e) {
       console.error('Chart creation failed:', e);
     }
-    return () => { try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
   }, [forecast]);
 
   const isEnvError = /Python|torch|KRONOS_HOME|kronos_runner|pip install/i.test(error);
