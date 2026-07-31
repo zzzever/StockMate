@@ -109,7 +109,6 @@ function KronosChart({ forecast }: { forecast: KronosForecast }) {
     const curStart = view?.start ?? 0;
     const curEnd = view?.end ?? N - 1;
     dragRef.current = { x0: e.clientX, start0: curStart };
-    (e.currentTarget as SVGSVGElement).setPointerCapture?.((e as any).pointerId);
   };
   const onMouseMove = (e: React.MouseEvent) => {
     if (!dragRef.current) return;
