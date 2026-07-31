@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { BrainCircuit, Search, ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useStockList } from '@/hooks/useTauriQuery';
-import { createChart, IChartApi, ISeriesApi, LineStyle } from 'lightweight-charts';
 
 interface ForecastPoint {
   date: string;
@@ -27,6 +26,84 @@ interface KronosHistoryItem {
   result: KronosForecast;
 }
 
+// Pure SVG line chart — history (blue) + forecast (red dashed) + confidence band.
+// Avoids lightweight-charts issues in Tauri WebView2.
+function KronosChart({ forecast }: { forecast: KronosForecast }) {
+  const W = 780;
+  const H = 280;
+  const PAD = { top: 16, right: 64, bottom: 24, left: 8 };
+
+  const all = [
+    ...forecast.history.map(p => ({ x: p.date, y: p.value, kind: 'hist' as const })),
+    ...forecast.forecast.map((p, i) => ({
+      x: `f${i + 1}`, y: p.value,
+      lower: p.lower ?? p.value, upper: p.upper ?? p.value, kind: 'fcst' as const,
+    })),
+  ];
+
+  const ys = all.map(d => d.y);
+  const lows = all.filter((d: any) => d.lower != null).map((d: any) => d.lower);
+  const highs = all.filter((d: any) => d.upper != null).map((d: any) => d.upper);
+  const min = Math.min(...ys, ...lows);
+  const max = Math.max(...ys, ...highs);
+  const range = (max - min) || 1;
+  const padY = range * 0.15;
+
+  const xAt = (i: number) => PAD.left + (i / Math.max(all.length - 1, 1)) * (W - PAD.left - PAD.right);
+  const yAt = (v: number) => PAD.top + (1 - (v - (min - padY)) / (range + 2 * padY)) * (H - PAD.top - PAD.bottom);
+
+  const histPts = forecast.history.map((_, i) => `${xAt(i)},${yAt(all[i].y)}`).join(' ');
+  const fcstPts = all.slice(forecast.history.length).map((_, i) =>
+    `${xAt(forecast.history.length + i)},${yAt(all[forecast.history.length + i].y)}`).join(' ');
+
+  // Confidence band polygon (forecast only)
+  const fcstStart = forecast.history.length;
+  const bandPts: string[] = [];
+  for (let i = fcstStart; i < all.length; i++) {
+    const d = all[i] as any;
+    if (d.upper != null) bandPts.push(`${xAt(i)},${yAt(d.upper)}`);
+  }
+  for (let i = all.length - 1; i >= fcstStart; i--) {
+    const d = all[i] as any;
+    if (d.lower != null) bandPts.push(`${xAt(i)},${yAt(d.lower)}`);
+  }
+
+  // Grid lines
+  const gridYs = [0.25, 0.5, 0.75].map(f => PAD.top + f * (H - PAD.top - PAD.bottom));
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" preserveAspectRatio="none">
+      {gridYs.map((gy, i) => (
+        <line key={i} x1={PAD.left} x2={W - PAD.right} y1={gy} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+      ))}
+      {bandPts.length > 2 && (
+        <polygon points={bandPts.join(' ')} fill="rgba(239,68,68,0.10)" stroke="none" />
+      )}
+      <polyline points={histPts} fill="none" stroke="#3b82f6" strokeWidth="1.8" />
+      {fcstPts && (
+        <polyline points={fcstPts} fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" />
+      )}
+      {/* Last history point → forecast start connector */}
+      {forecast.history.length > 0 && forecast.forecast.length > 0 && (
+        <line x1={xAt(fcstStart - 1)} x2={xAt(fcstStart)} y1={yAt(all[fcstStart - 1].y)} y2={yAt(all[fcstStart].y)}
+          stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" />
+      )}
+      {/* Forecast start marker */}
+      {fcstStart < all.length && (
+        <circle cx={xAt(fcstStart)} cy={yAt(all[fcstStart].y)} r="4" fill="#ef4444" />
+      )}
+      {/* Y-axis labels */}
+      {[0, 0.5, 1].map(f => {
+        const v = min - padY + (1 - f) * (range + 2 * padY);
+        return (
+          <text key={f} x={W - PAD.right + 4} y={PAD.top + f * (H - PAD.top - PAD.bottom) + 3}
+            fontSize="10" fill="#8b8b8b">{v.toFixed(2)}</text>
+        );
+      })}
+    </svg>
+  );
+}
+
 // Real-time progress pushed from Rust (parsed from Python subprocess stderr)
 interface KronosProgress {
   stage: string;
@@ -46,12 +123,7 @@ export default function KronosPage() {
   const [error, setError] = useState('');
   const [horizon, setHorizon] = useState(10);
   const [stage, setStage] = useState<{ label: string; pct: number } | null>(null);
-  const [chartError, setChartError] = useState('');
   const runIdRef = useRef(0);
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
-  const forecastSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
 
   const codeParam = searchParams.get('code') || '';
 
@@ -120,91 +192,7 @@ export default function KronosPage() {
     }
   };
 
-  // Chart rendering — history area + forecast dashed line + confidence band
-  useEffect(() => {
-    if (!chartContainerRef.current || !forecast) return;
-    if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
-    try {
-      const container = chartContainerRef.current;
-      // Diagnostic: surface data stats + render errors on the page (devtools unavailable)
-      const diag = `history=${forecast.history?.length ?? '?'} forecast=${forecast.forecast?.length ?? '?'} w=${container.clientWidth} h=${container.clientHeight}`;
-      try {
-        container.dataset.diag = diag;
-      } catch (_) {}
-      const chart = createChart(container, {
-        width: Math.max(container.clientWidth || 600, 400),
-        height: Math.max(container.clientHeight || 320, 200),
-        layout: { background: { color: 'transparent' }, textColor: '#8b8b8b', attributionLogo: false },
-        grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
-        crosshair: { mode: 1 },
-        rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
-        timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true },
-      });
-      chartRef.current = chart;
 
-      seriesRef.current = chart.addAreaSeries({
-        topColor: 'rgba(59,130,246,0.25)', bottomColor: 'rgba(59,130,246,0.01)',
-        lineColor: '#3b82f6', lineWidth: 1 as any,
-      });
-      forecastSeriesRef.current = chart.addLineSeries({
-        color: '#ef4444', lineWidth: 2, lineStyle: LineStyle.Dashed,
-      });
-
-      // Historical prices
-      const histData = forecast.history.map(p => ({ time: p.date as any, value: p.value }));
-      seriesRef.current.setData(histData);
-
-      // Forecast — real dates computed from last history date
-      const lastHist = histData[histData.length - 1];
-      const lastDate = new Date(forecast.history[forecast.history.length - 1]?.date);
-      const fcstData = forecast.forecast.map((p, i) => {
-        const d = new Date(lastDate); d.setDate(d.getDate() + i + 1);
-        return { time: d.toISOString().slice(0, 10) as any, value: p.value, lower: p.lower, upper: p.upper };
-      });
-
-      // Forecast line: only the segment from last history point onward
-      const fcstLineData = lastHist ? [{ ...lastHist }, ...fcstData] : fcstData;
-      forecastSeriesRef.current.setData(fcstLineData);
-      if (lastHist) {
-        forecastSeriesRef.current.setMarkers([{
-          time: lastHist.time, position: 'aboveBar' as const,
-          shape: 'circle' as const, color: '#ef4444', text: '预测开始', size: 1,
-        }]);
-      }
-
-      // Confidence band: upper area + lower dotted line
-      const upper = fcstData.filter(p => p.upper != null).map(p => ({ time: p.time, value: p.upper! }));
-      const lower = fcstData.filter(p => p.lower != null).map(p => ({ time: p.time, value: p.lower! }));
-      if (upper.length > 1) {
-        chart.addAreaSeries({
-          topColor: 'rgba(239,68,68,0.12)', bottomColor: 'rgba(239,68,68,0.02)',
-          lineColor: 'transparent', lineWidth: 1,
-        }).setData(upper);
-        chart.addLineSeries({ color: 'rgba(239,68,68,0.45)', lineWidth: 1, lineStyle: LineStyle.Dotted }).setData(lower);
-      }
-
-      chart.timeScale().fitContent();
-
-      // Handle window resize (autoSize unreliable in Tauri WebView)
-      const onResize = () => {
-        try {
-          chart.applyOptions({
-            width: container.clientWidth || 600,
-            height: container.clientHeight || 320,
-          });
-        } catch (_) {}
-      };
-      window.addEventListener('resize', onResize);
-      return () => {
-        window.removeEventListener('resize', onResize);
-        try { chart.remove(); } catch (_) {}
-        chartRef.current = null;
-      };
-    } catch (e) {
-      console.error('Chart creation failed:', e);
-      setChartError(String(e));
-    }
-  }, [forecast]);
 
   const isEnvError = /Python|torch|KRONOS_HOME|kronos_runner|pip install/i.test(error);
 
@@ -390,17 +378,14 @@ export default function KronosPage() {
                 </span>
               </div>
 
-              {/* Chart */}
-              <div className="flex-1 min-h-[320px] glass-card-flat p-2" ref={chartContainerRef} />
+              {/* Chart — pure SVG (no lightweight-charts dependency) */}
+              <div className="flex-1 min-h-[320px] glass-card-flat p-1 overflow-hidden">
+                <KronosChart forecast={forecast} />
+              </div>
               <div className="text-[10px] px-1 flex items-center justify-between shrink-0" style={{ color: 'var(--text-tertiary)' }}>
                 <span>历史 {forecast.history?.length ?? 0} 条 · 预测 {forecast.forecast?.length ?? 0} 条</span>
                 <span className="font-mono">{forecast.signal}</span>
               </div>
-              {chartError && (
-                <div className="text-[10px] px-2 py-1 rounded shrink-0" style={{ background: 'hsl(var(--price-down-bg))', color: 'hsl(var(--risk-danger))' }}>
-                  图表渲染错误: {chartError}
-                </div>
-              )}
 
               {/* Features */}
               <div className="glass-card-flat p-2">
