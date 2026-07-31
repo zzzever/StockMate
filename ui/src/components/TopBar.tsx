@@ -5,18 +5,18 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 
 const pageBreadcrumb: Record<string, { group: string; label: string }> = {
-  watchlist: { group: '市場', label: '自選' },
-  search: { group: '市場', label: '搜尋' },
-  quote: { group: '分析工具', label: '行情' },
-  sector: { group: '行情', label: '板塊' },
-  indicatorLab: { group: '分析預測', label: '支撐阻力' },
-  lnn: { group: '分析預測', label: 'LNN 预测' },
-  backtest: { group: '分析預測', label: '策略回測' },
-  predict: { group: '分析預測', label: 'AI 分析' },
-  rules: { group: '分析預測', label: '交易規則' },
+  watchlist: { group: '行情', label: '自選股' },
+  search: { group: '行情', label: '股票搜索' },
+  quote: { group: '行情', label: '個股詳情' },
+  sector: { group: '行情', label: '板塊熱點' },
+  indicatorLab: { group: '分析選股', label: '支撐阻力' },
+  lnn: { group: '分析選股', label: 'LNN 預測' },
+  backtest: { group: '分析選股', label: '策略回測' },
+  predict: { group: '分析選股', label: 'AI 分析' },
+  rules: { group: '分析選股', label: '交易規則' },
   settings: { group: '系統', label: '設置' },
-  screener: { group: '行情', label: '選股' },
-  kronos: { group: '分析預測', label: 'Kronos 预测' },
+  screener: { group: '分析選股', label: '選股' },
+  kronos: { group: '分析選股', label: 'Kronos 預測' },
 };
 
 const pageIdFromPath: Record<string, string> = {

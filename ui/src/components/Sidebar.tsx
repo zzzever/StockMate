@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store/useAppStore';
-import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, ScrollText, LayoutGrid, Settings, BarChart3, LineChart, PanelTop, Table2, CandlestickChart, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Search, TrendingUp, BrainCircuit, Activity, ScrollText, LayoutGrid, Settings, PanelTop, CandlestickChart, Filter } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
@@ -14,18 +14,17 @@ const navGroups = [
     label: '行情',
     items: [
       { id: 'watchlist' as const, label: '自選股', icon: Star, path: '/watchlist' },
-      { id: 'screener' as const, label: '選股', icon: Filter, path: '/screener' },
-      { id: 'kronos' as const, label: 'Kronos 預測', icon: BrainCircuit, path: '/kronos' },
+      { id: 'sector' as const, label: '板塊熱點', icon: LayoutGrid, path: '/sector' },
       { id: 'search' as const, label: '股票搜索', icon: Search, path: '/search' },
       { id: 'quote' as const, label: '個股詳情', icon: CandlestickChart, path: '/quote' },
-      { id: 'sector' as const, label: '板塊熱點', icon: LayoutGrid, path: '/sector' },
     ],
   },
   {
-    label: '分析預測',
+    label: '分析選股',
     items: [
-      { id: 'lnn' as const, label: 'LNN 預測', icon: BrainCircuit, path: '/lnn' },
-      { id: 'indicatorLab' as const, label: '支撐阻力', icon: CandlestickChart, path: '/indicator-lab' },
+      { id: 'screener' as const, label: '選股', icon: Filter, path: '/screener' },
+      { id: 'kronos' as const, label: 'Kronos 預測', icon: BrainCircuit, path: '/kronos' },
+      { id: 'lnn' as const, label: 'LNN 預測', icon: Activity, path: '/lnn' },
       { id: 'predict' as const, label: 'AI 分析', icon: PanelTop, path: '/predict' },
       { id: 'backtest' as const, label: '策略回測', icon: TrendingUp, path: '/backtest' },
       { id: 'rules' as const, label: '交易規則', icon: ScrollText, path: '/rules' },
@@ -45,7 +44,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'indicatorLab', 'screener', 'kronos', 'lnn', 'quote'];
+  const stockPages = ['backtest', 'predict', 'rules', 'screener', 'kronos', 'lnn', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {
