@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { BrainCircuit, Search, ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useStockList } from '@/hooks/useTauriQuery';
+import { createChart, IChartApi, ISeriesApi, LineStyle, Time } from 'lightweight-charts';
 
 interface ForecastPoint {
   date: string;
@@ -26,137 +27,103 @@ interface KronosHistoryItem {
   result: KronosForecast;
 }
 
-// Pure SVG line chart with zoom (wheel) + pan (drag).
-// Avoids lightweight-charts issues in Tauri WebView2.
-function KronosChart({ forecast }: { forecast: KronosForecast }) {
-  const W = 780;
-  const H = 280;
-  const PAD = { top: 16, right: 64, bottom: 24, left: 8 };
-  const [view, setView] = useState<{ start: number; end: number } | null>(null);
-  const dragRef = useRef<{ x0: number; start0: number } | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  const all = [
-    ...forecast.history.map(p => ({ x: p.date, y: p.value, kind: 'hist' as const })),
-    ...forecast.forecast.map((p, i) => ({
-      x: `f${i + 1}`, y: p.value,
-      lower: p.lower ?? p.value, upper: p.upper ?? p.value, kind: 'fcst' as const,
-    })),
-  ];
-  const N = all.length;
-
-  // Visible index range (null = show all)
-  const vStart = view?.start ?? 0;
-  const vEnd = view?.end ?? N - 1;
-  const vCount = Math.max(vEnd - vStart, 2);
-
-  // Y scale from visible range only (auto-fit current view)
-  const vis = all.slice(vStart, vEnd + 1);
-  const ys = vis.map(d => d.y);
-  const lows = vis.filter((d: any) => d.lower != null).map((d: any) => d.lower);
-  const highs = vis.filter((d: any) => d.upper != null).map((d: any) => d.upper);
-  const min = Math.min(...ys, ...lows);
-  const max = Math.max(...ys, ...highs);
-  const range = (max - min) || 1;
-  const padY = range * 0.15;
-
-  const xAt = (i: number) => PAD.left + ((i - vStart) / vCount) * (W - PAD.left - PAD.right);
-  const yAt = (v: number) => PAD.top + (1 - (v - (min - padY)) / (range + 2 * padY)) * (H - PAD.top - PAD.bottom);
-
-  // Build visible points only (clip outside range)
-  const visPts: { x: number; y: number; kind: string; lower?: number; upper?: number; idx: number }[] = [];
-  for (let i = vStart; i <= vEnd && i < N; i++) {
-    const d: any = all[i];
-    visPts.push({ x: xAt(i), y: yAt(d.y), kind: d.kind, lower: d.lower != null ? yAt(d.lower) : undefined, upper: d.upper != null ? yAt(d.upper) : undefined, idx: i });
-  }
-
-  const histPts = visPts.filter(p => p.kind === 'hist').map(p => `${p.x},${p.y}`).join(' ');
-  const fcstPts = visPts.filter(p => p.kind === 'fcst').map(p => `${p.x},${p.y}`).join(' ');
-
-  // Confidence band polygon (forecast only, visible)
-  const bandPts: string[] = [];
-  visPts.forEach(p => { if (p.upper != null) bandPts.push(`${p.x},${p.upper}`); });
-  [...visPts].reverse().forEach(p => { if (p.lower != null) bandPts.push(`${p.x},${p.lower}`); });
-
-  // Grid lines
-  const gridYs = [0.25, 0.5, 0.75].map(f => PAD.top + f * (H - PAD.top - PAD.bottom));
-
-  // Wheel zoom around cursor
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    if (N <= 10) return;
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const px = (e.clientX - rect.left) / rect.width; // 0..1 cursor pos
-    const curStart = view?.start ?? 0;
-    const curEnd = view?.end ?? N - 1;
-    const curLen = curEnd - curStart;
-    const factor = e.deltaY > 0 ? 1.25 : 0.8; // zoom out / in
-    const newLen = Math.min(Math.max(curLen * factor, 10), N - 1);
-    // keep cursor-relative anchor
-    const anchorIdx = curStart + px * curLen;
-    let newStart = anchorIdx - px * newLen;
-    let newEnd = newStart + newLen;
-    if (newStart < 0) { newStart = 0; newEnd = newLen; }
-    if (newEnd > N - 1) { newEnd = N - 1; newStart = newEnd - newLen; }
-    setView({ start: Math.max(0, Math.round(newStart)), end: Math.min(N - 1, Math.round(newEnd)) });
-  };
-
-  // Drag pan
-  const onMouseDown = (e: React.MouseEvent) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect || N <= 10) return;
-    const curStart = view?.start ?? 0;
-    const curEnd = view?.end ?? N - 1;
-    dragRef.current = { x0: e.clientX, start0: curStart };
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!dragRef.current) return;
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const curLen = (view?.end ?? N - 1) - (view?.start ?? 0);
-    const dx = (dragRef.current.x0 - e.clientX) / rect.width; // px→idx (drag right → view left)
-    let newStart = dragRef.current.start0 + dx * curLen;
-    newStart = Math.max(0, Math.min(newStart, N - 1 - curLen));
-    setView({ start: Math.round(newStart), end: Math.round(newStart + curLen) });
-  };
-  const endDrag = () => { dragRef.current = null; };
-
-  return (
-    <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full h-full cursor-grab select-none touch-none"
-      onWheel={onWheel} onMouseDown={onMouseDown} onMouseMove={onMouseMove}
-      onMouseUp={endDrag} onMouseLeave={endDrag}>
-      {gridYs.map((gy, i) => (
-        <line key={i} x1={PAD.left} x2={W - PAD.right} y1={gy} y2={gy} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
-      ))}
-      {bandPts.length > 2 && (
-        <polygon points={bandPts.join(' ')} fill="rgba(239,68,68,0.10)" stroke="none" />
-      )}
-      {histPts && <polyline points={histPts} fill="none" stroke="#3b82f6" strokeWidth="1.8" />}
-      {fcstPts && <polyline points={fcstPts} fill="none" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" />}
-      {/* Forecast start marker */}
-      {visPts.some(p => p.kind === 'fcst') && (() => {
-        const first = visPts.find(p => p.kind === 'fcst');
-        return first ? <circle cx={first.x} cy={first.y} r="4" fill="#ef4444" /> : null;
-      })()}
-      {/* Y-axis labels (visible range) */}
-      {[0, 0.5, 1].map(f => {
-        const v = min - padY + (1 - f) * (range + 2 * padY);
-        return (
-          <text key={f} x={W - PAD.right + 4} y={PAD.top + f * (H - PAD.top - PAD.bottom) + 3}
-            fontSize="10" fill="#8b8b8b">{v.toFixed(2)}</text>
-        );
-      })}
-      {/* Zoom hint */}
-      <text x={PAD.left} y={H - 6} fontSize="9" fill="#6b7280">滚轮缩放 · 拖拽平移</text>
-    </svg>
-  );
-}
-
-// Real-time progress pushed from Rust (parsed from Python subprocess stderr)
 interface KronosProgress {
   stage: string;
   pct: number;
+}
+
+// Kronos forecast chart — lightweight-charts, same container pattern as IntradayChart
+// (relative flex-1 + absolute inset-0 so the chart measures its size correctly in WebView2).
+function KronosChart({ forecast }: { forecast: KronosForecast }) {
+  const elRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const histRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const fcstRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const upperRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const lowerRef = useRef<ISeriesApi<'Line'> | null>(null);
+
+  useEffect(() => {
+    const el = elRef.current; if (!el) return;
+    const chart = createChart(el, {
+      layout: { background: { color: 'transparent' }, textColor: '#8b8b8b', attributionLogo: false },
+      grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
+      crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: 'rgba(255,255,255,0.15)', style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: 'rgba(255,255,255,0.15)', style: 2 } },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)', scaleMargins: { top: 0.08, bottom: 0.08 }, autoScale: true },
+      timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true, fixLeftEdge: true, fixRightEdge: true },
+      autoSize: true,
+    });
+    chartRef.current = chart;
+
+    histRef.current = chart.addAreaSeries({
+      topColor: 'rgba(59,130,246,0.22)', bottomColor: 'rgba(59,130,246,0.01)',
+      lineColor: '#3b82f6', lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
+    });
+    fcstRef.current = chart.addLineSeries({
+      color: '#ef4444', lineWidth: 2, lineStyle: LineStyle.Dashed, priceLineVisible: false,
+    });
+    upperRef.current = chart.addAreaSeries({
+      topColor: 'rgba(239,68,68,0.10)', bottomColor: 'rgba(239,68,68,0.01)',
+      lineColor: 'transparent', lineWidth: 1, priceLineVisible: false, lastValueVisible: false,
+    });
+    lowerRef.current = chart.addLineSeries({
+      color: 'rgba(239,68,68,0.5)', lineWidth: 1, lineStyle: LineStyle.Dotted, priceLineVisible: false, lastValueVisible: false,
+    });
+
+    try { const a = el.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (_) {}
+
+    return () => { try { chart.remove(); } catch (_) {} chartRef.current = null; };
+  }, []);
+
+  // Update data when forecast changes
+  useEffect(() => {
+    if (!chartRef.current || !histRef.current || !fcstRef.current) return;
+    // Convert YYYY-MM-DD to UTC seconds for reliable time axis
+    const toTime = (d: string): Time => {
+      const t = Date.parse(d);
+      return (Number.isFinite(t) ? Math.floor(t / 1000) : 0) as Time;
+    };
+
+    const histData = forecast.history.map(p => ({ time: toTime(p.date), value: p.value }));
+    histRef.current.setData(histData);
+
+    const lastDate = forecast.history.length > 0
+      ? new Date(forecast.history[forecast.history.length - 1].date)
+      : new Date();
+    const fcstData = forecast.forecast.map((p, i) => {
+      const d = new Date(lastDate); d.setDate(d.getDate() + i + 1);
+      return { time: Math.floor(d.getTime() / 1000) as Time, value: p.value };
+    });
+    // Connector: last history point → first forecast point
+    const lastHist = histData[histData.length - 1];
+    const fcstLine = lastHist ? [{ ...lastHist }, ...fcstData] : fcstData;
+    fcstRef.current.setData(fcstLine);
+    fcstRef.current.setMarkers(fcstData.length > 0 ? [{
+      time: fcstData[0].time, position: 'aboveBar', shape: 'circle', color: '#ef4444', text: '预测', size: 1,
+    }] : []);
+
+    // Confidence band
+    const upper = forecast.forecast
+      .filter(p => p.upper != null)
+      .map((p, i) => { const d = new Date(lastDate); d.setDate(d.getDate() + i + 1); return { time: Math.floor(d.getTime() / 1000) as Time, value: p.upper! }; });
+    const lower = forecast.forecast
+      .filter(p => p.lower != null)
+      .map((p, i) => { const d = new Date(lastDate); d.setDate(d.getDate() + i + 1); return { time: Math.floor(d.getTime() / 1000) as Time, value: p.lower! }; });
+    upperRef.current?.setData(upper);
+    lowerRef.current?.setData(lower);
+
+    chartRef.current.timeScale().fitContent();
+  }, [forecast]);
+
+  return (
+    <div className="relative flex-1 min-h-0">
+      <div ref={elRef} className="absolute inset-0" />
+      {(!forecast.history || forecast.history.length === 0) && (
+        <div className="absolute inset-0 flex items-center justify-center z-10">
+          <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>暂无预测数据</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function KronosPage() {
@@ -427,8 +394,8 @@ export default function KronosPage() {
                 </span>
               </div>
 
-              {/* Chart — pure SVG (no lightweight-charts dependency) */}
-              <div className="flex-1 min-h-[320px] glass-card-flat p-1 overflow-hidden">
+              {/* Chart — lightweight-charts (IntradayChart pattern) */}
+              <div className="flex-1 min-h-[320px] glass-card-flat p-2 overflow-hidden">
                 <KronosChart forecast={forecast} />
               </div>
               <div className="text-[10px] px-1 flex items-center justify-between shrink-0" style={{ color: 'var(--text-tertiary)' }}>
