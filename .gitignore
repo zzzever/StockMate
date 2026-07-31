@@ -8,7 +8,8 @@ stockmate.db
 *.exe
 *.bat
 *.cmd
-scripts/
+scripts/*
+!scripts/kronos_runner.py
 .hooks/
 .reasonix/
 docs/
