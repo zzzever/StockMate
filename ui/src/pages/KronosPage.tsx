@@ -115,7 +115,7 @@ function KronosChart({ forecast }: { forecast: KronosForecast }) {
   }, [forecast]);
 
   return (
-    <div className="relative flex-1 min-h-0">
+    <div className="relative h-full min-h-0">
       <div ref={elRef} className="absolute inset-0" />
       {(!forecast.history || forecast.history.length === 0) && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
