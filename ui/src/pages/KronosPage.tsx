@@ -46,6 +46,7 @@ export default function KronosPage() {
   const [error, setError] = useState('');
   const [horizon, setHorizon] = useState(10);
   const [stage, setStage] = useState<{ label: string; pct: number } | null>(null);
+  const [chartError, setChartError] = useState('');
   const runIdRef = useRef(0);
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -125,9 +126,14 @@ export default function KronosPage() {
     if (chartRef.current) { chartRef.current.remove(); chartRef.current = null; }
     try {
       const container = chartContainerRef.current;
+      // Diagnostic: surface data stats + render errors on the page (devtools unavailable)
+      const diag = `history=${forecast.history?.length ?? '?'} forecast=${forecast.forecast?.length ?? '?'} w=${container.clientWidth} h=${container.clientHeight}`;
+      try {
+        container.dataset.diag = diag;
+      } catch (_) {}
       const chart = createChart(container, {
-        width: container.clientWidth || 600,
-        height: container.clientHeight || 320,
+        width: Math.max(container.clientWidth || 600, 400),
+        height: Math.max(container.clientHeight || 320, 200),
         layout: { background: { color: 'transparent' }, textColor: '#8b8b8b', attributionLogo: false },
         grid: { vertLines: { color: 'rgba(255,255,255,0.04)' }, horzLines: { color: 'rgba(255,255,255,0.06)' } },
         crosshair: { mode: 1 },
@@ -196,6 +202,7 @@ export default function KronosPage() {
       };
     } catch (e) {
       console.error('Chart creation failed:', e);
+      setChartError(String(e));
     }
   }, [forecast]);
 
@@ -385,6 +392,15 @@ export default function KronosPage() {
 
               {/* Chart */}
               <div className="flex-1 min-h-[320px] glass-card-flat p-2" ref={chartContainerRef} />
+              <div className="text-[10px] px-1 flex items-center justify-between shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                <span>历史 {forecast.history?.length ?? 0} 条 · 预测 {forecast.forecast?.length ?? 0} 条</span>
+                <span className="font-mono">{forecast.signal}</span>
+              </div>
+              {chartError && (
+                <div className="text-[10px] px-2 py-1 rounded shrink-0" style={{ background: 'hsl(var(--price-down-bg))', color: 'hsl(var(--risk-danger))' }}>
+                  图表渲染错误: {chartError}
+                </div>
+              )}
 
               {/* Features */}
               <div className="glass-card-flat p-2">
