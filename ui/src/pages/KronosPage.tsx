@@ -367,7 +367,7 @@ export default function KronosPage() {
               </div>
 
               {/* Chart */}
-              <div className="flex-1 glass-card-flat p-2" ref={chartContainerRef} />
+              <div className="flex-1 min-h-[320px] glass-card-flat p-2" ref={chartContainerRef} />
 
               {/* Features */}
               <div className="glass-card-flat p-2">
