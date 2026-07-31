@@ -10,21 +10,23 @@ const pageBreadcrumb: Record<string, { group: string; label: string }> = {
   quote: { group: '行情', label: '個股詳情' },
   sector: { group: '行情', label: '板塊熱點' },
   indicatorLab: { group: '分析選股', label: '支撐阻力' },
-  lnn: { group: '分析選股', label: 'LNN 預測' },
+  lnn: { group: '分析選股', label: 'AI 預測' },
+  kronos: { group: '分析選股', label: 'AI 預測' },
+  aiPredict: { group: '分析選股', label: 'AI 預測' },
   backtest: { group: '分析選股', label: '策略回測' },
   predict: { group: '分析選股', label: 'AI 分析' },
   rules: { group: '分析選股', label: '交易規則' },
   settings: { group: '系統', label: '設置' },
   screener: { group: '分析選股', label: '選股' },
-  kronos: { group: '分析選股', label: 'Kronos 預測' },
 };
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
   '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/settings': 'settings',
-  '/lnn': 'lnn',
+  '/lnn': 'aiPredict',
   '/screener': 'screener',
-  '/kronos': 'kronos',
+  '/kronos': 'aiPredict',
+  '/ai-predict': 'aiPredict',
 };
 
 /** A‑share trading session based on Beijing time (UTC+8). */

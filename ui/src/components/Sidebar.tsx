@@ -4,9 +4,9 @@ import { Link, useLocation } from 'react-router-dom';
 
 const pageIdFromPath: Record<string, string> = {
   '/search': 'search', '/sector': 'sector', '/watchlist': 'watchlist', '/quote': 'quote',
-  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/screener': 'screener', '/kronos': 'kronos',
+  '/backtest': 'backtest', '/predict': 'predict', '/rules': 'rules', '/indicator-lab': 'indicatorLab', '/screener': 'screener', '/kronos': 'aiPredict', '/ai-predict': 'aiPredict',
   '/settings': 'settings',
-  '/lnn': 'lnn',
+  '/lnn': 'aiPredict',
 };
 
 const navGroups = [
@@ -23,8 +23,7 @@ const navGroups = [
     label: '分析選股',
     items: [
       { id: 'screener' as const, label: '選股', icon: Filter, path: '/screener' },
-      { id: 'kronos' as const, label: 'Kronos 預測', icon: BrainCircuit, path: '/kronos' },
-      { id: 'lnn' as const, label: 'LNN 預測', icon: Activity, path: '/lnn' },
+      { id: 'aiPredict' as const, label: 'AI 預測', icon: BrainCircuit, path: '/ai-predict' },
       { id: 'predict' as const, label: 'AI 分析', icon: PanelTop, path: '/predict' },
       { id: 'backtest' as const, label: '策略回測', icon: TrendingUp, path: '/backtest' },
       { id: 'rules' as const, label: '交易規則', icon: ScrollText, path: '/rules' },
@@ -44,7 +43,7 @@ export default function Sidebar() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const selectedStock = useAppStore((s) => s.selectedStock);
   const currentPage = pageIdFromPath[location.pathname] || 'watchlist';
-  const stockPages = ['backtest', 'predict', 'rules', 'screener', 'kronos', 'lnn', 'quote'];
+  const stockPages = ['backtest', 'predict', 'rules', 'screener', 'aiPredict', 'quote'];
 
   const buildPath = (item: (typeof navGroups)[number]['items'][number]) => {
     if (stockPages.includes(item.id) && selectedStock) {
