@@ -438,4 +438,347 @@ mod tests {
         let matches = screen_stock(&quotes, &[cond]);
         assert!(!matches.is_empty(), "Should detect new high");
     }
+
+    // ============ 补充测试：覆盖未测试的条件变体与边界 ============
+
+    #[test]
+    fn test_low_volume_match() {
+        // 最后一天成交量 100，5日均量 = (1000*4+100)/5 = 820，比值 0.12 < 0.5
+        let mut quotes = Vec::new();
+        for _ in 0..29 {
+            quotes.push(make_quote("20.0", 1000));
+        }
+        quotes.push(make_quote("20.0", 100));
+        let cond = ScreenCondition::LowVolume(0.5);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Low volume should match");
+    }
+
+    #[test]
+    fn test_low_volume_no_match() {
+        // 最后一天成交量 900，比值 ~1.1 > 0.5，不应匹配
+        let mut quotes = Vec::new();
+        for _ in 0..29 {
+            quotes.push(make_quote("20.0", 1000));
+        }
+        quotes.push(make_quote("20.0", 900));
+        let cond = ScreenCondition::LowVolume(0.5);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Normal volume should NOT match LowVolume");
+    }
+
+    #[test]
+    fn test_below_ma_match() {
+        // 30天从 20.0 递减到 5.5，最后收盘 5.5 < MA10 (7.75)
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 - i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::BelowMA(10);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Should be below MA10");
+    }
+
+    #[test]
+    fn test_below_ma_no_match() {
+        // 单调上涨，最后收盘 > MA10
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::BelowMA(10);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Rising stock should NOT be below MA10");
+    }
+
+    #[test]
+    fn test_rsi_below_match() {
+        // 30 天单调下跌，RSI=0 < 30
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 30.0 - i as f64), 1000));
+        }
+        let cond = ScreenCondition::RsiBelow(14, 30.0);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Oversold (declining) stock should match RsiBelow");
+    }
+
+    #[test]
+    fn test_rsi_below_no_match_when_rising() {
+        // 30 天单调上涨，RSI=100，不应匹配
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64), 1000));
+        }
+        let cond = ScreenCondition::RsiBelow(14, 30.0);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Rising stock should NOT match RsiBelow");
+    }
+
+    /// 已知 BUG 的回归测试（未修复前用 #[ignore] 挂起；`cargo test -- --ignored` 可复现）：
+    /// 数据不足（5 天 < period+1）时 compute_rsi 返回中性值 50.0，
+    /// 当 threshold > 50 时会被误判为匹配（50 < 60）。正确行为应是不匹配。
+    #[test]
+    #[ignore = "Known bug: compute_rsi returns neutral 50.0 when data is insufficient"]
+    fn test_rsi_below_insufficient_data_should_not_match() {
+        let mut quotes = Vec::new();
+        for i in 0..5 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 - i as f64), 1000));
+        }
+        let cond = ScreenCondition::RsiBelow(14, 60.0);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "BUG: insufficient data should not match RsiBelow (neutral RSI=50 falsely passes threshold>50)");
+    }
+
+    #[test]
+    fn test_low_position_match() {
+        // 20 天窗口：前 5 天 100，后 15 天递减到 20。最后收盘 20 处于窗口最低位，(20-20)/80 = 0 < 0.3
+        let mut quotes = Vec::new();
+        for _ in 0..5 {
+            quotes.push(make_quote("100.0", 1000));
+        }
+        for i in 0..15 {
+            quotes.push(make_quote(&format!("{:.1}", 100.0 - (i as f64) * 5.7), 1000));
+        }
+        let cond = ScreenCondition::LowPosition { days: 20, ratio: 0.3 };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Stock near period low should match LowPosition");
+    }
+
+    #[test]
+    fn test_low_position_no_match() {
+        // 最后收盘价处于窗口高位，(85-20)/80 = 0.81 > 0.3
+        let mut quotes = Vec::new();
+        for _ in 0..5 {
+            quotes.push(make_quote("100.0", 1000));
+        }
+        for i in 0..14 {
+            quotes.push(make_quote(&format!("{:.1}", 100.0 - (i as f64) * 5.7), 1000));
+        }
+        quotes.push(make_quote("85.0", 1000));
+        let cond = ScreenCondition::LowPosition { days: 20, ratio: 0.3 };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Stock near period high should NOT match LowPosition");
+    }
+
+    #[test]
+    fn test_kdj_oversold_match() {
+        // 14 日窗口最高 100、最低 10，最后收盘 10，K=(10-10)/(100-10)*100=0 < 20
+        let mut quotes = Vec::new();
+        for _ in 0..6 {
+            quotes.push(make_quote("100.0", 1000));
+        }
+        let prices = [100.0, 93.0, 86.0, 79.0, 72.0, 65.0, 58.0, 51.0, 44.0, 37.0, 30.0, 23.0, 16.0, 10.0];
+        for p in prices {
+            quotes.push(make_quote(&format!("{:.1}", p), 1000));
+        }
+        let cond = ScreenCondition::KDJOverSold;
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Oversold stock should match KDJOverSold");
+    }
+
+    #[test]
+    fn test_kdj_oversold_no_match() {
+        // 最后收盘接近窗口最高，K 接近 100
+        let mut quotes = Vec::new();
+        for i in 0..20 {
+            quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::KDJOverSold;
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Strong stock should NOT match KDJOverSold");
+    }
+
+    #[test]
+    fn test_condition_group_and() {
+        // 两个条件都满足（低价 + 低于MA10）
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 - i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::ConditionGroup {
+            logic: "AND".into(),
+            conditions: vec![
+                ScreenCondition::LowPrice(10.0),
+                ScreenCondition::BelowMA(10),
+            ],
+        };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert_eq!(matches.len(), 2, "AND group should aggregate all sub-matches");
+    }
+
+    #[test]
+    fn test_condition_group_and_fails_when_one_fails() {
+        // 低价满足 + 高于MA10 不满足（下跌趋势），AND 应整体不匹配
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 - i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::ConditionGroup {
+            logic: "AND".into(),
+            conditions: vec![
+                ScreenCondition::LowPrice(10.0),
+                ScreenCondition::AboveMA(10),
+            ],
+        };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "AND group must be empty when one sub-condition fails");
+    }
+
+    #[test]
+    fn test_condition_group_or() {
+        // OR：低价满足，AboveMA 不满足，整体匹配 1 条
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 - i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::ConditionGroup {
+            logic: "OR".into(),
+            conditions: vec![
+                ScreenCondition::LowPrice(10.0),
+                ScreenCondition::AboveMA(10),
+            ],
+        };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert_eq!(matches.len(), 1, "OR group should match only satisfied sub-conditions");
+    }
+
+    #[test]
+    fn test_condition_group_or_none_match() {
+        // 两个都不满足
+        let mut quotes = Vec::new();
+        for i in 0..30 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 + i as f64 * 0.5), 1000));
+        }
+        let cond = ScreenCondition::ConditionGroup {
+            logic: "OR".into(),
+            conditions: vec![
+                ScreenCondition::LowPrice(10.0),
+                ScreenCondition::BelowMA(10),
+            ],
+        };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "OR group should be empty when nothing matches");
+    }
+
+    #[test]
+    fn test_sslang_expr_match() {
+        let quotes = vec![make_quote("10.0", 1000), make_quote("9.0", 800)];
+        let cond = ScreenCondition::SSLangExpr("close(i) < 10 and down(3)".into());
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "SSLangExpr with known keywords should match");
+    }
+
+    #[test]
+    fn test_sslang_expr_unknown_no_match() {
+        let quotes = vec![make_quote("10.0", 1000)];
+        let cond = ScreenCondition::SSLangExpr("macd golden cross".into());
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Unknown SSLang expression should not match");
+    }
+
+    #[test]
+    fn test_sslang_expr_empty_no_match() {
+        let quotes = vec![make_quote("10.0", 1000)];
+        let cond = ScreenCondition::SSLangExpr(String::new());
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Empty SSLang expression should not match");
+    }
+
+    // ============ 边界值测试 ============
+
+    #[test]
+    fn test_low_price_equal_to_limit_no_match() {
+        let quotes = vec![make_quote("10.0", 1000), make_quote("10.0", 1000)];
+        let cond = ScreenCondition::LowPrice(10.0);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "close == limit should NOT match (strict <)");
+    }
+
+    #[test]
+    fn test_consecutive_drop_insufficient_data_no_match() {
+        // 只有 3 天，需要 4 天才够判断 3 连跌
+        let mut quotes = Vec::new();
+        for i in 0..3 {
+            quotes.push(make_quote(&format!("{:.1}", 15.0 - i as f64), 1000));
+        }
+        let cond = ScreenCondition::ConsecutiveDrop(3);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Insufficient data should not match ConsecutiveDrop");
+    }
+
+    #[test]
+    fn test_shrink_drop_insufficient_data_no_match() {
+        let mut quotes = Vec::new();
+        for i in 0..3 {
+            quotes.push(make_quote(&format!("{:.1}", 15.0 - i as f64), 500));
+        }
+        let cond = ScreenCondition::ShrinkDrop { days: 3, max_vol_ratio: 0.6 };
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Insufficient data should not match ShrinkDrop");
+    }
+
+    #[test]
+    fn test_macd_cross_insufficient_data_no_match() {
+        let mut quotes = Vec::new();
+        for i in 0..10 {
+            quotes.push(make_quote(&format!("{:.1}", 15.0 - i as f64), 1000));
+        }
+        let cond = ScreenCondition::MACDCross;
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "MACD needs >=26 bars");
+    }
+
+    #[test]
+    fn test_new_high_period_larger_than_data_no_match() {
+        let mut quotes = Vec::new();
+        for i in 0..10 {
+            quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64), 1000));
+        }
+        let cond = ScreenCondition::NewHigh(20);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "period > data length should not match");
+    }
+
+    #[test]
+    fn test_new_high_no_match_on_decline() {
+        let mut quotes = Vec::new();
+        for i in 0..20 {
+            quotes.push(make_quote(&format!("{:.1}", 20.0 - i as f64), 1000));
+        }
+        let cond = ScreenCondition::NewHigh(10);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "Declining stock should not be a NewHigh");
+    }
+
+    /// 已知 BUG 的回归测试（未修复前用 #[ignore] 挂起；`cargo test -- --ignored` 可复现）：
+    /// period=0 时 `closes[n-0..]` 为空切片，
+    /// fold(0.0) 初始值使 max_val=0.0，任何正收盘价都会满足 last_close >= 0.0。
+    /// 属于输入验证缺失（period=0 应被拒绝），当前实现会误报。
+    #[test]
+    #[ignore = "Known bug: NewHigh(0) matches any positive close due to fold(0.0) seed"]
+    fn test_new_high_zero_period_bug() {
+        let mut quotes = Vec::new();
+        for i in 0..10 {
+            quotes.push(make_quote(&format!("{:.1}", 10.0 + i as f64), 1000));
+        }
+        let cond = ScreenCondition::NewHigh(0);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(matches.is_empty(), "BUG: period=0 should be rejected, not match every stock");
+    }
+
+    #[test]
+    fn test_empty_quotes_no_match() {
+        let cond = ScreenCondition::LowPrice(100.0);
+        let matches = screen_stock(&[], &[cond]);
+        assert!(matches.is_empty(), "Empty quotes should produce no matches");
+    }
+
+    #[test]
+    fn test_single_quote_low_price() {
+        let quotes = vec![make_quote("5.0", 1000)];
+        let cond = ScreenCondition::LowPrice(10.0);
+        let matches = screen_stock(&quotes, &[cond]);
+        assert!(!matches.is_empty(), "Single quote close 5.0 < 10.0 should match");
+    }
 }
