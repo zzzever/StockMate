@@ -96,25 +96,11 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
     let mut trades = Vec::new();
     let mut equity_curve = vec![(quotes[0].date, capital)];
 
-    // ---- Deferred entry state ----
-    // Entry is computed at bar i (when signal[i] == 1) but the actual trade
-    // executes at open[i+1]. We defer position/capital changes so that
-    // bar i's MTM shows cash-only equity.
-    let mut has_pending_entry = false;
-    let mut pending_capital = Decimal::ZERO;
-    let mut pending_position = Decimal::ZERO;
-
-    // ---- Deferred exit state ----
-    // Exit is triggered at bar i (SL/TP/signal == -1) but the position is
-    // still held through bar i's close — the exit executes at open[i+1].
-    // We save the exit PnL and apply AFTER bar i's MTM push.
-    let mut has_pending_exit = false;
-    let mut pending_exit_price = Decimal::ZERO;
-    let mut pending_exit_date = quotes[0].date;
-    let mut pending_exit_pnl = Decimal::ZERO;
-    let mut pending_exit_pnl_pct = 0.0;
-
-    // ---- Ignored signal counters (warned at end) ----
+    // ---- Same-day close execution ----
+    // Entry/exit signals fire at bar i and execute at bar i's CLOSE price
+    // (no next-bar deferral). T+1 is naturally enforced: entry happens in
+    // step 4 AFTER exit checks in step 3, so a position can only be sold
+    // starting the next bar.
     let mut ignored_buys = 0u32;
     let mut ignored_sells = 0u32;
 
@@ -123,17 +109,7 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
         let signal = signals[i];
 
         // ----------------------------------------------------------------
-        // 1. Apply deferred entry from previous bar
-        //    (position becomes active for MTM starting this bar)
-        // ----------------------------------------------------------------
-        if has_pending_entry {
-            capital = pending_capital;
-            position = pending_position;
-            has_pending_entry = false;
-        }
-
-        // ----------------------------------------------------------------
-        // 2. Track ignored signals (buy while holding, sell while flat)
+        // 1. Track ignored signals (buy while holding, sell while flat)
         // ----------------------------------------------------------------
         if signal == 1 && position > Decimal::ZERO {
             ignored_buys += 1;
@@ -143,10 +119,10 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
         }
 
         // ----------------------------------------------------------------
-        // 3. Exit checks (position exists from a prior bar)
+        // 2. Exit checks — execute at TODAY's close
         // ----------------------------------------------------------------
         if position > Decimal::ZERO {
-            // Check stop-loss / take-profit (based on close, executed next open)
+            // Stop-loss / take-profit based on close
             let sl_triggered = config.stop_loss.map_or(false, |sl| {
                 entry_price > Decimal::ZERO && (q.close - entry_price) / entry_price < -sl
             });
@@ -155,61 +131,49 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
             });
 
             if sl_triggered || tp_triggered || signal == -1 {
-                // Use next bar's open for execution (avoid look-ahead);
-                // last bar uses close since there is no next bar.
-                let exit_price = if i + 1 < quotes.len() {
-                    quotes[i + 1].open * (Decimal::ONE - config.slippage)
-                } else {
-                    q.close * (Decimal::ONE - config.slippage)
-                };
-                let exit_date = if i + 1 < quotes.len() {
-                    quotes[i + 1].date
-                } else {
-                    q.date
-                };
+                let exit_price = q.close * (Decimal::ONE - config.slippage);
                 let (pnl, pnl_pct) = calculate_trade_exit(exit_price, entry_price, position, config);
-
-                // Defer: apply AFTER this bar's MTM (position still held at
-                // this bar's close)
-                has_pending_exit = true;
-                pending_exit_price = exit_price;
-                pending_exit_date = exit_date;
-                pending_exit_pnl = pnl;
-                pending_exit_pnl_pct = pnl_pct;
+                capital += pnl;
+                trades.push(Trade {
+                    entry_date,
+                    exit_date: q.date,
+                    entry_price,
+                    exit_price,
+                    side: "long".to_string(),
+                    pnl,
+                    pnl_pct,
+                });
+                position = Decimal::ZERO;
             }
         }
 
         // ----------------------------------------------------------------
-        // 4. Entry checks (signal == 1, no existing or pending position)
+        // 3. Entry checks — execute at TODAY's close
         // ----------------------------------------------------------------
-        if signal == 1 && position == Decimal::ZERO && i + 1 < quotes.len() {
-            // Can't enter on the last bar — no subsequent bar to exit on
-            entry_price = quotes[i + 1].open * (Decimal::ONE + config.slippage);
-            entry_date = quotes[i + 1].date;
+        if signal == 1 && position == Decimal::ZERO {
+            entry_price = q.close * (Decimal::ONE + config.slippage);
+            entry_date = q.date;
 
             if entry_price != Decimal::ZERO {
                 let entry_commission = entry_price * (capital / entry_price) * config.commission;
-                // Defer: save position/capital for application at bar i+1
-                pending_capital = capital - entry_commission;
-                pending_position = pending_capital / entry_price;
-                has_pending_entry = true;
-                // NOTE: capital and position are NOT modified here — they
-                // will be set at the START of the next iteration so that
-                // this bar's MTM shows cash-only equity.
+                // capital becomes the buy budget (orig_capital - commission);
+                // MTM below recovers remaining cash via - position * entry_price.
+                capital = capital - entry_commission;
+                position = capital / entry_price;
             }
         }
 
         // ----------------------------------------------------------------
-        // 5. Mark-to-market equity
+        // 4. Mark-to-market equity
         // ----------------------------------------------------------------
         let equity = if position > Decimal::ZERO {
-            // Position is active: capital = original_capital - commission (cost NOT deducted)
+            // Position is active: MTM = cash_after_entry + current_shares_value
+            // capital = buy_budget (cost NOT deducted from it)
             // → capital - position * entry_price + position * q.close
             //   = (orig_capital - commission) - cost + shares_value
             //   = remaining_cash + current_position_value
             capital - position * entry_price + position * q.close
         } else {
-            // No position (or pending entry not yet applied): equity = cash
             capital
         };
 
@@ -222,25 +186,6 @@ pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -
             }
         } else {
             equity_curve.push((q.date, equity));
-        }
-
-        // ----------------------------------------------------------------
-        // 6. Apply deferred exit AFTER MTM
-        //    (position was held through this bar's close)
-        // ----------------------------------------------------------------
-        if has_pending_exit {
-            capital += pending_exit_pnl;
-            trades.push(Trade {
-                entry_date,
-                exit_date: pending_exit_date,
-                entry_price,
-                exit_price: pending_exit_price,
-                side: "long".to_string(),
-                pnl: pending_exit_pnl,
-                pnl_pct: pending_exit_pnl_pct,
-            });
-            position = Decimal::ZERO;
-            has_pending_exit = false;
         }
     }
 
