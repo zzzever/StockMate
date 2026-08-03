@@ -267,7 +267,9 @@ mod tests {
         let sig = generate_strategy("TEST", "trend", &quotes, &mas, &sr);
         assert_eq!(sig.action, SignalAction::Buy);
         let expected_stop = Decimal::from(90u64) * Decimal::from(98u64) / Decimal::from(100u64);
-        assert_eq!(sig.stop_loss, Some(expected_stop));
+        let got_stop = sig.stop_loss.unwrap_or_default();
+        // 允许极小浮点舍入误差（from_f64 的精度噪声）
+        assert!((got_stop - expected_stop).abs() < Decimal::from_str("0.000001").unwrap());
         assert!(sig.entry_price.is_some());
     }
 }

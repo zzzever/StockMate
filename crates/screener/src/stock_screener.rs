@@ -139,6 +139,9 @@ pub fn screen_stock(quotes: &[Quote], conditions: &[ScreenCondition]) -> Vec<Str
                 }
             }
             ScreenCondition::RsiBelow(period, threshold) => {
+                if n < *period as usize + 1 {
+                    continue; // 数据不足，不误报
+                }
                 let rsi = compute_rsi(&closes, *period as usize);
                 if rsi < *threshold {
                     matches.push(format!("RSI({})={:.1}<{:.0}", period, rsi, threshold));
@@ -210,9 +213,10 @@ pub fn screen_stock(quotes: &[Quote], conditions: &[ScreenCondition]) -> Vec<Str
                 if all_up { matches.push(format!("连续上涨{}日", days)); }
             }
             ScreenCondition::NewHigh(period) => {
-                if n < *period as usize { continue; }
-                let max_val = closes[n-*period as usize..].iter().fold(0.0f64, |a, &b| a.max(b));
-                if last_close >= max_val {
+                if *period == 0 || n < *period as usize + 1 { continue; }
+                // 排除当天：比较前 period 天（不含今天）
+                let max_prev = closes[n-1-*period as usize..n-1].iter().fold(f64::MIN, |a, &b| a.max(b));
+                if last_close > max_prev {
                     matches.push(format!("{}日新高", period));
                 }
             }
@@ -519,7 +523,6 @@ mod tests {
     /// 数据不足（5 天 < period+1）时 compute_rsi 返回中性值 50.0，
     /// 当 threshold > 50 时会被误判为匹配（50 < 60）。正确行为应是不匹配。
     #[test]
-    #[ignore = "Known bug: compute_rsi returns neutral 50.0 when data is insufficient"]
     fn test_rsi_below_insufficient_data_should_not_match() {
         let mut quotes = Vec::new();
         for i in 0..5 {
@@ -756,7 +759,6 @@ mod tests {
     /// fold(0.0) 初始值使 max_val=0.0，任何正收盘价都会满足 last_close >= 0.0。
     /// 属于输入验证缺失（period=0 应被拒绝），当前实现会误报。
     #[test]
-    #[ignore = "Known bug: NewHigh(0) matches any positive close due to fold(0.0) seed"]
     fn test_new_high_zero_period_bug() {
         let mut quotes = Vec::new();
         for i in 0..10 {

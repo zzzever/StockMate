@@ -672,9 +672,17 @@ pub async fn screen_stocks(
     conditions_json: String,
     limit: u32,
 ) -> Result<Vec<stock_screener::ScreenedStock>, String> {
-    // Check cache: same day + same conditions
+    // Check cache: same day + same conditions (hash full JSON to avoid collisions)
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let cache_key = format!("screener_cache_{}_{}", today, conditions_json.len()); // simplified
+    let cache_hash = {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        conditions_json.hash(&mut h);
+        limit.hash(&mut h);
+        h.finish()
+    };
+    let cache_key = format!("screener_cache_{}_{}", today, cache_hash);
 
     if let Ok(Some(cached)) = storage::get_setting(&state.db_pool, &cache_key).await {
         if !cached.is_empty() {

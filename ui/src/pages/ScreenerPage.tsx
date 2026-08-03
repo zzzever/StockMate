@@ -518,8 +518,8 @@ export default function ScreenerPage() {
           case 'AboveMA': return { AboveMA: c.params?.period ?? 20 };
           case 'VolumeSurge': return { VolumeSurge: c.params?.ratio ?? 2 };
           case 'PriceChange': return { PriceChange: { min: c.params?.min ?? -5, max: c.params?.max ?? 5 } };
-          case 'MACDCross': return { MACDCross: {} };
-          case 'KDJOverSold': return { KDJOverSold: {} };
+          case 'MACDCross': return { MACDCross: null };
+          case 'KDJOverSold': return { KDJOverSold: null };
           case 'ConsecutiveUp': return { ConsecutiveUp: c.params?.days ?? 3 };
           case 'NewHigh': return { NewHigh: c.params?.period ?? 20 };
           case 'LowVolume': return { LowVolume: c.params?.ratio ?? 0.5 };
@@ -553,10 +553,13 @@ export default function ScreenerPage() {
         }
       }
       if (currentGroup.length > 0) groups.push(currentGroup);
-      // 构建 ConditionGroup payload — flat serde format for Rust
-      const flatConditions = conditions;
+      // 构建 ConditionGroup payload — 保留 AND/OR 语义：
+      // 每组内部 AND（ConditionGroup.logic="AND"），组之间由顶层数组 OR（任一命中即入选）
+      const conditionGroups = groups.map((g) => ({
+        ConditionGroup: { logic: 'AND', conditions: g }
+      }));
       const res: ScreenResult[] = await invoke('screen_stocks', {
-        conditionsJson: JSON.stringify(flatConditions),
+        conditionsJson: JSON.stringify(conditionGroups),
         limit: 5000,
       });
       // 保存当前策略条件
