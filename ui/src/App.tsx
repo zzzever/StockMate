@@ -24,6 +24,7 @@ const LNNPage = lazy(() => import('@/pages/LNNPage'));
 const KronosPage = lazy(() => import('@/pages/KronosPage'));
 const AiPredictPage = lazy(() => import('@/pages/AiPredictPage'));
 const ScreenerPage = lazy(() => import('@/pages/ScreenerPage'));
+const WikiPage = lazy(() => import('@/pages/WikiPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +74,7 @@ function AppRoutes() {
             <Route path="/lnn" element={<LNNPage />} />
             <Route path="/kronos" element={<KronosPage />} />
             <Route path="/screener" element={<ScreenerPage />} />
+            <Route path="/wiki" element={<WikiPage />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>
