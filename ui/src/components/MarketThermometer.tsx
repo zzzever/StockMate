@@ -163,10 +163,12 @@ export default function MarketThermometer() {
   const temp = useMemo(() => {
     if (!overview) return null;
     const sectorChanges = sectors.map(s => Number(s.change_percent) || 0);
-    const amount = typeof overview.total_turnover === 'string'
-      ? parseFloat(overview.total_turnover) || null
-      : typeof overview.total_turnover === 'number'
-        ? overview.total_turnover
+    // 成交额优先 total_amount，缺失时退用 total_volume（后端 Decimal → string）
+    const rawAmt = overview.total_amount ?? overview.total_volume;
+    const amount = typeof rawAmt === 'string'
+      ? parseFloat(rawAmt) || null
+      : typeof rawAmt === 'number'
+        ? rawAmt
         : null;
     const northbound = typeof overview.northbound_inflow === 'string'
       ? parseFloat(overview.northbound_inflow)

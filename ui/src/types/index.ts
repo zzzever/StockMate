@@ -189,8 +189,9 @@ export interface MarketOverview {
   up_count: number;
   down_count: number;
   flat_count: number;
-  total_turnover?: string;
-  northbound_inflow?: string;
+  total_volume?: string;     // Decimal → string via IPC
+  total_amount?: string;     // 总成交额 (Decimal → string)
+  northbound_inflow?: string; // 北向资金 (Decimal → string, 可能 null)
   sentiment_index: number;
 }
 
