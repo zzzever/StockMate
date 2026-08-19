@@ -18,13 +18,13 @@ export interface MarketTemp {
 }
 
 /** 根据涨跌家数 + 情绪指数计算市场温度（1-100） */
-export function calcMarketTemp(upCount: number, downCount: number, flatCount: number, sentiment?: number): MarketTemp {
+export function calcMarketTemp(upCount: number, downCount: number, flatCount: number, sentiment?: number, overrideTemp?: number): MarketTemp {
   const total = upCount + downCount + flatCount;
   const s = typeof sentiment === 'number' && isFinite(sentiment) ? sentiment : 0.5;
   // 当总数为 0（无个股数据），纯用情绪指数
   const ratio = total > 0 ? upCount / total : s;
   // 综合：上涨比例(70%) + 情绪(30%)
-  let temp = Math.round(ratio * 70 + s * 30);
+  let temp = overrideTemp ?? Math.round(ratio * 70 + s * 30);
   temp = Math.max(1, Math.min(100, temp));
 
   let zone: TempZone;
@@ -54,10 +54,12 @@ export default function MarketThermometer() {
   const temp = useMemo(() => {
     if (!overview) return null;
     // 优先使用后端板块驱动的温度/区间；缺省时前端用板块涨跌比例自行计算
-    if (typeof overview.temperature === 'number') {
-      const t = overview.temperature;
+    const hasBackend = typeof overview.temperature === 'number';
+    if (hasBackend) {
+      const t = overview.temperature as number;
       return {
-        ...calcMarketTemp(overview.up_count, overview.down_count, overview.flat_count, overview.sentiment_index),
+        // overrideTemp 传入后端温度，保证 advice 文案与展示温度一致
+        ...calcMarketTemp(overview.up_count, overview.down_count, overview.flat_count, overview.sentiment_index, t),
         temperature: t,
         zone: (overview.temp_zone || zoneOf(t)) as TempZone,
         color: zoneOfColor(overview.temp_zone || zoneOf(t)),
@@ -73,9 +75,9 @@ export default function MarketThermometer() {
   const pct = temp.temperature;
   // 历史温度（最新在前），反转成正序展示
   const histAsc = [...history].reverse();
-  // 板块驱动标注：up_count/down_count 为 4 大指数或板块数
-  const isIndex = overview.up_count + overview.down_count <= 8;
-  const unitLabel = isIndex ? '板块' : '指数';
+  // 板块驱动由后端 temperature 字段标识；缺省时走指数/前端自算
+  const isSectorDriven = typeof overview.temperature === 'number';
+  const unitLabel = isSectorDriven ? '板块' : '指数';
   const canShowUpDown = overview.up_count > 0 || overview.down_count > 0;
 
   return (
