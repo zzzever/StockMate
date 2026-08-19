@@ -193,6 +193,15 @@ export interface MarketOverview {
   total_amount?: string;     // 总成交额 (Decimal → string)
   northbound_inflow?: string; // 北向资金 (Decimal → string, 可能 null)
   sentiment_index: number;
+  temperature?: number;      // 后端板块驱动温度 (1-100)
+  temp_zone?: string;
+}
+
+export interface MarketTempDim {
+  key: string;
+  label: string;
+  value: number;   // 0-100
+  weight: number;
 }
 
 export interface MarketTempRecord {

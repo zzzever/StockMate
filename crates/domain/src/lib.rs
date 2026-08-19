@@ -388,6 +388,18 @@ pub struct MarketOverview {
     pub total_amount: Option<Decimal>,
     pub northbound_inflow: Option<Decimal>,
     pub sentiment_index: Option<f64>,
+    /// 后端计算的板块驱动温度（1-100），前端优先使用；缺省时前端自行计算
+    pub temperature: Option<u32>,
+    pub temp_zone: Option<String>,
+}
+
+/// 温度子维度（供前端展示）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TempDim {
+    pub key: String,
+    pub label: String,
+    pub value: f64,   // 0-100
+    pub weight: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -411,6 +423,8 @@ impl Default for MarketOverview {
             total_amount: None,
             northbound_inflow: None,
             sentiment_index: None,
+            temperature: None,
+            temp_zone: None,
         }
     }
 }

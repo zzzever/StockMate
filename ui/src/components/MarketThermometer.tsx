@@ -53,6 +53,17 @@ export default function MarketThermometer() {
 
   const temp = useMemo(() => {
     if (!overview) return null;
+    // 优先使用后端板块驱动的温度/区间；缺省时前端用板块涨跌比例自行计算
+    if (typeof overview.temperature === 'number') {
+      const t = overview.temperature;
+      return {
+        ...calcMarketTemp(overview.up_count, overview.down_count, overview.flat_count, overview.sentiment_index),
+        temperature: t,
+        zone: (overview.temp_zone || zoneOf(t)) as TempZone,
+        color: zoneOfColor(overview.temp_zone || zoneOf(t)),
+        label: `${t}°`,
+      };
+    }
     return calcMarketTemp(overview.up_count, overview.down_count, overview.flat_count, overview.sentiment_index);
   }, [overview]);
 
@@ -62,7 +73,9 @@ export default function MarketThermometer() {
   const pct = temp.temperature;
   // 历史温度（最新在前），反转成正序展示
   const histAsc = [...history].reverse();
-  const hasIndexData = true; // 后端已改为指数驱动
+  // 板块驱动标注：up_count/down_count 为 4 大指数或板块数
+  const isIndex = overview.up_count + overview.down_count <= 8;
+  const unitLabel = isIndex ? '板块' : '指数';
   const canShowUpDown = overview.up_count > 0 || overview.down_count > 0;
 
   return (
@@ -87,7 +100,7 @@ export default function MarketThermometer() {
               {temp.zone}
             </span>
             <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {hasIndexData ? '指数驱动' : '个股涨跌'}
+              板块驱动
             </span>
           </div>
           <div className="text-data-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{temp.advice}</div>
@@ -108,22 +121,18 @@ export default function MarketThermometer() {
       {/* 指标行：指数驱动时显示 4 大指数涨跌，否则显示个股涨跌家数 */}
       {overview && (
         <div className="flex items-center gap-4 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
-          {hasIndexData ? (
+          {canShowUpDown ? (
             <>
-              <span>指数上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
-              <span>指数下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
-              <span>（4 大指数）</span>
+              <span>{unitLabel}上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
+              <span>{unitLabel}下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
             </>
           ) : (
             <>
               <span>上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
               <span>下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
-              <span>平盘 <b className="font-mono-nums">{overview.flat_count}</b></span>
             </>
           )}
-          {canShowUpDown && (
-            <span className="ml-auto">情绪 {Math.round((overview.sentiment_index ?? 0) * 100)}</span>
-          )}
+          <span className="ml-auto">情绪 {Math.round((overview.sentiment_index ?? 0) * 100)}</span>
         </div>
       )}
 
@@ -153,6 +162,26 @@ export default function MarketThermometer() {
 }
 
 function zoneColor(zone: string): string {
+  switch (zone) {
+    case '冰点': return '#3b82f6';
+    case '冷点': return '#22c55e';
+    case '热点': return '#f97316';
+    case '沸点': return '#ef4444';
+    default: return '#f59e0b';
+  }
+}
+
+/** 温度 → 区间名 */
+function zoneOf(t: number): string {
+  if (t <= 10) return '冰点';
+  if (t < 20) return '冷点';
+  if (t < 80) return '常温';
+  if (t < 90) return '热点';
+  return '沸点';
+}
+
+/** 区间名 → 主色 */
+function zoneOfColor(zone: string): string {
   switch (zone) {
     case '冰点': return '#3b82f6';
     case '冷点': return '#22c55e';

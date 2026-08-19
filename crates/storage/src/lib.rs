@@ -892,6 +892,8 @@ impl MarketOverviewRepository {
                 total_amount: d(r.get::<Option<f64>, _>("total_amount")),
                 northbound_inflow: d(r.get::<Option<f64>, _>("northbound_inflow")),
                 sentiment_index: r.get("sentiment_index"),
+                temperature: None,
+                temp_zone: None,
             }
         }))
     }

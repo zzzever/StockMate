@@ -1082,6 +1082,11 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
     }
 
     pub async fn get_market_overview(&self) -> Result<MarketOverview, ApiError> {
+        // ── 优先用真实板块行情计算温度（板块驱动，5 维度） ──
+        if let Some((overview, temperature, zone)) = self.temp_from_sectors().await {
+            self.record_temp_history(&overview, temperature, &zone).await;
+            return Ok(overview);
+        }
         let val = self
             .fetch(&self.inner.overview_cache, "/overview", &[], MAX_STALE_REALTIME_SECS)
             .await?;
@@ -1108,6 +1113,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 total_amount: obj.get("turnover").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
                 northbound_inflow: obj.get("northbound_inflow").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
                 sentiment_index: Some(0.5),
+                temperature: None,
+                temp_zone: None,
             });
         }
 
@@ -1152,6 +1159,8 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 total_amount: Decimal::from_f64_retain(total_amount),
                 northbound_inflow: None,
                 sentiment_index: Some(sentiment),
+                temperature: Some(temperature),
+                temp_zone: Some(zone.clone()),
             };
             // 持久化历史温度（幂等：同一天覆盖）
             self.record_temp_history(&overview, temperature, &zone).await;
@@ -1168,7 +1177,52 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             total_amount: Decimal::from_f64_retain(850_000_000_000.0),
             northbound_inflow: Decimal::from_f64_retain(5_000_000_000.0),
             sentiment_index: Some(0.65),
+            temperature: Some(65),
+            temp_zone: Some("常温".to_string()),
         })
+    }
+
+    /// 板块驱动温度：从 sector_realtime 读取 47 板块真实数据计算 5 维度温度。
+    /// 返回 (overview, temperature, zone)；板块缓存为空时返回 None（降级到指数驱动）。
+    async fn temp_from_sectors(&self) -> Option<(MarketOverview, u32, String)> {
+        let sectors = self.inner.sector_realtime.read().await.clone().unwrap_or_default();
+        if sectors.len() < 5 {
+            return None; // 板块数据不足，交给指数降级
+        }
+        let n = sectors.len() as f64;
+        let up_boards = sectors.iter().filter(|s| s.change_percent > 0.0).count();
+        let avg_change = sectors.iter().map(|s| s.change_percent).sum::<f64>() / n;
+        let hot_ratio = sectors.iter().filter(|s| s.change_percent > 2.0).count() as f64 / n;
+        let fund_in_ratio = sectors.iter()
+            .filter(|s| s.fund_flow.map_or(false, |f| f > 0.0)).count() as f64 / n;
+        let max_change = sectors.iter().map(|s| s.change_percent).fold(f64::MIN, f64::max);
+        let min_change = sectors.iter().map(|s| s.change_percent).fold(f64::MAX, f64::min);
+
+        // 5 维度 0-100
+        let d_breadth = (up_boards as f64 / n) * 100.0;                          // 板块广度
+        let d_strength = clamp01((avg_change + 4.0) / 8.0) * 100.0;              // 板块强度 -4%~+4%
+        let d_hot = hot_ratio * 100.0;                                           // 热点占比 >2%
+        let d_fund = fund_in_ratio * 100.0;                                      // 资金动能
+        let d_gradient = clamp01((max_change - min_change).max(0.0) / 8.0) * 100.0; // 领涨梯度 0~8%
+
+        // 加权：广度25 + 强度25 + 热点20 + 资金15 + 梯度15
+        let temperature = ((d_breadth * 0.25 + d_strength * 0.25 + d_hot * 0.20 + d_fund * 0.15 + d_gradient * 0.15) as u32).clamp(1, 100);
+        let zone = zone_for_temp(temperature).to_string();
+        let sentiment = avg_change.clamp(-4.0, 4.0) / 4.0 * 0.5 + 0.5; // 归一 0~1
+
+        let overview = MarketOverview {
+            date: chrono::Local::now().naive_local().date(),
+            up_count: up_boards as u32,          // 真实上涨板块数
+            down_count: (sectors.len() - up_boards) as u32,
+            flat_count: 0,
+            total_volume: None,
+            total_amount: None,
+            northbound_inflow: None,
+            sentiment_index: Some(sentiment),
+            temperature: Some(temperature),
+            temp_zone: Some(zone.clone()),
+        };
+        Some((overview, temperature, zone))
     }
 
     /// 把某天温度写入历史表（幂等：同一天覆盖）
@@ -1231,6 +1285,11 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
 // ============================================================
 // CacheManager: L1 (moka) + L2 (SQLite ai_cache)
 // ============================================================
+
+/// 归一化到 [0,1]
+fn clamp01(v: f64) -> f64 {
+    v.max(0.0).min(1.0)
+}
 
 /// 根据温度映射到区间名
 fn zone_for_temp(temp: u32) -> &'static str {
