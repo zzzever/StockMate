@@ -21,10 +21,20 @@ export interface MarketTemp {
 export function calcMarketTemp(upCount: number, downCount: number, flatCount: number, sentiment?: number, overrideTemp?: number): MarketTemp {
   const total = upCount + downCount + flatCount;
   const s = typeof sentiment === 'number' && isFinite(sentiment) ? sentiment : 0.5;
-  // 当总数为 0（无个股数据），纯用情绪指数
-  const ratio = total > 0 ? upCount / total : s;
-  // 综合：上涨比例(70%) + 情绪(30%)
-  let temp = overrideTemp ?? Math.round(ratio * 70 + s * 30);
+  let temp: number;
+
+  if (overrideTemp !== undefined) {
+    // 后端已算好温度，直接使用
+    temp = overrideTemp;
+  } else if (total <= 20) {
+    // 小样本（指数/少数板块）：价格驱动不可靠，以情绪指数为准
+    // 情绪 0~1 → 温度，中性 0.5≈50，不再用 ratio（会出现 1 度失真）
+    temp = Math.round(s * 100);
+  } else {
+    // 大样本：上涨比例(70%) + 情绪(30%)
+    const ratio = upCount / total;
+    temp = Math.round(ratio * 70 + s * 30);
+  }
   temp = Math.max(1, Math.min(100, temp));
 
   let zone: TempZone;

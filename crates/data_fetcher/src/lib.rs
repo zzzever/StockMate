@@ -1186,7 +1186,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
     /// 返回 (overview, temperature, zone)；板块缓存为空时返回 None（降级到指数驱动）。
     async fn temp_from_sectors(&self) -> Option<(MarketOverview, u32, String)> {
         let sectors = self.inner.sector_realtime.read().await.clone().unwrap_or_default();
-        if sectors.len() < 5 {
+        if sectors.is_empty() {
             return None; // 板块数据不足，交给指数降级
         }
         let n = sectors.len() as f64;
