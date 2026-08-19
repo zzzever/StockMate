@@ -1192,23 +1192,29 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let n = sectors.len() as f64;
         let up_boards = sectors.iter().filter(|s| s.change_percent > 0.0).count();
         let avg_change = sectors.iter().map(|s| s.change_percent).sum::<f64>() / n;
-        let hot_ratio = sectors.iter().filter(|s| s.change_percent > 2.0).count() as f64 / n;
+        let hot_ratio = sectors.iter().filter(|s| s.change_percent > 1.5).count() as f64 / n;
         let fund_in_ratio = sectors.iter()
-            .filter(|s| s.fund_flow.map_or(false, |f| f > 0.0)).count() as f64 / n;
-        let max_change = sectors.iter().map(|s| s.change_percent).fold(f64::MIN, f64::max);
-        let min_change = sectors.iter().map(|s| s.change_percent).fold(f64::MAX, f64::min);
+            .filter(|s| s.fund_flow.map_or(true, |f| f > 0.0)).count() as f64 / n;
+        // 情绪：avg_change 归一 0~1（-4%~+4%）
+        let sentiment = avg_change.clamp(-4.0, 4.0) / 4.0 * 0.5 + 0.5;
 
-        // 5 维度 0-100
-        let d_breadth = (up_boards as f64 / n) * 100.0;                          // 板块广度
-        let d_strength = clamp01((avg_change + 4.0) / 8.0) * 100.0;              // 板块强度 -4%~+4%
-        let d_hot = hot_ratio * 100.0;                                           // 热点占比 >2%
-        let d_fund = fund_in_ratio * 100.0;                                      // 资金动能
-        let d_gradient = clamp01((max_change - min_change).max(0.0) / 8.0) * 100.0; // 领涨梯度 0~8%
+        // ── 5 维度全部锚定中性 50，加大离中幅度使正常市场落在 40-60 ──
+        // 1) 板块广度：涨跌板块 1:1 ≈ 50（每偏离 10% 板块占比 ±15 度）
+        let d_breadth = clamp01(50.0 + ((up_boards as f64 / n) - 0.5) * 150.0);
+        // 2) 板块强度：0 涨幅 ≈ 50，±4% 到 0/100（每 +1% 涨幅 ≈ +12.5 度）
+        let d_strength = clamp01(50.0 + avg_change * 12.5);
+        // 3) 热点占比：约 25% 板块涨超 1.5% ≈ 50（每偏离 10% ±17.5 度）
+        let d_hot = clamp01(50.0 + (hot_ratio - 0.25) * 175.0);
+        // 4) 资金动能：净流入/流出板块平衡 ≈ 50（每偏离 10% ±14 度）
+        let d_fund = clamp01(50.0 + (fund_in_ratio - 0.5) * 140.0);
+        // 5) 情绪指数：直接取归一值
+        let d_sentiment = clamp01(sentiment) * 100.0;
 
-        // 加权：广度25 + 强度25 + 热点20 + 资金15 + 梯度15
-        let temperature = ((d_breadth * 0.25 + d_strength * 0.25 + d_hot * 0.20 + d_fund * 0.15 + d_gradient * 0.15) as u32).clamp(1, 100);
+        // 加权：广度25 + 强度25 + 情绪20 + 热点15 + 资金15
+        let raw_temp = d_breadth * 0.25 + d_strength * 0.25 + d_sentiment * 0.20 + d_hot * 0.15 + d_fund * 0.15;
+        // 正常波动：±8 度缓冲；极端行情才到冰点/沸点。clamp 保底避免 1 度/100 度的荒谬值。
+        let temperature = ((raw_temp * 0.9 + 5.0) as u32).clamp(5, 95);
         let zone = zone_for_temp(temperature).to_string();
-        let sentiment = avg_change.clamp(-4.0, 4.0) / 4.0 * 0.5 + 0.5; // 归一 0~1
 
         let overview = MarketOverview {
             date: chrono::Local::now().naive_local().date(),
