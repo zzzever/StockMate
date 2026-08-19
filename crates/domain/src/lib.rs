@@ -390,6 +390,16 @@ pub struct MarketOverview {
     pub sentiment_index: Option<f64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MarketTempRecord {
+    pub date: NaiveDate,
+    pub temperature: u32,     // 1-100
+    pub zone: String,          // 冰点/冷点/常温/热点/沸点
+    pub up_count: u32,
+    pub down_count: u32,
+    pub flat_count: u32,
+    pub sentiment: Option<f64>,
+}
 impl Default for MarketOverview {
     fn default() -> Self {
         Self {

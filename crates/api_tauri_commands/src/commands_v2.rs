@@ -134,6 +134,15 @@ pub async fn get_market_overview(state: State<'_, AppState>) -> Result<domain::M
 }
 
 #[tauri::command]
+pub async fn get_market_temp_history(
+    limit: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<Vec<domain::MarketTempRecord>, domain::ApiError> {
+    let limit = limit.unwrap_or(30);
+    state.data_service.get_market_temp_history(limit).await
+}
+
+#[tauri::command]
 pub async fn calculate_ma(stock_id: String, days: u32, state: State<'_, AppState>) -> Result<Vec<domain::MovingAverage>, domain::ApiError> {
     validate_stock_id(&stock_id)?;
     validate_days(days)?;

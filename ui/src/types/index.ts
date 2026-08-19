@@ -195,6 +195,16 @@ export interface MarketOverview {
   sentiment_index: number;
 }
 
+export interface MarketTempRecord {
+  date: string;          // YYYY-MM-DD
+  temperature: number;   // 1-100
+  zone: string;
+  up_count: number;
+  down_count: number;
+  flat_count: number;
+  sentiment: number | null;
+}
+
 // v0.3.0 DeepSeek types
 export interface DeepSeekAnalysis {
   trend: string;        // "bullish" / "bearish" / "neutral"

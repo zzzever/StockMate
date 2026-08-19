@@ -322,6 +322,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::predict_trend,
             api_tauri_commands::commands_v2::generate_card_data,
             api_tauri_commands::commands_v2::get_market_overview,
+            api_tauri_commands::commands_v2::get_market_temp_history,
             api_tauri_commands::deepseek_commands::save_deepseek_config,
             api_tauri_commands::deepseek_commands::get_deepseek_config,
             api_tauri_commands::deepseek_commands::test_deepseek_connection,

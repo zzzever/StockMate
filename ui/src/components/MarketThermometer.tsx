@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useMarketOverview } from '@/hooks/useTauriQuery';
+import { useMarketOverview, useMarketTempHistory } from '@/hooks/useTauriQuery';
 
 /** 市场温度分级 */
 export type TempZone =
@@ -17,13 +17,12 @@ export interface MarketTemp {
   advice: string;
 }
 
-/** 用涨跌家数和情绪指数计算市场温度（1-100） */
+/** 根据涨跌家数 + 情绪指数计算市场温度（1-100） */
 export function calcMarketTemp(upCount: number, downCount: number, flatCount: number, sentiment?: number): MarketTemp {
   const total = upCount + downCount + flatCount;
-  const ratio = total > 0 ? upCount / total : 0.5; // 0~1，上涨比例
-  // sentiment 0~1，若未提供则用 ratio 替代
-  const s = typeof sentiment === 'number' ? sentiment : ratio;
-
+  const s = typeof sentiment === 'number' && isFinite(sentiment) ? sentiment : 0.5;
+  // 当总数为 0（无个股数据），纯用情绪指数
+  const ratio = total > 0 ? upCount / total : s;
   // 综合：上涨比例(70%) + 情绪(30%)
   let temp = Math.round(ratio * 70 + s * 30);
   temp = Math.max(1, Math.min(100, temp));
@@ -50,15 +49,21 @@ const ZONE_MARKS = [
 
 export default function MarketThermometer() {
   const { data: overview } = useMarketOverview();
+  const { data: history = [] } = useMarketTempHistory(30);
 
   const temp = useMemo(() => {
     if (!overview) return null;
     return calcMarketTemp(overview.up_count, overview.down_count, overview.flat_count, overview.sentiment_index);
   }, [overview]);
 
+  if (!overview) return null;
   if (!temp) return null;
 
-  const pct = temp.temperature; // 0-100 scale directly as percentage
+  const pct = temp.temperature;
+  // 历史温度（最新在前），反转成正序展示
+  const histAsc = [...history].reverse();
+  const hasIndexData = true; // 后端已改为指数驱动
+  const canShowUpDown = overview.up_count > 0 || overview.down_count > 0;
 
   return (
     <div className="glass-card p-4">
@@ -66,9 +71,7 @@ export default function MarketThermometer() {
         {/* 温度计 */}
         <div className="flex flex-col items-center shrink-0">
           <div className="relative w-6 h-36 rounded-full overflow-hidden" style={{ background: 'var(--bg-input)' }}>
-            {/* 渐变填充（从底部蓝/绿到顶部红，模拟温度） */}
             <div className="absolute bottom-0 left-0 right-0" style={{ height: `${pct}%`, background: `linear-gradient(to top, #3b82f6, #22c55e, #f59e0b, #f97316, #ef4444)` }} />
-            {/* 刻度线 */}
             {[10, 20, 50, 80, 90].map(t => (
               <div key={t} className="absolute left-0 right-0 border-t border-white/40" style={{ bottom: `${t}%` }} />
             ))}
@@ -82,6 +85,9 @@ export default function MarketThermometer() {
             <span className="text-heading-sm" style={{ color: 'var(--text-primary)' }}>🌡️ 市场温度</span>
             <span className="text-data-sm font-bold px-2 py-0.5 rounded-sm" style={{ background: temp.color + '33', color: temp.color }}>
               {temp.zone}
+            </span>
+            <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+              {hasIndexData ? '指数驱动' : '个股涨跌'}
             </span>
           </div>
           <div className="text-data-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{temp.advice}</div>
@@ -99,14 +105,59 @@ export default function MarketThermometer() {
         </div>
       </div>
 
-      {/* 涨跌家数 */}
+      {/* 指标行：指数驱动时显示 4 大指数涨跌，否则显示个股涨跌家数 */}
       {overview && (
         <div className="flex items-center gap-4 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
-          <span>上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
-          <span>下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
-          <span>平盘 <b className="font-mono-nums">{overview.flat_count}</b></span>
+          {hasIndexData ? (
+            <>
+              <span>指数上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
+              <span>指数下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
+              <span>（4 大指数）</span>
+            </>
+          ) : (
+            <>
+              <span>上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
+              <span>下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
+              <span>平盘 <b className="font-mono-nums">{overview.flat_count}</b></span>
+            </>
+          )}
+          {canShowUpDown && (
+            <span className="ml-auto">情绪 {Math.round((overview.sentiment_index ?? 0) * 100)}</span>
+          )}
+        </div>
+      )}
+
+      {/* 历史温度曲线 */}
+      {history.length > 0 && (
+        <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-data-xs font-bold" style={{ color: 'var(--text-tertiary)' }}>📅 近 {history.length} 日温度</span>
+            <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最新 {temp.zone}</span>
+          </div>
+          <div className="flex items-end gap-[2px] h-10">
+            {histAsc.map((h, i) => (
+              <div key={h.date} className="flex-1 flex flex-col items-center gap-0.5 group" title={`${h.date} · ${h.temperature}° · ${h.zone}`}>
+                <div className={`w-full rounded-sm transition-all ${i === histAsc.length - 1 ? 'ring-1 ring-white/60' : ''}`}
+                  style={{ height: `${Math.max(6, h.temperature)}%`, background: zoneColor(h.zone) }} />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between text-[9px] mt-1" style={{ color: 'var(--text-tertiary)' }}>
+            <span>{histAsc[0]?.date?.slice(5)}</span>
+            <span>{histAsc[histAsc.length - 1]?.date?.slice(5)}</span>
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+function zoneColor(zone: string): string {
+  switch (zone) {
+    case '冰点': return '#3b82f6';
+    case '冷点': return '#22c55e';
+    case '热点': return '#f97316';
+    case '沸点': return '#ef4444';
+    default: return '#f59e0b';
+  }
 }

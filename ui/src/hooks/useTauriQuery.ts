@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { type Stock, type HotSector, type SectorStock, type SectorTopStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse, type WatchlistQuoteItem } from '@/types';
+import { type Stock, type HotSector, type SectorStock, type SectorTopStock, type HotStock, type StockFinance, type FundFlow, type StrategySignal, type Prediction, type CardData, type MarketOverview, type Quote, type MovingAverage, type SupportResistance, type DeepSeekAnalysis, type StrategyScript, type DeepSeekPrediction, type DeepSeekConfigResponse, type PriceData, type MultiDimensionAnalysis, type MarketEnvironment, type AnalyzeAllResponse, type WatchlistQuoteItem, type MarketTempRecord } from '@/types';
 
 // ============================================================
 // WebSocket real-time price store
@@ -371,6 +371,18 @@ export function useMarketOverview() {
         throw error;
       }
     },
+  });
+}
+
+export function useMarketTempHistory(limit: number = 30) {
+  return useQuery<MarketTempRecord[], Error>({
+    queryKey: ['market', 'temp_history', limit],
+    queryFn: async () => {
+      console.log('[useMarketTempHistory] fired, limit:', limit);
+      const data = await invoke<MarketTempRecord[]>('get_market_temp_history', { limit });
+      return data || [];
+    },
+    staleTime: 30_000,
   });
 }
 

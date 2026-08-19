@@ -1122,8 +1122,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let mut count = 0;
         let mut total_volume = 0.0;
         let mut total_amount = 0.0;
+        let mut idx_up = 0u32;
 
-        for (code, _name) in indices {
+        for (code, _name) in &indices {
             let suffix = if code.starts_with("sh") { "SH" } else { "SZ" };
             let id = format!("{}.{}", &code[2..], suffix);
             if let Some(data) = market_data::tencent::fetch_realtime_price(&id).await {
@@ -1131,22 +1132,30 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 count += 1;
                 total_volume += data.volume as f64;
                 total_amount += data.amount;
+                if data.change_percent > 0.0 { idx_up += 1; }
             }
         }
 
         if count > 0 {
             let avg_change = total_change / count as f64;
             let sentiment = ((avg_change + 3.0) / 6.0).clamp(0.0, 1.0); // Normalize -3%~+3% to 0~1
-            return Ok(MarketOverview {
+            // 指数驱动的涨跌家数（真实统计 4 大指数中涨跌数量）
+            let idx_down = (count.max(1) as u32).saturating_sub(idx_up);
+            let temperature = ((sentiment * 100.0) as u32).clamp(1, 100);
+            let zone = zone_for_temp(temperature).to_string();
+            let overview = MarketOverview {
                 date: chrono::Local::now().naive_local().date(),
-                up_count: ((sentiment * 4500.0) as u32).min(4500), // Estimate based on sentiment
-                down_count: (4500 - (sentiment * 4500.0) as u32).min(4500),
-                flat_count: 200,
+                up_count: idx_up,          // 指数上涨个数（不再造假涨跌家数）
+                down_count: idx_down,
+                flat_count: 0,
                 total_volume: Decimal::from_f64_retain(total_volume),
                 total_amount: Decimal::from_f64_retain(total_amount),
                 northbound_inflow: None,
                 sentiment_index: Some(sentiment),
-            });
+            };
+            // 持久化历史温度（幂等：同一天覆盖）
+            self.record_temp_history(&overview, temperature, &zone).await;
+            return Ok(overview);
         }
 
         // Mock fallback (only when all APIs fail)
@@ -1161,11 +1170,76 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             sentiment_index: Some(0.65),
         })
     }
+
+    /// 把某天温度写入历史表（幂等：同一天覆盖）
+    async fn record_temp_history(&self, o: &MarketOverview, temperature: u32, zone: &str) {
+        if let Some(pool) = &self.inner.db_pool {
+            let date = o.date.format("%Y-%m-%d").to_string();
+            let _ = sqlx::query(
+                "INSERT INTO market_temp_history(date, temperature, zone, up_count, down_count, flat_count, sentiment) \
+                 VALUES(?1,?2,?3,?4,?5,?6,COALESCE(?7,0.5)) \
+                 ON CONFLICT(date) DO UPDATE SET temperature=excluded.temperature, zone=excluded.zone, \
+                   up_count=excluded.up_count, down_count=excluded.down_count, flat_count=excluded.flat_count, sentiment=excluded.sentiment"
+            )
+                .bind(&date)
+                .bind(temperature as i64)
+                .bind(zone)
+                .bind(o.up_count as i64)
+                .bind(o.down_count as i64)
+                .bind(o.flat_count as i64)
+                .bind(o.sentiment_index)
+                .execute(pool)
+                .await;
+        }
+    }
+
+    /// 拉取历史温度记录（最新在前）
+    pub async fn get_market_temp_history(&self, limit: u32) -> Result<Vec<domain::MarketTempRecord>, ApiError> {
+        let mut recs = Vec::new();
+        if let Some(pool) = &self.inner.db_pool {
+            let rows = sqlx::query(
+                "SELECT date, temperature, zone, up_count, down_count, flat_count, sentiment \
+                 FROM market_temp_history ORDER BY date DESC LIMIT ? "
+            )
+                .bind(limit as i64)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| ApiError { code: 500, message: format!("读取温度历史失败: {}", e), details: None })?;
+            for r in rows {
+                let date_str: String = r.get("date");
+                let temp: i64 = r.get("temperature");
+                let zone: String = r.get("zone");
+                let up: i64 = r.get("up_count");
+                let down: i64 = r.get("down_count");
+                let flat: i64 = r.get("flat_count");
+                let sent: Option<f64> = r.get("sentiment");
+                recs.push(domain::MarketTempRecord {
+                    date: chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").unwrap_or_else(|_| chrono::Local::now().naive_local().date()),
+                    temperature: temp.clamp(1, 100) as u32,
+                    zone,
+                    up_count: up.max(0) as u32,
+                    down_count: down.max(0) as u32,
+                    flat_count: flat.max(0) as u32,
+                    sentiment: sent,
+                });
+            }
+        }
+        Ok(recs)
+    }
 }
 
 // ============================================================
 // CacheManager: L1 (moka) + L2 (SQLite ai_cache)
 // ============================================================
+
+/// 根据温度映射到区间名
+fn zone_for_temp(temp: u32) -> &'static str {
+    if temp <= 10 { "冰点" }
+    else if temp < 20 { "冷点" }
+    else if temp < 80 { "常温" }
+    else if temp < 90 { "热点" }
+    else { "沸点" }
+}
 
 use sha2::{Sha256, Digest};
 use chrono::{Utc, TimeDelta as ChronoDuration};
