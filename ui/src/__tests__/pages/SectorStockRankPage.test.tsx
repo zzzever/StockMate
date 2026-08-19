@@ -97,7 +97,7 @@ describe('SectorStockRankPage — Sector Analysis', () => {
       expect(screen.getAllByText('半导体').length).toBeGreaterThanOrEqual(2);
       expect(screen.getAllByText('银行').length).toBeGreaterThanOrEqual(2);
       // Heatmap cells have tooltip titles with full name + percent
-      const heatmapCells = document.querySelectorAll('[title]');
+      const heatmapCells = heatmapGrid ? heatmapGrid.querySelectorAll('[title]') : [];
       expect(heatmapCells.length).toBe(3);
       expect(heatmapCells[0].getAttribute('title')).toContain('半导体 +3.45%');
     });
