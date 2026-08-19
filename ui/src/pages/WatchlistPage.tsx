@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Search, RefreshCw } from 'lucide-react';
 import { useWatchlist, useWatchlistRemove, useWatchlistWithRealtime } from '@/hooks/useTauriQuery';
+import MarketThermometer from '@/components/MarketThermometer';
 import { useQueryClient } from '@tanstack/react-query';
 import { fmtPrice, fmtPct, fmtVolume } from '@/lib/format';
 
@@ -66,6 +67,9 @@ export default function WatchlistPage() {
           </button>
         </div>
       </div>
+
+      {/* 市场温度计 */}
+      <MarketThermometer />
 
       {/* Error state */}
       {error && (
