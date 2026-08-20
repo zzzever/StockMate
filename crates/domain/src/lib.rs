@@ -417,6 +417,9 @@ pub struct MarketTempRecord {
     pub down_count: u32,
     pub flat_count: u32,
     pub sentiment: Option<f64>,
+    pub limit_up: u32,
+    pub limit_down: u32,
+    pub total_amount: Option<f64>,
 }
 impl Default for MarketOverview {
     fn default() -> Self {

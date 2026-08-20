@@ -1175,7 +1175,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         let mut recs = Vec::new();
         if let Some(pool) = &self.inner.db_pool {
             let rows = sqlx::query(
-                "SELECT date, temperature, zone, up_count, down_count, flat_count, sentiment \
+                "SELECT date, temperature, zone, up_count, down_count, flat_count, sentiment, limit_up, limit_down, total_amount \
                  FROM market_temp_history ORDER BY date DESC LIMIT ? "
             )
                 .bind(limit as i64)
@@ -1190,6 +1190,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 let down: i64 = r.get("down_count");
                 let flat: i64 = r.get("flat_count");
                 let sent: Option<f64> = r.get("sentiment");
+                let limit_up: i64 = r.get("limit_up");
+                let limit_down: i64 = r.get("limit_down");
+                let total_amount: Option<f64> = r.get("total_amount");
                 recs.push(domain::MarketTempRecord {
                     date: chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").unwrap_or_else(|_| chrono::Local::now().naive_local().date()),
                     temperature: temp.clamp(1, 100) as u32,
@@ -1198,6 +1201,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                     down_count: down.max(0) as u32,
                     flat_count: flat.max(0) as u32,
                     sentiment: sent,
+                    limit_up: limit_up.max(0) as u32,
+                    limit_down: limit_down.max(0) as u32,
+                    total_amount,
                 });
             }
         }

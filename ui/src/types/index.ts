@@ -215,6 +215,9 @@ export interface MarketTempRecord {
   down_count: number;
   flat_count: number;
   sentiment: number | null;
+  limit_up?: number;
+  limit_down?: number;
+  total_amount?: number | null;
 }
 
 // v0.3.0 DeepSeek types
