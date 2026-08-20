@@ -371,6 +371,9 @@ export function useMarketOverview() {
         throw error;
       }
     },
+    // 交易时段温度应随板块实时数据刷新，轮询避免数值静止不动
+    refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 }
 
@@ -382,7 +385,8 @@ export function useMarketTempHistory(limit: number = 30) {
       const data = await invoke<MarketTempRecord[]>('get_market_temp_history', { limit });
       return data || [];
     },
-    staleTime: 30_000,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 }
 

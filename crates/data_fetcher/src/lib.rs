@@ -332,16 +332,23 @@ impl DataService {
                 }
 
                 loop {
-                    // Fetch all stock prices in chunks — concurrent for speed
+                    // Fetch all stock prices in chunks — bounded concurrency (Semaphore=8)
+                    // to keep speed while avoiding rate-limit/IP bans on Tencent/EastMoney
                     let mut all_prices: Vec<market_data::PriceData> = Vec::new();
                     let chunks: Vec<Vec<&str>> = unique_codes.chunks(20).map(|c| c.to_vec()).collect();
-                    let results = futures_util::future::join_all(chunks.iter().map(|chunk| async move {
-                        let mut batch = market_data::fetch_realtime_batch(chunk).await;
-                        if batch.is_empty() {
-                            // Fallback: try EastMoney
-                            batch = market_data::eastmoney::fetch_realtime_batch(chunk).await;
+                    let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+                    let results = futures_util::future::join_all(chunks.iter().map(|chunk| {
+                        let sem = sem.clone();
+                        async move {
+                            let _permit = sem.acquire_owned().await;
+                            let mut batch = market_data::fetch_realtime_batch(chunk).await;
+                            // 轻微节流，分摊东财 fallback 的并发爆发
+                            if batch.is_empty() {
+                                tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+                                batch = market_data::eastmoney::fetch_realtime_batch(chunk).await;
+                            }
+                            batch
                         }
-                        batch
                     })).await;
                     for batch in results { all_prices.extend(batch); }
 
@@ -1205,11 +1212,16 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
         // 情绪：avg_change 归一 0~1（-4%~+4%）
         let sentiment = avg_change.clamp(-4.0, 4.0) / 4.0 * 0.5 + 0.5;
 
-        // ── 5 维度全部锚定中性 50 ──
-        let d_breadth = clamp01(50.0 + ((up_boards as f64 / n) - 0.5) * 150.0);
-        let d_strength = clamp01(50.0 + avg_change * 12.5);
-        let d_hot = clamp01(50.0 + (hot_ratio - 0.25) * 175.0);
-        let d_fund = clamp01(50.0 + (fund_in_ratio - 0.5) * 140.0);
+        // ── 5 维度全部锚定中性 0.5(归一到0~1后×100 => 中性≈50) ──
+        // 1) 板块广度：涨跌板块 1:1 ≈ 50（每偏离 10% 版面占比 ±15 度）
+        let d_breadth = clamp01(0.5 + ((up_boards as f64 / n) - 0.5) * 1.5) * 100.0;
+        // 2) 板块强度：0 涨幅 ≈ 50，±4% 到 0/100（每 ±1% 涨幅 ≈ ±12.5 度）
+        let d_strength = clamp01(0.5 + avg_change * 0.125) * 100.0;
+        // 3) 热点占比：约 25% 板块涨超 1.5% ≈ 50（每偏离 10% ±17.5 度）
+        let d_hot = clamp01(0.5 + (hot_ratio - 0.25) * 1.75) * 100.0;
+        // 4) 资金动能：净流入/流出板块平衡 ≈ 50（每偏离 10% ±14 度）
+        let d_fund = clamp01(0.5 + (fund_in_ratio - 0.5) * 1.4) * 100.0;
+        // 5) 情绪指数：直接取归一值
         let d_sentiment = clamp01(sentiment) * 100.0;
 
         let raw_temp = d_breadth * 0.25 + d_strength * 0.25 + d_sentiment * 0.20 + d_hot * 0.15 + d_fund * 0.15;
