@@ -26,6 +26,7 @@ pub async fn init_db(pool: &DbPool) -> Result<()> {
         include_str!("../migrations/0009_add_screener_strategies.sql"),
         include_str!("../migrations/0010_add_model_to_prediction_history.sql"),
         include_str!("../migrations/0011_add_market_temp_history.sql"),
+        include_str!("../migrations/0012_add_market_breadth_columns.sql"),
     ];
     for mig in migrations {
         // Wrap each migration file in a transaction for atomicity

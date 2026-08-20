@@ -1147,11 +1147,13 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
     async fn record_temp_history(&self, o: &MarketOverview, temperature: u32, zone: &str) {
         if let Some(pool) = &self.inner.db_pool {
             let date = o.date.format("%Y-%m-%d").to_string();
+            let amount = o.total_amount.clone().and_then(|d| rust_decimal::prelude::ToPrimitive::to_f64(&d)).unwrap_or(0.0);
             let _ = sqlx::query(
-                "INSERT INTO market_temp_history(date, temperature, zone, up_count, down_count, flat_count, sentiment) \
-                 VALUES(?1,?2,?3,?4,?5,?6,COALESCE(?7,0.5)) \
+                "INSERT INTO market_temp_history(date, temperature, zone, up_count, down_count, flat_count, sentiment, limit_up, limit_down, total_amount) \
+                 VALUES(?1,?2,?3,?4,?5,?6,COALESCE(?7,0.5),?8,?9,?10) \
                  ON CONFLICT(date) DO UPDATE SET temperature=excluded.temperature, zone=excluded.zone, \
-                   up_count=excluded.up_count, down_count=excluded.down_count, flat_count=excluded.flat_count, sentiment=excluded.sentiment"
+                   up_count=excluded.up_count, down_count=excluded.down_count, flat_count=excluded.flat_count, sentiment=excluded.sentiment, \
+                   limit_up=excluded.limit_up, limit_down=excluded.limit_down, total_amount=excluded.total_amount"
             )
                 .bind(&date)
                 .bind(temperature as i64)
@@ -1160,6 +1162,9 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 .bind(o.down_count as i64)
                 .bind(o.flat_count as i64)
                 .bind(o.sentiment_index)
+                .bind(o.limit_up as i64)
+                .bind(o.limit_down as i64)
+                .bind(amount)
                 .execute(pool)
                 .await;
         }
