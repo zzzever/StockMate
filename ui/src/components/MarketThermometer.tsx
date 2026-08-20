@@ -88,7 +88,6 @@ export default function MarketThermometer() {
   // 板块驱动由后端 temperature 字段标识；缺省时走指数/前端自算
   const isSectorDriven = typeof overview.temperature === 'number';
   const unitLabel = isSectorDriven ? '板块' : '指数';
-  const canShowUpDown = overview.up_count > 0 || overview.down_count > 0;
 
   return (
     <div className="glass-card p-4">
@@ -130,19 +129,13 @@ export default function MarketThermometer() {
         </div>
       </div>
 
-      {/* 指标行：指数驱动时显示 4 大指数涨跌，否则显示个股涨跌家数 */}
+      {/* 指标行：上涨/下跌/持平 + 有效板块数 */}
       {overview && (
-        <div className="flex items-center gap-4 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
-          {canShowUpDown ? (
-            <>
-              <span>{unitLabel}上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
-              <span>{unitLabel}下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
-            </>
-          ) : (
-            <>
-              <span>上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
-              <span>下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
-            </>
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
+          <span>{unitLabel}上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
+          <span>{unitLabel}下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
+          {overview.flat_count > 0 && (
+            <span>持平 <b className="font-mono-nums">{overview.flat_count}</b></span>
           )}
           <span className="ml-auto">情绪 {Math.round((overview.sentiment_index ?? 0) * 100)}</span>
         </div>
