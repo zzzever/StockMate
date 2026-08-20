@@ -5,6 +5,9 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  // Tauri 生产环境通过 tauri://localhost 协议加载，必须用相对路径，
+  // 否则 index.html 里 /assets/... 绝对路径会解析失败报 "assets not found"
+  base: './',
   server: {
     port: 1420,
     strictPort: true,
