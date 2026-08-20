@@ -1090,161 +1090,57 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
     }
 
     pub async fn get_market_overview(&self) -> Result<MarketOverview, ApiError> {
-        // ── 优先用真实板块行情计算温度（板块驱动，5 维度） ──
-        if let Some((overview, temperature, zone)) = self.temp_from_sectors().await {
-            self.record_temp_history(&overview, temperature, &zone).await;
-            return Ok(overview);
-        }
-        let val = self
-            .fetch(&self.inner.overview_cache, "/overview", &[], MAX_STALE_REALTIME_SECS)
-            .await?;
+        // ── 全市场情绪驱动：涨跌家数 + 涨停跌停 + 大盘量能 ──
+        let breadth = market_data::eastmoney::fetch_market_breadth().await;
+        let amount = self.fetch_market_amount().await; // 两市总成交额（元）
 
-        if !val.is_null() {
-            // Try deserializing directly (cached MarketOverview JSON from previous Tencent call)
-            if let Ok(overview) = serde_json::from_value::<MarketOverview>(val.clone()) {
-                return Ok(overview);
-            }
+        let up = breadth.up_count as f64;
+        let down = breadth.down_count as f64;
+        let total = up + down;
+        let breadth_ratio = if total > 0.0 { up / total } else { 0.5 };
 
-            // Cached JSON format: object with specific keys
-            let obj = val.as_object().ok_or(ApiError {
-                code: 500,
-                message: "Invalid overview format".into(),
-                details: None,
-            })?;
+        // ── 3 维度温度（全部锚定中性 0.5 → 50）──
+        // 1) 市场广度：涨跌家数比 5:5 ≈ 50（每偏离 10% ±20 度）
+        let d_breadth = clamp01(0.5 + (breadth_ratio - 0.5) * 2.0) * 100.0;
+        // 2) 赚钱效应：涨停 vs 跌停（涨跌停抵消 → 50）
+        let limit_sum = (breadth.limit_up + breadth.limit_down) as f64;
+        let d_limit = if limit_sum > 0.0 {
+            let bias = (breadth.limit_up as f64 - breadth.limit_down as f64) / limit_sum;
+            clamp01(0.5 + bias * 0.5) * 100.0
+        } else { 50.0 };
+        // 3) 大盘量能：1.2 万亿 ≈ 50（缩量<0.6万亿→0，放量>1.8万亿→100）
+        let amount_yi = amount / 1e8; // 元 → 亿元
+        let d_volume = clamp01(0.5 + (amount_yi - 12000.0) / 12000.0 * 1.5) * 100.0;
 
-            return Ok(MarketOverview {
-                date: chrono::Local::now().naive_local().date(),
-                up_count: obj.get("up").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                down_count: obj.get("down").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                flat_count: obj.get("flat").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                total_volume: obj.get("volume").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
-                total_amount: obj.get("turnover").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
-                northbound_inflow: obj.get("northbound_inflow").and_then(|v| v.as_f64()).and_then(|x| Decimal::from_f64_retain(x)),
-                sentiment_index: Some(0.5),
-                temperature: None,
-                temp_zone: None,
-                data_source: None,
-            });
-        }
-
-        // Tencent fallback: fetch 4 major indices to calculate sentiment
-        let indices = vec![
-            ("sh000001", "上证"),   // 上证指数
-            ("sz399001", "深证"),   // 深证成指
-            ("sh000688", "科创50"), // 科创50
-            ("sz399006", "创业板"), // 创业板指
-        ];
-        let mut total_change = 0.0;
-        let mut count = 0;
-        let mut total_volume = 0.0;
-        let mut total_amount = 0.0;
-        let mut idx_up = 0u32;
-
-        for (code, _name) in &indices {
-            let suffix = if code.starts_with("sh") { "SH" } else { "SZ" };
-            let id = format!("{}.{}", &code[2..], suffix);
-            if let Some(data) = market_data::tencent::fetch_realtime_price(&id).await {
-                total_change += data.change_percent;
-                count += 1;
-                total_volume += data.volume as f64;
-                total_amount += data.amount;
-                if data.change_percent > 0.0 { idx_up += 1; }
-            }
-        }
-
-        if count > 0 {
-            let avg_change = total_change / count as f64;
-            let sentiment = ((avg_change + 3.0) / 6.0).clamp(0.0, 1.0); // Normalize -3%~+3% to 0~1
-            // 指数驱动的涨跌家数（真实统计 4 大指数中涨跌数量）
-            let idx_down = (count.max(1) as u32).saturating_sub(idx_up);
-            let temperature = ((sentiment * 100.0) as u32).clamp(1, 100);
-            let zone = zone_for_temp(temperature).to_string();
-            let overview = MarketOverview {
-                date: chrono::Local::now().naive_local().date(),
-                up_count: idx_up,          // 指数上涨个数（不再造假涨跌家数）
-                down_count: idx_down,
-                flat_count: 0,
-                total_volume: Decimal::from_f64_retain(total_volume),
-                total_amount: Decimal::from_f64_retain(total_amount),
-                northbound_inflow: None,
-                sentiment_index: Some(sentiment),
-                temperature: Some(temperature),
-                temp_zone: Some(zone.clone()),
-                data_source: Some("index".to_string()),
-            };
-            // 持久化历史温度（幂等：同一天覆盖）
-            self.record_temp_history(&overview, temperature, &zone).await;
-            return Ok(overview);
-        }
-
-        // Mock fallback (only when all APIs fail)
-        Ok(MarketOverview {
-            date: chrono::Local::now().naive_local().date(),
-            up_count: 2500,
-            down_count: 1800,
-            flat_count: 200,
-            total_volume: Decimal::from_f64_retain(850_000_000_000.0),
-            total_amount: Decimal::from_f64_retain(850_000_000_000.0),
-            northbound_inflow: Decimal::from_f64_retain(5_000_000_000.0),
-            sentiment_index: Some(0.65),
-            temperature: Some(65),
-            temp_zone: Some("常温".to_string()),
-            data_source: None,
-        })
-    }
-
-    /// 板块驱动温度：从 sector_realtime 读取 47 板块真实数据计算 5 维度温度。
-    /// 返回 (overview, temperature, zone)；板块缓存为空时返回 None（降级到指数驱动）。
-    async fn temp_from_sectors(&self) -> Option<(MarketOverview, u32, String)> {
-        let sectors = self.inner.sector_realtime.read().await.clone().unwrap_or_default();
-        if sectors.is_empty() {
-            return None;
-        }
-        // 只统计"有真实涨跌数据"的板块（排除 change_percent≈0 的无数据板块）
-        let active: Vec<&HotSector> = sectors.iter().filter(|s| s.change_percent.abs() > 0.01).collect();
-        if active.len() < 5 {
-            return None; // 有效板块数据不足，降级到指数驱动
-        }
-        let n = active.len() as f64;
-        let up_boards = active.iter().filter(|s| s.change_percent > 0.0).count();
-        let flat_boards = active.iter().filter(|s| s.change_percent.abs() <= 0.01).count();
-        let avg_change = active.iter().map(|s| s.change_percent).sum::<f64>() / n;
-        let hot_ratio = active.iter().filter(|s| s.change_percent > 1.5).count() as f64 / n;
-        let fund_in_ratio = active.iter()
-            .filter(|s| s.fund_flow.map_or(true, |f| f > 0.0)).count() as f64 / n;
-        // 情绪：avg_change 归一 0~1（-4%~+4%）
-        let sentiment = avg_change.clamp(-4.0, 4.0) / 4.0 * 0.5 + 0.5;
-
-        // ── 5 维度全部锚定中性 0.5(归一到0~1后×100 => 中性≈50) ──
-        // 1) 板块广度：涨跌板块 1:1 ≈ 50（每偏离 10% 版面占比 ±15 度）
-        let d_breadth = clamp01(0.5 + ((up_boards as f64 / n) - 0.5) * 1.5) * 100.0;
-        // 2) 板块强度：0 涨幅 ≈ 50，±4% 到 0/100（每 ±1% 涨幅 ≈ ±12.5 度）
-        let d_strength = clamp01(0.5 + avg_change * 0.125) * 100.0;
-        // 3) 热点占比：约 25% 板块涨超 1.5% ≈ 50（每偏离 10% ±17.5 度）
-        let d_hot = clamp01(0.5 + (hot_ratio - 0.25) * 1.75) * 100.0;
-        // 4) 资金动能：净流入/流出板块平衡 ≈ 50（每偏离 10% ±14 度）
-        let d_fund = clamp01(0.5 + (fund_in_ratio - 0.5) * 1.4) * 100.0;
-        // 5) 情绪指数：直接取归一值
-        let d_sentiment = clamp01(sentiment) * 100.0;
-
-        let raw_temp = d_breadth * 0.25 + d_strength * 0.25 + d_sentiment * 0.20 + d_hot * 0.15 + d_fund * 0.15;
-        let temperature = ((raw_temp * 0.9 + 5.0) as u32).clamp(5, 95);
+        // 加权：广度 45% + 赚钱效应 35% + 量能 20%
+        let raw = d_breadth * 0.45 + d_limit * 0.35 + d_volume * 0.20;
+        let temperature = ((raw * 0.9 + 5.0) as u32).clamp(5, 95);
         let zone = zone_for_temp(temperature).to_string();
 
         let overview = MarketOverview {
             date: chrono::Local::now().naive_local().date(),
-            up_count: up_boards as u32,          // 有效板块中上涨数
-            down_count: (active.len() - up_boards - flat_boards) as u32,
-            flat_count: flat_boards as u32,      // 持平板块数
+            up_count: breadth.up_count,       // 全市场上涨家数
+            down_count: breadth.down_count,   // 全市场下跌家数
+            flat_count: breadth.flat_count,   // 全市场平盘家数
             total_volume: None,
-            total_amount: None,
+            total_amount: Decimal::from_f64_retain(amount),
             northbound_inflow: None,
-            sentiment_index: Some(sentiment),
+            sentiment_index: Some(breadth_ratio),
             temperature: Some(temperature),
             temp_zone: Some(zone.clone()),
-            data_source: Some("sector".to_string()),
+            data_source: Some("market".to_string()),
+            limit_up: breadth.limit_up,
+            limit_down: breadth.limit_down,
         };
-        Some((overview, temperature, zone))
+        self.record_temp_history(&overview, temperature, &zone).await;
+        Ok(overview)
+    }
+
+    /// 获取沪深两市总成交额（元）。用上证指数 + 深证成指的成交额之和作为大盘量能。
+    async fn fetch_market_amount(&self) -> f64 {
+        let codes = vec!["sh000001", "sz399001"];
+        let prices = market_data::tencent::fetch_realtime_batch(&codes).await;
+        prices.iter().map(|p| p.amount).sum()
     }
 
     /// 把某天温度写入历史表（幂等：同一天覆盖）

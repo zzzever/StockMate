@@ -85,9 +85,6 @@ export default function MarketThermometer() {
   const pct = temp.temperature;
   // 历史温度（最新在前），反转成正序展示
   const histAsc = [...history].reverse();
-  // 数据源：后端 data_source 明确区分板块/指数；无则按 temperature 存在性推断
-  const isSectorDriven = overview.data_source === 'sector' || (overview.data_source == null && typeof overview.temperature === 'number');
-  const unitLabel = isSectorDriven ? '板块' : '指数';
 
   return (
     <div className="glass-card p-4">
@@ -111,7 +108,7 @@ export default function MarketThermometer() {
               {temp.zone}
             </span>
             <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-              板块驱动
+              全市场
             </span>
           </div>
           <div className="text-data-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{temp.advice}</div>
@@ -129,15 +126,19 @@ export default function MarketThermometer() {
         </div>
       </div>
 
-      {/* 指标行：上涨/下跌/持平 + 有效板块数 */}
+      {/* 指标行：全市场涨跌家数 + 涨停跌停 + 量能 */}
       {overview && (
         <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
-          <span>{unitLabel}上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
-          <span>{unitLabel}下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
+          <span>上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
+          <span>下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
           {overview.flat_count > 0 && (
-            <span>持平 <b className="font-mono-nums">{overview.flat_count}</b></span>
+            <span>平盘 <b className="font-mono-nums">{overview.flat_count}</b></span>
           )}
-          <span className="ml-auto">情绪 {Math.round((overview.sentiment_index ?? 0) * 100)}</span>
+          <span>涨停 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.limit_up ?? 0}</b></span>
+          <span>跌停 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.limit_down ?? 0}</b></span>
+          {overview.total_amount != null && (
+            <span className="ml-auto">成交额 <b className="font-mono-nums">{(Number(overview.total_amount) / 1e8).toFixed(0)}亿</b></span>
+          )}
         </div>
       )}
 

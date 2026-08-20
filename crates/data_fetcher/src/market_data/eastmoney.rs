@@ -540,3 +540,100 @@ pub fn get_board_name_for_sector(our_name: &'static str) -> Option<&'static str>
 
     Some(mapped)
 }
+
+// ── 全市场涨跌家数 / 涨停跌停 ──
+
+/// 全市场情绪数据：上涨家数、下跌家数、涨停数、跌停数。
+#[derive(Debug, Clone, Default)]
+pub struct MarketBreadth {
+    pub up_count: u32,
+    pub down_count: u32,
+    pub flat_count: u32,
+    pub limit_up: u32,
+    pub limit_down: u32,
+}
+
+/// 从东方财富市场总貌接口拉取全市场涨跌分布 + 涨停/跌停家数。
+/// 三个接口并行请求，任一失败取默认 0（不影响其它维度）。
+pub async fn fetch_market_breadth() -> MarketBreadth {
+    let client = match build_client() {
+        Some(c) => c,
+        None => return MarketBreadth::default(),
+    };
+    let client = std::sync::Arc::new(client);
+
+    // 并行拉取：涨跌分布、涨停池、跌停池
+    let (fenbu, zt, dt) = tokio::join!(
+        fetch_zdfenbu(&client),
+        fetch_zt_dt_pool(&client, "ZTPool"),
+        fetch_zt_dt_pool(&client, "DTPool"),
+    );
+
+    let mut breadth = MarketBreadth {
+        limit_up: zt,
+        limit_down: dt,
+        ..Default::default()
+    };
+    // 从涨跌分布统计上涨/下跌/持平家数（涨停/跌停已在 zt/dt 单独统计，避免双计）
+    let mut up = 0u64;
+    let mut down = 0u64;
+    let mut flat = 0u64;
+    for (bucket, count) in fenbu {
+        if bucket > 0 { up += count; }
+        else if bucket < 0 { down += count; }
+        else { flat += count; }
+    }
+    breadth.up_count = up as u32;
+    breadth.down_count = down as u32;
+    breadth.flat_count = flat as u32;
+    breadth
+}
+
+/// 拉取涨跌分布：返回 (涨跌幅桶中心, 家数) 列表。
+async fn fetch_zdfenbu(client: &std::sync::Arc<Client>) -> Vec<(i32, u64)> {
+    let url = "https://push2ex.eastmoney.com/getTopicZDFenBu?cb=&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt";
+    let resp = match send_request(client, url).await {
+        Ok(r) => r,
+        Err(_) => return vec![],
+    };
+    #[derive(Deserialize)]
+    struct Wrapper { data: Option<DataInner> }
+    #[derive(Deserialize)]
+    struct DataInner { fenbu: Option<Vec<std::collections::HashMap<String, i64>>> }
+    let json: Wrapper = match resp.json().await {
+        Ok(j) => j,
+        Err(_) => return vec![],
+    };
+    let mut out = Vec::new();
+    if let Some(list) = json.data.and_then(|d| d.fenbu) {
+        for map in list {
+            for (k, v) in map {
+                if let Ok(bucket) = k.parse::<i32>() {
+                    out.push((bucket, v.max(0) as u64));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 拉取涨停/跌停池的家数（tc 字段）。
+async fn fetch_zt_dt_pool(client: &std::sync::Arc<Client>, kind: &str) -> u32 {
+    let url = format!(
+        "https://push2ex.eastmoney.com/getTopic{}?cb=&ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&pagesize=1&sort=fbt%3Aasc",
+        kind
+    );
+    let resp = match send_request(client, &url).await {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+    #[derive(Deserialize)]
+    struct Wrapper { data: Option<DataInner> }
+    #[derive(Deserialize)]
+    struct DataInner { tc: Option<u32> }
+    let json: Wrapper = match resp.json().await {
+        Ok(j) => j,
+        Err(_) => return 0,
+    };
+    json.data.and_then(|d| d.tc).unwrap_or(0)
+}

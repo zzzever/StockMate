@@ -393,6 +393,10 @@ pub struct MarketOverview {
     pub temp_zone: Option<String>,
     /// 数据来源标识："sector"=板块驱动(47板块), "index"=指数降级(4大指数), None=未知/缓存
     pub data_source: Option<String>,
+    /// 全市场涨停家数
+    pub limit_up: u32,
+    /// 全市场跌停家数
+    pub limit_down: u32,
 }
 
 /// 温度子维度（供前端展示）
@@ -428,6 +432,8 @@ impl Default for MarketOverview {
             temperature: None,
             temp_zone: None,
             data_source: None,
+            limit_up: 0,
+            limit_down: 0,
         }
     }
 }
@@ -1290,6 +1296,7 @@ mod tests {
             total_amount: Some(Decimal::new(850000000000i64, 0)),
             northbound_inflow: Some(Decimal::new(5000000000i64, 0)),
             sentiment_index: Some(0.65),
+            ..Default::default()
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: MarketOverview = serde_json::from_str(&json).unwrap();
@@ -1309,6 +1316,7 @@ mod tests {
             total_amount: None,
             northbound_inflow: None,
             sentiment_index: Some(0.0),
+            ..Default::default()
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: MarketOverview = serde_json::from_str(&json).unwrap();
@@ -1326,6 +1334,7 @@ mod tests {
             total_amount: None,
             northbound_inflow: None,
             sentiment_index: Some(0.0),
+            ..Default::default()
         };
         let _dbg = format!("{:?}", m);
         let _cloned = m.clone();

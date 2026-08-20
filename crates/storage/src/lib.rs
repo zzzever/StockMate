@@ -895,6 +895,8 @@ impl MarketOverviewRepository {
                 temperature: None,
                 temp_zone: None,
                 data_source: None,
+                limit_up: 0,
+                limit_down: 0,
             }
         }))
     }
@@ -1622,6 +1624,7 @@ mod tests {
             total_amount: Some(Decimal::new(850, 0)),
             northbound_inflow: Some(Decimal::new(5, 0)),
             sentiment_index: Some(0.65),
+            ..Default::default()
         };
 
         repo.insert(&overview).await.unwrap();
