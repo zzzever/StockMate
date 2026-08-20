@@ -332,17 +332,18 @@ impl DataService {
                 }
 
                 loop {
-                    // Fetch all stock prices in chunks
+                    // Fetch all stock prices in chunks — concurrent for speed
                     let mut all_prices: Vec<market_data::PriceData> = Vec::new();
-                    for chunk in unique_codes.chunks(20) {
-                        let mut batch = market_data::fetch_realtime_batch(&chunk.to_vec()).await;
+                    let chunks: Vec<Vec<&str>> = unique_codes.chunks(20).map(|c| c.to_vec()).collect();
+                    let results = futures_util::future::join_all(chunks.iter().map(|chunk| async move {
+                        let mut batch = market_data::fetch_realtime_batch(chunk).await;
                         if batch.is_empty() {
                             // Fallback: try EastMoney
-                            batch = market_data::eastmoney::fetch_realtime_batch(&chunk.to_vec()).await;
+                            batch = market_data::eastmoney::fetch_realtime_batch(chunk).await;
                         }
-                        all_prices.extend(batch);
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
+                        batch
+                    })).await;
+                    for batch in results { all_prices.extend(batch); }
 
                     if all_prices.is_empty() {
                         tracing::warn!("[sector_refresh] all data sources returned empty (Tencent + EastMoney)");
@@ -1791,4 +1792,5 @@ mod tests {
     fn test_exchange_to_secid_unknown() {
         assert_eq!(exchange_to_secid("HK", "00700"), "0.00700");
     }
+
 }
