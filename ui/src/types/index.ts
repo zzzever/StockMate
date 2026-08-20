@@ -195,6 +195,7 @@ export interface MarketOverview {
   sentiment_index: number;
   temperature?: number;      // 后端板块驱动温度 (1-100)
   temp_zone?: string;
+  data_source?: string | null;  // "sector"=板块驱动, "index"=指数降级, null=未知/缓存
 }
 
 export interface MarketTempDim {

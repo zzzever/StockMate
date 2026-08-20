@@ -894,6 +894,7 @@ impl MarketOverviewRepository {
                 sentiment_index: r.get("sentiment_index"),
                 temperature: None,
                 temp_zone: None,
+                data_source: None,
             }
         }))
     }

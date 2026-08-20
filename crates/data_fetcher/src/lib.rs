@@ -1123,6 +1123,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 sentiment_index: Some(0.5),
                 temperature: None,
                 temp_zone: None,
+                data_source: None,
             });
         }
 
@@ -1169,6 +1170,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
                 sentiment_index: Some(sentiment),
                 temperature: Some(temperature),
                 temp_zone: Some(zone.clone()),
+                data_source: Some("index".to_string()),
             };
             // 持久化历史温度（幂等：同一天覆盖）
             self.record_temp_history(&overview, temperature, &zone).await;
@@ -1187,6 +1189,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             sentiment_index: Some(0.65),
             temperature: Some(65),
             temp_zone: Some("常温".to_string()),
+            data_source: None,
         })
     }
 
@@ -1239,6 +1242,7 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
             sentiment_index: Some(sentiment),
             temperature: Some(temperature),
             temp_zone: Some(zone.clone()),
+            data_source: Some("sector".to_string()),
         };
         Some((overview, temperature, zone))
     }

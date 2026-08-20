@@ -391,6 +391,8 @@ pub struct MarketOverview {
     /// 后端计算的板块驱动温度（1-100），前端优先使用；缺省时前端自行计算
     pub temperature: Option<u32>,
     pub temp_zone: Option<String>,
+    /// 数据来源标识："sector"=板块驱动(47板块), "index"=指数降级(4大指数), None=未知/缓存
+    pub data_source: Option<String>,
 }
 
 /// 温度子维度（供前端展示）
@@ -425,6 +427,7 @@ impl Default for MarketOverview {
             sentiment_index: None,
             temperature: None,
             temp_zone: None,
+            data_source: None,
         }
     }
 }

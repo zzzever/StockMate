@@ -85,8 +85,8 @@ export default function MarketThermometer() {
   const pct = temp.temperature;
   // 历史温度（最新在前），反转成正序展示
   const histAsc = [...history].reverse();
-  // 板块驱动由后端 temperature 字段标识；缺省时走指数/前端自算
-  const isSectorDriven = typeof overview.temperature === 'number';
+  // 数据源：后端 data_source 明确区分板块/指数；无则按 temperature 存在性推断
+  const isSectorDriven = overview.data_source === 'sector' || (overview.data_source == null && typeof overview.temperature === 'number');
   const unitLabel = isSectorDriven ? '板块' : '指数';
 
   return (
