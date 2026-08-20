@@ -59,7 +59,7 @@ const ZONE_MARKS = [
 
 export default function MarketThermometer() {
   const { data: overview } = useMarketOverview();
-  const { data: history = [] } = useMarketTempHistory(30);
+  const { data: history = [] } = useMarketTempHistory(7);
 
   const temp = useMemo(() => {
     if (!overview) return null;
@@ -145,14 +145,55 @@ export default function MarketThermometer() {
       {history.length > 0 && (
         <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-data-xs font-bold" style={{ color: 'var(--text-tertiary)' }}>📅 近 {history.length} 日温度</span>
+            <span className="text-data-xs font-bold" style={{ color: 'var(--text-tertiary)' }}>📅 近 7 日温度</span>
             <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>最新 {temp.zone}</span>
           </div>
-          <div className="flex items-end gap-[2px] h-10">
+          <div className="relative h-10">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full overflow-visible">
+              {(() => {
+                const pts = histAsc;
+                const n = pts.length;
+                // 坐标映射：温度 0~100 → y 100~0；x 均匀分布并留边距
+                const pad = 4; // 横向留边(1~100 外的 padding)
+                const stepX = n > 1 ? (100 - pad * 2) / (n - 1) : 0;
+                const coord = (i: number) => ({
+                  x: n > 1 ? pad + i * stepX : 50,
+                  y: 100 - Math.max(0, Math.min(100, pts[i].temperature)),
+                });
+                const pointsStr = pts.map((_, i) => `${coord(i).x.toFixed(2)},${coord(i).y.toFixed(2)}`).join(' ');
+                const last = coord(n - 1);
+                return (
+                  <>
+                    <defs>
+                      <linearGradient id="tempGrad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#3b82f6" />
+                        <stop offset="50%" stopColor="#f59e0b" />
+                        <stop offset="100%" stopColor="#ef4444" />
+                      </linearGradient>
+                    </defs>
+                    <polyline
+                      points={pointsStr}
+                      fill="none" stroke="url(#tempGrad)" strokeWidth="2.5" vectorEffect="non-scaling-stroke"
+                      style={{ strokeLinecap: 'round', strokeLinejoin: 'round' }}
+                    />
+                    {pts.map((h, i) => (
+                      <circle key={h.date} cx={coord(i).x} cy={coord(i).y} r={i === n - 1 ? 3.2 : 2}
+                        fill={i === n - 1 ? '#fff' : zoneColor(h.zone)} stroke="#000" strokeWidth="0.6"
+                        vectorEffect="non-scaling-stroke" />
+                    ))}
+                    <circle cx={last.x} cy={last.y} r="3.4" fill="none" stroke="#fff" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.12)" strokeWidth="0.5"
+                      strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                  </>
+                );
+              })()}
+            </svg>
+            <div className="relative z-10 h-full" style={{ pointerEvents: 'none' }} />
             {histAsc.map((h, i) => (
-              <div key={h.date} className="flex-1 flex flex-col items-center gap-0.5 group" title={`${h.date} · ${h.temperature}° · ${h.zone}`}>
-                <div className={`w-full rounded-sm transition-all ${i === histAsc.length - 1 ? 'ring-1 ring-white/60' : ''}`}
-                  style={{ height: `${Math.max(6, h.temperature)}%`, background: zoneColor(h.zone) }} />
+              <div key={h.date} className="absolute top-0 bottom-0 flex items-center"
+                style={{ left: `${(() => { const pad = 4; const n = histAsc.length; return n > 1 ? (pad + i * ((100 - pad * 2) / (n - 1))) : 50; })()}%`, pointerEvents: 'auto' }}
+                title={`${h.date} · ${h.temperature}° · ${h.zone}`}>
+                <span className={`h-2 w-2 rounded-full ${i === histAsc.length - 1 ? 'ring-1 ring-white/60' : 'opacity-0 group-hover:opacity-100'}`} style={{ background: zoneColor(h.zone) }} />
               </div>
             ))}
           </div>
