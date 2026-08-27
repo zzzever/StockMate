@@ -1138,6 +1138,13 @@ pub async fn get_hot_stocks(&self) -> Result<Vec<HotStock>, ApiError> {
 
     /// 获取沪深两市总成交额（元）。用上证指数 + 深证成指的成交额之和作为大盘量能。
     async fn fetch_market_amount(&self) -> f64 {
+        // 优先用东财指数快照（实测可达且返回有效两市成交额）；据此替代腾讯 qt.gtimg.cn
+        // （该腾讯源在本机环境常因网络/接口原因取不到，导致成交额显示 -0）。
+        let em = market_data::eastmoney::fetch_total_market_amount().await;
+        if em > 0.0 {
+            return em;
+        }
+        // 降级：腾讯行情（原实现）
         let codes = vec!["sh000001", "sz399001"];
         let prices = market_data::tencent::fetch_realtime_batch(&codes).await;
         prices.iter().map(|p| p.amount).sum()

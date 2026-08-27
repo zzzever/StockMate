@@ -72,6 +72,7 @@ interface AppState {
   debugOpen: boolean;
   chartStyle: ChartStyle;
   deepseekEnabled: boolean;
+  klineBarSpacing?: number;
 
   setPage: (page: Page) => void;
   toggleSidebar: () => void;
@@ -82,6 +83,7 @@ interface AppState {
   toggleDebug: () => void;
   setChartStyle: (style: ChartStyle) => void;
   toggleDeepseek: () => void;
+  setKlineBarSpacing: (spacing?: number) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -114,4 +116,5 @@ export const useAppStore = create<AppState>()(
   setAccent: (accent) => { applyAccent(accent); set({ accent }); },
   setChartStyle: (style) => set({ chartStyle: style }),
   toggleDeepseek: () => set((s) => ({ deepseekEnabled: !s.deepseekEnabled })),
+  setKlineBarSpacing: (spacing) => set({ klineBarSpacing: spacing }),
 }), { name: 'stockmate-app' }));

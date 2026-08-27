@@ -11,9 +11,16 @@ import type { StockFinance } from '@/types';
 import type { PriceData, Quote } from '@/types';
 import type { TradingRule } from '@/types';
 import { invoke } from '@tauri-apps/api/core';
+import { compileTdx, TDX_DEFAULT_FORMULA, type TdxSeriesInput, type TdxOutput } from '@/utils/tdxIndicator';
 import { IntradayChart } from '@/components/IntradayChart';
 import StockMetricsPanel from '@/components/StockMetricsPanel';
 import { evaluateRules, RULE_TEMPLATES, ruleColor } from '@/utils/ruleEngine';
+import { getAllIndicators, computeIndicator, getDefaultParams, type BarData, type ComputeResult, type SeriesOutput } from '@/indicators';
+import IndicatorParamsPanel from '@/indicators/IndicatorParamsPanel';
+import { TdxEditor } from '@/components/TdxEditor';
+import { IndicatorPicker } from '@/components/IndicatorPicker';
+import { InlineParamsPanel } from '@/indicators/InlineParamsPanel';
+import { IndicatorHelpDialog } from '@/components/IndicatorHelpDialog';
 
 function safeNumber(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
@@ -39,25 +46,160 @@ const SMA = (data: number[], period: number): (number | null)[] => period < 1 ? 
 
 const EMA = (data: number[], period: number): number[] => { if (data.length === 0) return []; const r = [data[0]]; const k = 2 / (period + 1); for (let i = 1; i < data.length; i++) r.push(data[i] * k + r[i - 1] * (1 - k)); return r; };
 
-type IndicatorType = 'macd' | 'kdj' | 'boll' | 'none';
+/** 动力线副图（0~100 版，按第 2 版公式实现）。
+ *      N=20；最低=LLV(L,20)；最高=HHV(H,20)；宽=max(最高-最低,0.01)；
+ *      动力线 = EMA( 100×(C−最低)/宽, 4 )                    // 0~100
+ *  红/绿柱：动力线较前一日 ≥=红柱、<绿柱（表达动能方向，非买卖点）。
+ *  五条参考线：清仓90 / 阶段80 / 强弱50 / 关注30 / 底部15。
+ *  信号：
+ *    底部买 —— CROSS(动力线,15) 且 动力线<30
+ *    趋势买 —— CROSS(动力线,30) 且 MA20>MA60 且 MA20>REF(MA20,1) 且 VOL>VOL5
+ *    （高位警戒：动力线>80 且 <上日为纯提示，不含在买卖 markers 中）
+ *    阶段卖 —— CROSS(80,动力线) 且 MA20<REF(MA20,1)
+ *    趋势卖 —— CROSS(70,动力线) 且 MA20<MA60 且 MA20<REF(MA20,1)
+ *    ATR止损—— CROSS(移动止损,CLOSE)，移动止损=HHV(CLOSE,20)-2.5×ATR14，ATR14=MA(TR,14)
+ *  返回 { gr, bars:红绿柱, buys, sells }。 */
+export const calcGuihui = (data: any[]) => {
+  const n = data.length;
+  const closes = data.map((d: any) => safeNumber(d.close));
+  const highs = data.map((d: any) => safeNumber(d.high));
+  const lows = data.map((d: any) => safeNumber(d.low));
+  const volume = data.map((d: any) => safeNumber(d.volume));
+  const t = (i: number) => (data[i] as any).date || (data[i] as any).time;
+  const llv = (p: number, i: number) => Math.min(...lows.slice(Math.max(0, i - p + 1), i + 1));
+  const hhv = (p: number, i: number) => Math.max(...highs.slice(Math.max(0, i - p + 1), i + 1));
 
-function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, drawMode = false, drawColor = '#ef4444' }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; drawMode?: boolean; drawColor?: string }) {
+  // 位置值 raw = 100×(C−LLV20)/(HHV20−LLV20)，再 EMA4（index ≥ 19）
+  const raw: (number | null)[] = new Array(n).fill(null);
+  for (let i = 0; i < n; i++) {
+    if (i < 19) continue;
+    const lo = llv(20, i), hi = hhv(20, i);
+    const width = Math.max(hi - lo, 0.01);
+    raw[i] = Math.max(0, Math.min(100, (100 * (closes[i] - lo)) / width));
+  }
+  const validRaw = raw.filter((v): v is number => v != null);
+  const ema = validRaw.length ? EMA(validRaw, 4) : [];
+  const gr: (number | null)[] = new Array(n).fill(null);
+  for (let i = 19, j = 0; i < n; i++) { gr[i] = ema[j++] ?? null; }
+
+  // 红绿柱：柱高 = 相邻两日动力线变化量（贴合 STICKLINE 语义；低位也清晰，不会因动力线绝对值≈0 而消失）
+  // 红柱 = 动力线上涨（动能为正），绿柱 = 动力线下跌（动能为负）；方向非买卖点
+  const bars: ({ time: string; value: number; color: string } | null)[] = new Array(n).fill(null);
+  for (let i = 20; i < n; i++) {
+    const cur = gr[i]!, prev = gr[i - 1];
+    if (prev == null) continue;
+    bars[i] = { time: t(i), value: cur - prev, color: cur >= prev ? 'rgba(208,49,78,0.5)' : 'rgba(26,138,74,0.5)' };
+  }
+
+  // MA20 / MA60 / VOL5
+  const ma20 = SMA(closes, 20), ma60 = SMA(closes, 60);
+  const vol5 = SMA(volume, 5);
+  // ATR14 = MA(TR,14)，TR = max(高-低, |高-昨收|, |低-昨收|)；先算 TR 再对 TR 做 14 窗口均线，前 13 根置空
+  const trArr: (number | null)[] = new Array(n).fill(null);
+  for (let i = 1; i < n; i++) {
+    trArr[i] = Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1]));
+  }
+  const atr = SMA(trArr as number[], 14);
+  // 移动止损 = HHV(CLOSE,20) - 2.5×ATR14（规格要求收盘价区间，不用 highs）
+  const hhvC20 = (i: number) => Math.max(...closes.slice(Math.max(0, i - 19), i + 1));
+
+  const buys: { time: string; position: 'belowBar'; color: string; shape: 'arrowUp'; text: string; size: number }[] = [];
+  const sells: { time: string; position: 'aboveBar'; color: string; shape: 'arrowDown'; text: string; size: number }[] = [];
+  let lastBuy = -99, lastSell = -99;
+  for (let i = 20; i < n; i++) {
+    const cur = gr[i]!, prev = gr[i - 1];
+    if (prev == null || ma20[i] == null) continue;
+    const m20 = ma20[i]!;
+    const uptrend = ma20[i - 1] != null && m20 > ma20[i - 1]!;
+    const midTrend = ma60[i] != null && m20 > ma60[i]!;
+    const volOk = (vol5[i] ?? 0) > 0 && volume[i] > (vol5[i] ?? 0);
+    // 底部买
+    if (prev < 15 && cur >= 15 && cur < 30) {
+      if (i - lastBuy >= 20) { buys.push({ time: t(i), position: 'belowBar', color: '#0ea5e9', shape: 'arrowUp', text: '底', size: 2 }); lastBuy = i; }
+    }
+    // 趋势买
+    if (prev < 30 && cur >= 30 && midTrend && uptrend && volOk) {
+      if (i - lastBuy >= 20) { buys.push({ time: t(i), position: 'belowBar', color: '#22c55e', shape: 'arrowUp', text: '买', size: 2 }); lastBuy = i; }
+    }
+    // 阶段卖：CROSS(80,动力线) 且 MA20 下行
+    if (prev >= 80 && cur <= 80 && !uptrend) {
+      if (i - lastSell >= 20) { sells.push({ time: t(i), position: 'aboveBar', color: '#f59e0b', shape: 'arrowDown', text: '卖', size: 2 }); lastSell = i; }
+    }
+    // 趋势卖：CROSS(70,动力线) 且 MA20<MA60 且 MA20 下行
+    if (prev >= 70 && cur <= 70 && !midTrend && !uptrend) {
+      if (i - lastSell >= 20) { sells.push({ time: t(i), position: 'aboveBar', color: '#ef4444', shape: 'arrowDown', text: '清', size: 2 }); lastSell = i; }
+    }
+    // ATR 止损：CROSS(移动止损, CLOSE)，移动止损 = HHV(CLOSE,20) - 2.5×ATR14
+    const at14 = atr[i] ?? 0;
+    const stop = at14 > 0 ? hhvC20(i) - 2.5 * at14 : 0;
+    if (i > 0 && stop > 0 && closes[i - 1] > stop && closes[i] <= stop) {
+      if (i - lastSell >= 20) { sells.push({ time: t(i), position: 'aboveBar', color: '#eab308', shape: 'arrowDown', text: '损', size: 2 }); lastSell = i; }
+    }
+  }
+  return { gr, bars: bars.filter((v): v is { time: string; value: number; color: string } => v != null), buys, sells };
+};
+
+type IndicatorType = 'none' | 'tdx' | string;  // string = registry indicator id
+
+/** 默认 K 线可见区间天数（交易日）。仅影响默认显示，不改变数据加载。 */
+const DEFAULT_VISIBLE_BARS = 180;
+const monthWindow = (data: any[]): { from: string; to: string } | null => {
+  if (!data.length) return null;
+  const times = data.map((d: any) => d.date || d.time);
+  const to = times[times.length - 1];
+  const from = times[Math.max(0, times.length - DEFAULT_VISIBLE_BARS)];
+  return { from, to };
+};
+
+function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, drawMode = false, drawColor = '#ef4444', indicatorParams }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; drawMode?: boolean; drawColor?: string; indicatorParams?: Record<string, number | string> }) {
   const chartStyle = useAppStore(s => s.chartStyle);
   const darkMode = useAppStore(s => s.darkMode);
+  const klineBarSpacing = useAppStore(s => s.klineBarSpacing);
+  const setKlineBarSpacing = useAppStore(s => s.setKlineBarSpacing);
   const T = useMemo(() => getChartTheme(chartStyle, darkMode), [chartStyle, darkMode]);
   const mainRef = useRef<HTMLDivElement>(null);
   const volRef = useRef<HTMLDivElement>(null);
   const indRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [overlays, setOverlays] = useState<{ x: number; y: number; color: string; label: string }[]>([]);
-  const charts = useRef<{ mc: IChartApi; vc: IChartApi; candle: ISeriesApi<'Candlestick'>; vol: ISeriesApi<'Histogram'>; ind: IChartApi; macdHist: ISeriesApi<'Histogram'>; macdDif: ISeriesApi<'Line'>; macdDea: ISeriesApi<'Line'>; kdjK: ISeriesApi<'Line'>; kdjD: ISeriesApi<'Line'>; kdjJ: ISeriesApi<'Line'>; bbU: ISeriesApi<'Line'>; bbM: ISeriesApi<'Line'>; bbL: ISeriesApi<'Line'>; bbUMain: ISeriesApi<'Line'>; bbMMain: ISeriesApi<'Line'>; bbLMain: ISeriesApi<'Line'>; ma5: ISeriesApi<'Line'>; ma10: ISeriesApi<'Line'>; ma20: ISeriesApi<'Line'>; ma60: ISeriesApi<'Line'>; drawLines: any[] } | null>(null);
+  const [indHelp, setIndHelp] = useState(false);
+  const [showGrLegend, setShowGrLegend] = useState(false);
+  const [tdxEdit, setTdxEdit] = useState(false);
+  const [tdxTxt, setTdxTxt] = useState<string>(() => { try { return localStorage.getItem('stockmate_tdx_formula') || TDX_DEFAULT_FORMULA; } catch { return TDX_DEFAULT_FORMULA; } });
+  const [visibleBars, setVisibleBars] = useState(DEFAULT_VISIBLE_BARS);
+  const lastZoomSaveRef = useRef(0);
+  const charts = useRef<{ mc: IChartApi; vc: IChartApi; candle: ISeriesApi<'Candlestick'>; vol: ISeriesApi<'Histogram'>; ind: IChartApi; bbUMain: ISeriesApi<'Line'>; bbMMain: ISeriesApi<'Line'>; bbLMain: ISeriesApi<'Line'>; ma5: ISeriesApi<'Line'>; ma10: ISeriesApi<'Line'>; ma20: ISeriesApi<'Line'>; ma60: ISeriesApi<'Line'>; drawLines: any[] } | null>(null);
+  // Dynamic indicator series — managed per indicator switch
+  const indSeriesRef = useRef<ISeriesApi<any>[]>([]);
   const onCrosshairMoveRef = useRef(onCrosshairMove); onCrosshairMoveRef.current = onCrosshairMove;
   const dataRef = useRef(data); dataRef.current = data;
   const prevLenRef = useRef(0);
   const ruleMarkersRef = useRef(ruleMarkers); ruleMarkersRef.current = ruleMarkers;
+  // 最新指标值，用于副图右上角"当前指标值"标签
+  const indicatorLatest = useMemo(() => {
+    if (indicator === 'none' || indicator === 'tdx') return null;
+    const bars: BarData[] = data.map((d: any) => ({
+      time: String(d.date || d.time),
+      open: Number(d.open) || 0, high: Number(d.high) || 0,
+      low: Number(d.low) || 0, close: Number(d.close) || 0,
+      volume: Number(d.volume) || 0,
+    }));
+    const def = getAllIndicators().find(i => i.id === indicator);
+    if (!def?.currentValue) return null;
+    const savedParams = (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[indicator] || {}; } catch { return {}; } })();
+    const params = { ...getDefaultParams(indicator), ...savedParams };
+    return def.currentValue(bars, params);
+  }, [data, indicator]);
+  // 自定义通达信公式求值（仅 tdx 指标时使用）
+  const tdxRes = useMemo(() => {
+    if (indicator !== 'tdx') return null;
+    const bars: TdxSeriesInput[] = data.map((d: any) => ({ time: String(d.date || d.time), close: safeNumber(d.close), high: safeNumber(d.high), low: safeNumber(d.low), open: safeNumber(d.open), volume: safeNumber(d.volume) }));
+    return compileTdx(tdxTxt, bars);
+  }, [data, tdxTxt, indicator]);
   // Indicator sub-chart only holds data when an indicator is active; syncing its time range
   // while empty makes lightweight-charts throw "Value is null". Track it for the sync guard.
   const indicatorActiveRef = useRef(indicator !== 'none'); indicatorActiveRef.current = indicator !== 'none';
+  const indicatorRef = useRef<IndicatorType>(indicator); indicatorRef.current = indicator;
   // Volume chart also throws "Value is null" if synced before data is loaded.
   const volumeLoadedRef = useRef(false);
   // Single source of truth for draw mode: driven by the `drawMode` prop, read live in the
@@ -89,6 +231,10 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
     const mc = createChart(mainRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor, attributionLogo: false }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, timeVisible: true, fixLeftEdge: true, fixRightEdge: true, barSpacing: 6 }, autoSize: true });
     const vc = createChart(volRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, visible: false, fixLeftEdge: true, fixRightEdge: true }, handleScroll: false, handleScale: false, autoSize: true });
     const ic = createChart(indRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, visible: false, fixLeftEdge: true, fixRightEdge: true }, handleScroll: false, handleScale: false, autoSize: true });
+    // 副图分区：动力线/参考线用右轴占上部，红绿柱用左轴占下部，避免 K 线放大时图线互相重叠
+    ic.applyOptions({ leftPriceScale: { visible: false } });
+    try { ic.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.38 } }); } catch {}
+    try { ic.priceScale('left').applyOptions({ scaleMargins: { top: 0.4, bottom: 0.02 } }); } catch {}
 
     const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor, });
     const ma5 = mc.addLineSeries({ color: T.ma5Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
@@ -99,15 +245,6 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
     const bbMMain = mc.addLineSeries({ color: T.bbMiddleColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     const bbLMain = mc.addLineSeries({ color: T.bbLowerColor, lineWidth: 1, lineStyle: LineStyle.Dashed, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     const vol = vc.addHistogramSeries({ priceFormat: { type: 'volume' }, priceLineVisible: false });
-    const macdHist = ic.addHistogramSeries({});
-    const macdDif = ic.addLineSeries({ color: T.macdDifColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const macdDea = ic.addLineSeries({ color: T.macdDeaColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const kdjK = ic.addLineSeries({ color: T.kdjKColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const kdjD = ic.addLineSeries({ color: T.kdjDColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const kdjJ = ic.addLineSeries({ color: T.kdjJColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const bbU = ic.addLineSeries({ color: T.bbUpperColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const bbM = ic.addLineSeries({ color: T.bbMiddleColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
-    const bbL = ic.addLineSeries({ color: T.bbLowerColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
 
     // Drawing tools: click anywhere → horizontal line at that Y-coordinate price.
     // Draw mode is read live from drawModeRef (driven by the drawMode prop) — no local flag,
@@ -123,9 +260,16 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
     (window as any).__klineDrawClear = () => { if (charts.current) { charts.current.drawLines.forEach(l => { try { candle.removePriceLine(l); } catch (e) { console.warn('[SimpleKLine] removePriceLine error:', e); } }); charts.current.drawLines = []; } };
     (window as any).__klineFitContent = () => {
       const c = charts.current; if (!c) return;
-      // Restore both axes: fit the time (horizontal) range AND re-enable price (vertical) auto-scale.
-      // Dragging the price axis turns autoScale off — this switches it back on for all three panes.
-      c.mc.timeScale().fitContent();
+      // 恢复默认比例：显示最近一个月区间 + 恢复价格轴 autoScale（数据加载区间不做任何改变）。
+      const mw = monthWindow(dataRef.current ?? []);
+      if (mw) {
+        const range = { from: mw.from as any, to: mw.to as any };
+        c.mc.timeScale().setVisibleRange(range);
+        try { c.vc.timeScale().setVisibleRange(range); } catch {}
+        try { c.ind.timeScale().setVisibleRange(range); } catch {}
+      } else {
+        c.mc.timeScale().fitContent();
+      }
       c.mc.priceScale('right').applyOptions({ autoScale: true });
       c.vc.priceScale('right').applyOptions({ autoScale: true });
       c.ind.priceScale('right').applyOptions({ autoScale: true });
@@ -160,6 +304,15 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       }
     };
     mc.timeScale().subscribeVisibleTimeRangeChange(() => { if (volumeLoadedRef.current) syncSub(vc, 'volume'); if (indicatorActiveRef.current) syncSub(ic, 'indicator'); updateOverlays(); });
+    // 缩放状态同步：记录当前可见根数（指示用），并把 barSpacing（全局缩放级别）节流写回 store 以便记忆
+    mc.timeScale().subscribeVisibleLogicalRangeChange(() => {
+      try { const lr = mc.timeScale().getVisibleLogicalRange(); if (lr) setVisibleBars(Math.max(1, Math.round(lr.to - lr.from))); } catch {}
+      try {
+        const bs = mc.timeScale().options().barSpacing;
+        const now = Date.now();
+        if (bs > 0 && now - lastZoomSaveRef.current > 300) { lastZoomSaveRef.current = now; setKlineBarSpacing(bs); }
+      } catch {}
+    });
 
     // --- Wheel event forwarding: sub-chart containers → main chart zoom ---
     const forwardWheelToMain = (e: WheelEvent) => {
@@ -222,12 +375,14 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       // Forward crosshair position to sub-charts. The indicator pane is empty when
       // indicator === 'none' — forwarding then would throw "Value is null", so guard it.
       safeSetCrosshair(vc, vol, param.time as Time);
-      if (indicatorActiveRef.current) safeSetCrosshair(ic, macdHist, param.time as Time);
+      if (indicatorActiveRef.current && indSeriesRef.current.length > 0) {
+        safeSetCrosshair(ic, indSeriesRef.current[0], param.time as Time);
+      }
     });
     vc.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; safeSetCrosshair(mc, candle, param.time as Time); });
     ic.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; safeSetCrosshair(mc, candle, param.time as Time); });
 
-    charts.current = { mc, vc, candle, vol, ind: ic, macdHist, macdDif, macdDea, kdjK, kdjD, kdjJ, bbU, bbM, bbL, bbUMain, bbMMain, bbLMain, ma5, ma10, ma20, ma60, drawLines: [] };
+    charts.current = { mc, vc, candle, vol, ind: ic, bbUMain, bbMMain, bbLMain, ma5, ma10, ma20, ma60, drawLines: [] };
     [mainRef, volRef, indRef].forEach(r => { try { const a = r.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (e) { console.warn('[SimpleKLine] hide attribution error:', e); } });
     return () => {
       volRef.current?.removeEventListener('wheel', forwardWheelToMain);
@@ -241,8 +396,11 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       window.removeEventListener('keydown', escHandler);
       // Drop the window globals so a stale closure can't touch a removed chart after unmount.
       delete (window as any).__klineDrawClear;
-      delete (window as any).__klineFitContent;
+      delete (window as any).__klineDrawFitContent;
       delete (window as any).__klineDrawModeActive;
+      // Clean up dynamic indicator series
+      indSeriesRef.current.forEach(s => { try { ic.removeSeries(s); } catch {} });
+      indSeriesRef.current = [];
       mc.remove(); vc.remove(); ic.remove(); charts.current = null;
     };
   }, []);
@@ -269,25 +427,16 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
 
   const maData = useMemo(() => { const closes = data.map((d: any) => Number(d.close) || 0); return { ma5: SMA(closes, 5), ma10: SMA(closes, 10), ma20: SMA(closes, 20), ma60: SMA(closes, 60) }; }, [data]);
 
-  // Compute MACD/KDJ/BOLL
-  const indData = useMemo(() => {
+  // BOLL overlay data for main chart (only when showBOLL is toggled)
+  const bollOverlayData = useMemo(() => {
     const closes = data.map((d: any) => Number(d.close) || 0);
-    const highs = data.map((d: any) => Number(d.high) || 0);
-    const lows = data.map((d: any) => Number(d.low) || 0);
-    const ema12 = EMA(closes, 12), ema26 = EMA(closes, 26);
-    const dif = ema12.map((v, i) => v - ema26[i]);
-    const dea = EMA(dif, 9);
-    const macd = dif.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: (v - dea[i]) * 2, color: (v - dea[i]) >= 0 ? T.macdHistUpColor : T.macdHistDownColor }));
-    // KDJ
-    const kdj: { k: number; d: number; j: number }[] = []; let k = 50, d = 50;
-    for (let i = 8; i < data.length; i++) { const h = Math.max(...highs.slice(i - 8, i + 1)), l = Math.min(...lows.slice(i - 8, i + 1)); const rsv = h === l ? 50 : ((closes[i] - l) / (h - l)) * 100; k = k * 2 / 3 + rsv / 3; d = d * 2 / 3 + k / 3; kdj.push({ k, d, j: 3 * k - 2 * d }); }
-    // BOLL
     const bb = SMA(closes, 20).map((m, i) => { if (m == null) return { u: null, m: null, l: null }; const slice = closes.slice(Math.max(0, i - 19), i + 1); const std = Math.sqrt(slice.reduce((s, v) => s + (v - m!) ** 2, 0) / slice.length); return { u: m + 2 * std, m, l: m - 2 * std }; });
-    const bbU = bb.map((v: any, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v.u ?? undefined }));
-    const bbM = bb.map((v: any, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v.m ?? undefined }));
-    const bbL = bb.map((v: any, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v.l ?? undefined }));
-    return { macd, kdj, bb, dif, dea, bbU, bbM, bbL };
-  }, [data, T]);
+    return {
+      bbU: bb.map((v: any, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v.u ?? undefined })),
+      bbM: bb.map((v: any, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v.m ?? undefined })),
+      bbL: bb.map((v: any, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v.l ?? undefined })),
+    };
+  }, [data]);
 
   const IND = indicator;
 
@@ -299,28 +448,209 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       c.candle.setData(candleData); c.vol.setData(volData); volumeLoadedRef.current = true;
       const ml = (vals: (number | null)[]) => vals.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v ?? undefined }));
       c.ma5.setData(ml(maData.ma5)); c.ma10.setData(ml(maData.ma10)); c.ma20.setData(ml(maData.ma20)); c.ma60.setData(ml(maData.ma60));
-      // BOLL toggleable
-      if (showBOLL) { c.bbUMain.setData(indData.bbU); c.bbMMain.setData(indData.bbM); c.bbLMain.setData(indData.bbL); }
+      // BOLL toggleable on main chart
+      if (showBOLL) { c.bbUMain.setData(bollOverlayData.bbU); c.bbMMain.setData(bollOverlayData.bbM); c.bbLMain.setData(bollOverlayData.bbL); }
       else { c.bbUMain.setData([]); c.bbMMain.setData([]); c.bbLMain.setData([]); }
-      // Indicator sub-chart
-      if (IND === 'macd') { c.macdHist.setData(indData.macd); c.macdDif.setData(indData.dif.map((v: number, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v }))); c.macdDea.setData(indData.dea.map((v: number, i: number) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v }))); c.kdjK.setData([]); c.kdjD.setData([]); c.kdjJ.setData([]); c.bbU.setData([]); c.bbM.setData([]); c.bbL.setData([]); }
-      else if (IND === 'kdj') { c.macdHist.setData([]); c.macdDif.setData([]); c.macdDea.setData([]); c.kdjK.setData(indData.kdj.map((v, i) => ({ time: (data[i + 8] as any)?.date || (data[i + 8] as any)?.time, value: v.k }))); c.kdjD.setData(indData.kdj.map((v, i) => ({ time: (data[i + 8] as any)?.date || (data[i + 8] as any)?.time, value: v.d }))); c.kdjJ.setData(indData.kdj.map((v, i) => ({ time: (data[i + 8] as any)?.date || (data[i + 8] as any)?.time, value: v.j }))); c.bbU.setData([]); c.bbM.setData([]); c.bbL.setData([]); }
-      else if (IND === 'boll') { c.macdHist.setData([]); c.macdDif.setData([]); c.macdDea.setData([]); c.kdjK.setData([]); c.kdjD.setData([]); c.kdjJ.setData([]); c.bbU.setData(indData.bbU); c.bbM.setData(indData.bbM); c.bbL.setData(indData.bbL); }
-      else { c.macdHist.setData([]); c.macdDif.setData([]); c.macdDea.setData([]); c.kdjK.setData([]); c.kdjD.setData([]); c.kdjJ.setData([]); c.bbU.setData([]); c.bbM.setData([]); c.bbL.setData([]); }
-      if (data.length !== prevLenRef.current) { c.mc.timeScale().fitContent(); c.mc.timeScale().scrollToPosition(0, false); prevLenRef.current = data.length; }
+
+      // ── Indicator sub-chart: dynamic series via registry ──
+      // Remove old dynamic series
+      indSeriesRef.current.forEach(s => { try { c.ind.removeSeries(s); } catch {} });
+      indSeriesRef.current = [];
+
+      if (IND !== 'none' && IND !== 'tdx') {
+        // Registry-based indicator
+        const bars: BarData[] = data.map((d: any) => ({
+          time: String(d.date || d.time),
+          open: Number(d.open) || 0,
+          high: Number(d.high) || 0,
+          low: Number(d.low) || 0,
+          close: Number(d.close) || 0,
+          volume: Number(d.volume) || 0,
+        }));
+        const savedParams = indicatorParams ?? (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[IND] || {}; } catch { return {}; } })();
+        const def = getAllIndicators().find(i => i.id === IND);
+        const params = { ...getDefaultParams(IND), ...savedParams };
+        const result = def?.compute(bars, params);
+        if (result?.series) {
+          const lineStyleMap = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted };
+          for (const s of result.series) {
+            const opts: any = {
+              color: s.color,
+              lineWidth: s.lineWidth ?? 1,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              crosshairMarkerVisible: false,
+            };
+            if (s.lineStyle) opts.lineStyle = lineStyleMap[s.lineStyle] ?? LineStyle.Solid;
+            if (s.priceScaleId) opts.priceScaleId = s.priceScaleId;
+            if (s.type === 'line') {
+              const series = c.ind.addLineSeries(opts);
+              series.setData(ml(s.data));
+              indSeriesRef.current.push(series);
+            } else if (s.type === 'histogram') {
+              const series = c.ind.addHistogramSeries(opts);
+              if (s.colors) {
+                series.setData(s.data.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v ?? undefined, color: s.colors![i] ?? s.color })));
+              } else {
+                series.setData(ml(s.data));
+              }
+              indSeriesRef.current.push(series);
+            }
+          }
+          // Set markers (buy/sell arrows)
+          if (result.markers && result.markers.length > 0 && indSeriesRef.current.length > 0) {
+            const mainSeries = indSeriesRef.current[0];
+            (mainSeries as any).setMarkers?.(result.markers);
+          }
+        }
+      } else if (IND === 'tdx') {
+        // TDX custom formula — keep existing approach with dynamic series
+        if (tdxRes && !tdxRes.error) {
+          const lineStyleMap = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted };
+          const lines = tdxRes.outputs.filter(o => o.type === 'line').slice(0, 4);
+          const sticks = tdxRes.outputs.filter(o => o.type === 'stick').slice(0, 1);
+          const tdxColors = ['#38bdf8', '#f59e0b', '#a78bfa', '#34d399'];
+          for (let i = 0; i < lines.length; i++) {
+            const series = c.ind.addLineSeries({ color: lines[i].color || tdxColors[i], lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+            series.setData(ml(lines[i].series));
+            indSeriesRef.current.push(series);
+          }
+          if (sticks[0]) {
+            const series = c.ind.addHistogramSeries({ priceScaleId: 'left', priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'custom', formatter: () => '' } });
+            series.setData(sticks[0].series.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v ?? undefined, color: sticks[0].color })));
+            indSeriesRef.current.push(series);
+          }
+          // TDX markers
+          if (tdxRes.marks && tdxRes.marks.length > 0 && indSeriesRef.current.length > 0) {
+            (indSeriesRef.current[0] as any).setMarkers?.(tdxRes.marks);
+          }
+        }
+      }
+
+      if (data.length !== prevLenRef.current) {
+        // 有全局缩放记忆则还原缩放级别（barSpacing）；否则默认显示最近 180 个交易日
+        const saved = klineBarSpacing && klineBarSpacing >= 1 ? klineBarSpacing : null;
+        if (saved) {
+          const bs = { barSpacing: saved };
+          c.mc.timeScale().applyOptions(bs);
+          try { c.vc.timeScale().applyOptions(bs); } catch {}
+          if (indicatorActiveRef.current) { try { c.ind.timeScale().applyOptions(bs); } catch {} }
+        } else {
+          const mw = monthWindow(data);
+          if (mw) {
+            const range = { from: mw.from as any, to: mw.to as any };
+            c.mc.timeScale().setVisibleRange(range);
+            try { c.vc.timeScale().setVisibleRange(range); } catch {}
+            if (indicatorActiveRef.current) { try { c.ind.timeScale().setVisibleRange(range); } catch {} }
+          } else {
+            c.mc.timeScale().fitContent();
+          }
+        }
+        prevLenRef.current = data.length;
+      }
       updateOverlays();
     } catch (e) { console.warn('Chart data update failed:', e); }
-  }, [data, maData, T, IND, indData, updateOverlays, showBOLL]);
+  }, [data, maData, T, IND, bollOverlayData, updateOverlays, showBOLL, klineBarSpacing, visibleBars, tdxRes, indicatorParams]);
+
+  // 缩放：增减 barSpacing（全局缩放级别），三图同步
+  const zoomBy = useCallback((factor: number) => {
+    const c = charts.current; if (!c) return;
+    const cur = c.mc.timeScale().options().barSpacing;
+    const next = Math.max(4, Math.min(40, cur * factor));
+    c.mc.timeScale().applyOptions({ barSpacing: next });
+    try { c.vc.timeScale().applyOptions({ barSpacing: next }); } catch {}
+    try { c.ind.timeScale().applyOptions({ barSpacing: next }); } catch {}
+    setKlineBarSpacing(next);
+  }, [setKlineBarSpacing]);
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden kline-fullscreen-target" style={{ position: 'relative', background: 'var(--bg-root)' }}>
-      <div ref={mainRef} className="flex-1 min-h-0" />
+      <div ref={mainRef} className="min-h-0" style={{ flex: '74 0 0' }} />
+      <div className="absolute top-1 right-1 z-10 flex items-center gap-1 text-[10px] font-bold select-none">
+        <button onClick={() => zoomBy(1 / 1.5)} aria-label="缩小" title="缩小" className="h-5 px-1.5 flex items-center justify-center rounded hover:opacity-70 cursor-pointer" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>−</button>
+        <span className="px-1.5 py-0.5 rounded font-mono-nums" style={{ color: 'hsl(var(--text-tertiary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }} title="当前可见K线数">{visibleBars}根</span>
+        <button onClick={() => zoomBy(1.5)} aria-label="放大" title="放大" className="h-5 px-1.5 flex items-center justify-center rounded hover:opacity-70 cursor-pointer" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>+</button>
+      </div>
       <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 10 }}>
         {overlays.map((o, i) => (<span key={i} className="absolute text-[9px] font-bold leading-none" style={{ left: o.x - 6, top: o.y, color: o.color, textShadow: '0 0 2px hsl(var(--bg-card)), 0 0 2px hsl(var(--bg-card))' }}>{o.label}</span>))}
       </div>
-      <div ref={volRef} className="h-[60px]" />
-      {/* Indicator pane animates its height instead of display:none — smooth show/hide, no abrupt jump */}
-      <div ref={indRef} style={{ height: indicator === 'none' ? 0 : 80, overflow: 'hidden', transition: 'height 150ms ease' }} />
+      <div ref={volRef} className="min-h-0" style={{ flex: '11 0 0' }} />
+      {/* Indicator pane: flex-grow weight 22 when active, 0 when none — main/volume grow proportionally */}
+      <div ref={indRef} className="relative min-h-0" style={{ flex: `${indicator === 'none' ? 0 : 44} 0 0`, overflow: 'hidden', transition: 'flex-grow 150ms ease' }}>
+        {indicator !== 'none' && (
+          <>
+            <button
+              onClick={() => setIndHelp(true)}
+              aria-label="指标使用说明"
+              title="指标使用说明"
+              className="absolute top-0.5 left-1 z-10 w-4 h-4 flex items-center justify-center rounded-full text-[10px] font-bold leading-none cursor-pointer hover:opacity-70"
+              style={{ color: 'hsl(var(--text-tertiary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}
+            >?</button>
+          </>
+        )}
+        {indicator === 'tdx' && (
+          <button
+            onClick={() => setTdxEdit(true)}
+            aria-label="编辑自定义公式"
+            title="编辑通达信公式"
+            className="absolute top-0.5 left-1 z-10 w-4 h-4 flex items-center justify-center rounded-full text-[10px] font-bold leading-none cursor-pointer hover:opacity-70"
+            style={{ color: '#38bdf8', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}
+          >✎</button>
+        )}
+        {indicator !== 'none' && indicator !== 'tdx' && (
+          <div className="absolute left-1 top-5 z-10 flex flex-col gap-0.5">
+            <button
+              onClick={() => setShowGrLegend(v => !v)}
+              aria-label={showGrLegend ? '收起图例' : '展开图例'}
+              title="指标图例"
+              className="self-start px-1 py-0.5 rounded text-[9px] font-bold leading-none cursor-pointer hover:opacity-70"
+              style={{ color: 'hsl(var(--text-tertiary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}
+            >图例 {showGrLegend ? '▾' : '▸'}</button>
+            {showGrLegend && (() => {
+              const bars: BarData[] = data.map((d: any) => ({
+                time: String(d.date || d.time),
+                open: Number(d.open) || 0, high: Number(d.high) || 0,
+                low: Number(d.low) || 0, close: Number(d.close) || 0,
+                volume: Number(d.volume) || 0,
+              }));
+              const def = getAllIndicators().find(i => i.id === indicator);
+              const savedParams = (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[indicator] || {}; } catch { return {}; } })();
+              const params = { ...getDefaultParams(indicator), ...savedParams };
+              const legends = def?.legends?.(bars, params);
+              if (!legends?.length) return null;
+              return (
+                <div className="flex flex-col gap-0.5 text-[9px] font-bold leading-none pointer-events-none">
+                  {legends.map(l => (
+                    <span key={l.label} style={{ color: l.color }}>{l.label} {l.value != null ? l.value.toFixed(1) : '--'}</span>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+        {indicatorLatest != null && (
+          <div className="absolute top-0 right-1 z-10 pointer-events-none text-[10px] font-mono-nums font-bold leading-none" style={{ color: 'hsl(var(--text-primary))' }}>
+            {indicatorLatest}
+          </div>
+        )}
+      </div>
+      {tdxEdit && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-6" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={() => setTdxEdit(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <TdxEditor
+              value={tdxTxt}
+              onChange={setTdxTxt}
+              onSave={() => { try { localStorage.setItem('stockmate_tdx_formula', tdxTxt); } catch {} setTdxEdit(false); }}
+              onApply={() => { try { localStorage.setItem('stockmate_tdx_formula', tdxTxt); } catch {} window.dispatchEvent(new CustomEvent('stockmate:rules-changed')); setTdxEdit(false); }}
+              onCancel={() => setTdxEdit(false)}
+              error={tdxRes?.error?.error ?? null}
+            />
+          </div>
+        </div>
+      )}
+      {indHelp && indicator !== 'none' && (
+        <IndicatorHelpDialog indicatorId={indicator} onClose={() => setIndHelp(false)} />
+      )}
     </div>
   );
 }
@@ -355,8 +685,28 @@ function IndexBar() {
 
 const PERIODS = ['minute', 'day', 'week', 'month'] as const;
 const PERIOD_LABELS: Record<string, string> = { minute: '分时', day: '日线', week: '周线', month: '月线' };
-const INDICATORS: IndicatorType[] = ['none', 'macd', 'kdj'];
-const IND_LABELS: Record<string, string> = { none: '无', macd: 'MACD', kdj: 'KDJ' };
+const BUILTIN_INDICATOR_IDS = ['macd', 'kdj', 'gr', 'rsi', 'cci', 'atr', 'obv', 'wr', 'dmi', 'sar', 'brar'];
+const INDICATORS: IndicatorType[] = ['none', ...BUILTIN_INDICATOR_IDS, 'tdx'];
+const IND_LABELS: Record<string, string> = {
+  none: '无', macd: 'MACD', kdj: 'KDJ', gr: '动力', rsi: 'RSI',
+  cci: 'CCI', atr: 'ATR', obv: 'OBV', wr: 'WR', dmi: 'DMI', sar: 'SAR', brar: 'BRAR',
+  tdx: '✎',
+};
+/** 各副图指标的使用说明（点击副图左上角 ? 弹窗显示）。 */
+const IND_DESC: Record<string, string> = {
+  none: '',
+  macd: 'MACD 动量趋势：白线 DIF 上穿黄线 DEA（金叉）看多/底部，下穿（死叉）看空/顶部；红柱转绿柱预示动能切换。',
+  kdj: 'KDJ 随机指标(9)：K/D/J 三线低位<20 金叉→底部买点；高位>80 死叉→顶部卖点；J 值极值常预示短线拐点。',
+  gr: '动力线·0~100（N20）：EMA(100×(C−LLV(L,20))/(HHV(H,20)−LLV(L,20)),4)。红柱=动力线上升、绿柱=下降。参考线：清仓90/阶段80/强弱50/关注30/底部15。底部买=上穿15且<30；趋势买=上穿30+MA20趋势+量能；阶段卖=跌破80且MA20下；趋势卖=跌破70且MA20空头；ATR止损=跌破HHV20−2.5×ATR14。',
+  rsi: 'RSI 相对强弱指标(14)：>70 超买区警惕回调，<30 超卖区关注反弹；50 为多空分界。',
+  cci: '顺势指标 CCI(14)：CCI>100 超买警惕回调，CCI<-100 超卖关注反弹；±100 穿越为趋势确认信号。',
+  atr: '平均真实波幅 ATR(14)：衡量波动率，值越大波动越剧烈；常用于设置止损位（如 2.5×ATR）和仓位管理。',
+  obv: '能量潮 OBV：量价同步验证——OBV 上升确认涨势，OBV 下降确认跌势；OBV 与价格背离预示趋势反转。',
+  wr: '威廉指标 WR(10)：WR<20 超买警惕回调，WR>80 超卖关注反弹；比 RSI 更灵敏，适合短线。',
+  dmi: '趋向指标 DMI(14,6)：+DI 上穿 -DI 金叉看多，下穿死叉看空；ADX>25 确认趋势行情，ADX<20 为盘整。',
+  sar: '抛物线转向 SAR：价格上穿 SAR 红点为买入信号，下穿绿点为卖出信号；适合追踪止损。',
+  brar: '情绪指标 AR/BR(26)：AR 衡量买卖气势，BR 衡量买卖意愿；AR>180/BR>300 过热警惕，AR<50/BR<50 过冷关注。',
+};
 // Draw-line palette. Fixed hexes (not theme price colors) so 红/绿/蓝 stay red/green/blue in every chart style.
 const DRAW_COLORS: { name: string; value: string }[] = [{ name: '红', value: '#ef4444' }, { name: '绿', value: '#22c55e' }, { name: '蓝', value: '#3b82f6' }];
 
@@ -383,7 +733,27 @@ export default function StockDetailPage() {
 
   const handleSetPeriod = (p: string) => { setPeriod(p); if (p === 'minute') setCrosshair(null); };
   const [indicator, setIndicator] = useState<IndicatorType>('none');
+  const [indicatorParams, setIndicatorParams] = useState<Record<string, number | string>>({});
+  const [recentIndicators, setRecentIndicators] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('stockmate_recent_indicators') || '[]'); } catch { return []; }
+  });
+  const handleIndicatorChange = useCallback((id: string) => {
+    setIndicator(id);
+    // Load saved params for the new indicator
+    if (id !== 'none' && id !== 'tdx') {
+      try {
+        const saved = JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[id] || {};
+        setIndicatorParams(saved);
+      } catch { setIndicatorParams({}); }
+      setRecentIndicators(prev => {
+        const next = [id, ...prev.filter(x => x !== id)].slice(0, 5);
+        try { localStorage.setItem('stockmate_recent_indicators', JSON.stringify(next)); } catch {}
+        return next;
+      });
+    }
+  }, []);
   const [showBOLL, setShowBOLL] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   
   const [drawMode, setDrawMode] = useState(false);
   const [drawColor, setDrawColor] = useState<string>(DRAW_COLORS[0].value);
@@ -474,27 +844,43 @@ export default function StockDetailPage() {
           </button>
         </div>
       )}
-      <div className="flex items-start justify-between shrink-0 px-1 pt-2 pb-1 overflow-hidden">
-        <div className="flex items-center gap-2 min-w-0 pt-1">
+      <div className="flex items-center justify-between shrink-0 px-1 py-0.5 overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => navigate(-1)} className="text-[11px] font-medium shrink-0" style={{ color: 'hsl(var(--text-secondary))' }}>←</button>
           <span className="text-sm font-bold truncate text-gradient" style={{ color: 'hsl(var(--text-primary))' }}>{displayName}</span>
           <span className="text-[11px] font-mono-nums shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>{displayCode}</span>
+          <span className="text-sm font-black font-mono-nums leading-none" style={{ color: chgColor }}>¥{fmtPrice(price)}</span>
+          <span className="text-[11px] font-mono-nums font-bold leading-none" style={{ color: chgColor }}>{hasQuote ? `${up ? '+' : ''}${fmtPrice(change)} (${up ? '+' : ''}${fmtPct(changePct)}%)` : '--'}</span>
+          {fiveDayChange != null && <span className="text-[11px] font-mono-nums" style={{ color: fiveDayChange >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>5日 {fiveDayChange >= 0 ? '+' : ''}{fmtPct(fiveDayChange)}%</span>}
+          {realtimeError && !hasQuote && <InlineError message="行情加载失败" onRetry={() => queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime', effectiveCode] })} />}
         </div>
-        <div className="flex items-start gap-3 shrink-0">
-          <div className="flex flex-col items-end gap-0.5"><div className="text-[48px] font-black font-mono-nums leading-none" style={{ color: chgColor }}>¥{fmtPrice(price)}</div><div className="text-[16px] font-mono-nums font-bold leading-none" style={{ color: chgColor }}>{hasQuote ? `${up ? '+' : ''}${fmtPrice(change)} (${up ? '+' : ''}${fmtPct(changePct)}%)` : '--'}</div>{realtimeError && !hasQuote && <InlineError message="行情加载失败" onRetry={() => queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime', effectiveCode] })} />}{fiveDayChange != null && <div className="text-[11px] font-mono-nums" style={{ color: fiveDayChange >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>5日 {fiveDayChange >= 0 ? '+' : ''}{fmtPct(fiveDayChange)}%</div>}{limits && <div className="flex items-center gap-1.5 text-[11px] font-mono-nums"><span style={{ color: 'hsl(var(--price-up))' }}>涨停 {fmtPrice(limits.up)}</span><span className="w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" /><span style={{ color: 'hsl(var(--price-down))' }}>跌停 {fmtPrice(limits.down)}</span></div>}</div>
-          <div className="flex flex-col items-end gap-0.5">
-            <button disabled={watchlistBusy} onClick={() => { setWatchlistError(null); const ticker = effectiveCode.split('.')[0]; const opts = { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['watchlist'] }); }, onError: (e: any) => { console.warn(e); setWatchlistError(watchlist.check.data ? '取消自选失败' : '加入自选失败'); } }; if (watchlist.check.data) { watchlist.remove.mutate(ticker, opts); } else { watchlist.add.mutate(ticker, opts); } }} className="flex h-9 w-9 shrink-0 items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ color: watchlist.check.data ? '#f59e0b' : 'hsl(var(--text-tertiary))' }} title={watchlist.check.data ? '取消自选' : '加入自选'} aria-label={watchlist.check.data ? '取消自选' : '加入自选'}><Star size={18} fill={watchlist.check.data ? 'currentColor' : 'none'} className={watchlistBusy ? 'animate-pulse' : ''} /></button>
-            {watchlistError && <span className="text-[10px] font-bold" style={{ color: 'hsl(var(--price-up))' }}>{watchlistError}</span>}
-          </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {limits && <span className="flex items-center gap-1.5 text-[11px] font-mono-nums"><span style={{ color: 'hsl(var(--price-up))' }}>涨停 {fmtPrice(limits.up)}</span><span className="w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" /><span style={{ color: 'hsl(var(--price-down))' }}>跌停 {fmtPrice(limits.down)}</span></span>}
+          <button disabled={watchlistBusy} onClick={() => { setWatchlistError(null); const ticker = effectiveCode.split('.')[0]; const opts = { onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['watchlist'] }); }, onError: (e: any) => { console.warn(e); setWatchlistError(watchlist.check.data ? '取消自选失败' : '加入自选失败'); } }; if (watchlist.check.data) { watchlist.remove.mutate(ticker, opts); } else { watchlist.add.mutate(ticker, opts); } }} className="flex h-6 w-6 shrink-0 items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ color: watchlist.check.data ? '#f59e0b' : 'hsl(var(--text-tertiary))' }} title={watchlist.check.data ? '取消自选' : '加入自选'} aria-label={watchlist.check.data ? '取消自选' : '加入自选'}><Star size={14} fill={watchlist.check.data ? 'currentColor' : 'none'} className={watchlistBusy ? 'animate-pulse' : ''} /></button>
+          {watchlistError && <span className="text-[10px] font-bold" style={{ color: 'hsl(var(--price-up))' }}>{watchlistError}</span>}
         </div>
       </div>
       <IndexBar />
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
+        {/* Inline params panel for indicator */}
+        {indicator !== 'none' && indicator !== 'tdx' && (() => {
+          const def = getAllIndicators().find(i => i.id === indicator);
+          if (!def?.params?.length) return null;
+          return (
+            <InlineParamsPanel
+              key={indicator}
+              indicator={def}
+              onParamsChange={(params) => {
+                setIndicatorParams(params);
+              }}
+            />
+          );
+        })()}
         <div className="flex items-center gap-2 px-1 py-0.5 shrink-0">
           <div className="flex items-center gap-0.5 -ml-1.5 min-w-0 flex-1 overflow-x-auto">
             {PERIODS.map(p => (<button key={p} onClick={() => handleSetPeriod(p)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: p === period ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: p === period ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{PERIOD_LABELS[p]}</button>))}
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
-            {INDICATORS.map(ind => (<button key={ind} onClick={() => setIndicator(ind)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: ind === indicator ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: ind === indicator ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{IND_LABELS[ind]}</button>))}
+            <IndicatorPicker value={indicator} onChange={handleIndicatorChange} recentIds={recentIndicators} />
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
@@ -540,7 +926,7 @@ export default function StockDetailPage() {
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
               : !historyLoading && !chartData.length
                 ? (<div className="flex-1 flex items-center justify-center"><span className="text-data-sm" style={{ color: 'var(--text-tertiary)' }}>暂无日线数据</span></div>)
-                : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} />)}
+                : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} indicatorParams={indicatorParams} />)}
       </div>
 
       {secondaryErrors.length > 0 && (
@@ -548,13 +934,24 @@ export default function StockDetailPage() {
           <InlineError message={`${secondaryErrors.join('、')}数据加载失败`} onRetry={retrySecondary} />
         </div>
       )}
-      <StockMetricsPanel
-        finance={finance}
-        realtimeQuote={hasQuote ? realtimeQuote : null}
-        mainFlow={mainFlow}
-        prevClose={prevClose}
-        supportResistance={sr}
-      />
+      <div className="shrink-0">
+        {showMetrics ? (
+          <div className="flex items-center justify-between px-1 py-1">
+            <StockMetricsPanel
+              finance={finance}
+              realtimeQuote={hasQuote ? realtimeQuote : null}
+              mainFlow={mainFlow}
+              prevClose={prevClose}
+              supportResistance={sr}
+            />
+            <button onClick={() => setShowMetrics(false)} className="px-1.5 py-0.5 text-[10px] font-bold hover:opacity-60 shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }}>收起 ▲</button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-0.5 border-t" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
+            <button onClick={() => setShowMetrics(true)} className="px-1.5 py-0.5 text-[10px] font-bold hover:opacity-60" style={{ color: 'hsl(var(--text-tertiary))' }}>💰 指标财务 ▲ 展开</button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

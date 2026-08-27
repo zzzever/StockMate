@@ -54,18 +54,19 @@ cargo tauri dev
 
 ### 构建发布版
 
+推荐使用一键脚本（自动完成前端构建 + 后端 Release 打包，无需分步）:
+
 ```bash
-# 构建前端
-cd ui && npm run build && cd ..
-
-# 构建后端
-cargo build --release
-
-# 或一步构建 Tauri 应用
-cargo tauri build
+# Windows（git-bash / WSL）
+./release.sh
+# 或 Windows 命令提示符
+release.cmd
 ```
 
-发布版位于 `target/release/stockmate-tauri.exe`。
+脚本产出物位于 `target/release/stockmate-tauri.exe`。
+
+> 说明：脚本内部依次执行「前端 `ui/` 的 `npm run build`（tsc + vite → `ui/dist`）」与「`tauri build --no-bundle`（把最新 `ui/dist` 内嵌进 release exe）」。Tauri 的 release exe 会自包含前端资源，不依赖磁盘上的 `ui/dist`，因此每次改完代码都需重跑该脚本、再运行重新生成的 exe 才能看到新 UI（同理，`beforeBuildCommand` 为空，`cargo tauri build` 不会自动构建前端）。
+
 
 ## 🛠️ 技术栈
 

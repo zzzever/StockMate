@@ -57,9 +57,9 @@ const ZONE_MARKS = [
   { at: 90, label: '沸点', color: '#ef4444' },
 ];
 
-export default function MarketThermometer() {
-  const { data: overview } = useMarketOverview();
-  const { data: history = [] } = useMarketTempHistory(7);
+/** 计算当前市场温度（供组件与标题栏按钮共用）。enabled=false 时不拉取/轮询。 */
+export function useMarketTemp(enabled = true) {
+  const { data: overview } = useMarketOverview({ enabled });
 
   const temp = useMemo(() => {
     if (!overview) return null;
@@ -78,6 +78,13 @@ export default function MarketThermometer() {
     }
     return calcMarketTemp(overview.up_count, overview.down_count, overview.flat_count, overview.sentiment_index);
   }, [overview]);
+
+  return { overview, temp };
+}
+
+export default function MarketThermometer() {
+  const { overview, temp } = useMarketTemp();
+  const { data: history = [] } = useMarketTempHistory(7);
 
   if (!overview) return null;
   if (!temp) return null;
@@ -126,18 +133,13 @@ export default function MarketThermometer() {
         </div>
       </div>
 
-      {/* 指标行：全市场涨跌家数 + 涨停跌停 + 量能 */}
+      {/* 指标行：全市场涨跌家数 */}
       {overview && (
-        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
+        <div className="flex items-center flex-wrap whitespace-nowrap gap-x-4 gap-y-1.5 mt-3 pt-3 border-t text-data-xs" style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}>
           <span>上涨 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.up_count}</b></span>
           <span>下跌 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.down_count}</b></span>
           {overview.flat_count > 0 && (
             <span>平盘 <b className="font-mono-nums">{overview.flat_count}</b></span>
-          )}
-          <span>涨停 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-up))' }}>{overview.limit_up ?? 0}</b></span>
-          <span>跌停 <b className="font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{overview.limit_down ?? 0}</b></span>
-          {overview.total_amount != null && (
-            <span className="ml-auto">成交额 <b className="font-mono-nums">{(Number(overview.total_amount) / 1e8).toFixed(0)}亿</b></span>
           )}
         </div>
       )}

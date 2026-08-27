@@ -543,6 +543,57 @@ pub fn get_board_name_for_sector(our_name: &'static str) -> Option<&'static str>
 
 // ── 全市场涨跌家数 / 涨停跌停 ──
 
+/// 从东财指数快照拉取沪深两市总成交额（元）。f6 = 单只指数当日成交额(元)。
+///
+/// 「指数快照接口」（push2 .../ulist.np/get）比腾讯 qt.gtimg.cn 更稳定，且在本机
+/// 网络可达；若任一请求失败则返回 0.0（调用方已做了降级/兜底）。
+pub async fn fetch_total_market_amount() -> f64 {
+    let client = match build_client() {
+        Some(c) => c,
+        None => {
+            tracing::warn!("[EastMoney] fetch_total_market_amount: no HTTP client");
+            return 0.0;
+        }
+    };
+    let client = std::sync::Arc::new(client);
+    let url = "https://push2.eastmoney.com/api/qt/ulist.np/get?secids=1.000001,0.399001&fields=f2,f6&ut=fa5fd1943c7b386f172d6893dbfba10b";
+    let resp = match send_request(&client, url).await {
+        Ok(r) => r,
+        Err(_) => return 0.0,
+    };
+    #[derive(Deserialize)]
+    struct QuoteItem {
+        #[serde(default)]
+        f2: f64, // 最新价（分）
+        #[serde(default)]
+        f6: f64, // 成交额（元）
+    }
+    #[derive(Deserialize)]
+    struct DataInner {
+        #[serde(default)]
+        diff: Vec<QuoteItem>,
+    }
+    #[derive(Deserialize)]
+    struct Wrapper {
+        #[serde(default)]
+        data: Option<DataInner>,
+    }
+    let json: Wrapper = match resp.json().await {
+        Ok(j) => j,
+        Err(_) => return 0.0,
+    };
+    let mut total = 0.0;
+    if let Some(data) = json.data {
+        for item in data.diff {
+            // 仅累加价格>0 且成交额>0 的有效条目，避免接口缺省把 0 累加起来
+            if item.f2 > 0.0 && item.f6 > 0.0 {
+                total += item.f6;
+            }
+        }
+    }
+    total
+}
+
 /// 全市场情绪数据：上涨家数、下跌家数、涨停数、跌停数。
 #[derive(Debug, Clone, Default)]
 pub struct MarketBreadth {

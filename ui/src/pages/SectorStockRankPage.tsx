@@ -1,7 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useHotSectors } from '@/hooks/useTauriQuery';
-import MarketThermometer from '@/components/MarketThermometer';
 import {
   Search,
   TrendingUp,
@@ -327,9 +326,6 @@ export default function SectorStockRankPage() {
           </p>
         </div>
       </div>
-
-      {/* ═══ 市场温度计 ═══ */}
-      <MarketThermometer />
 
       {/* ═══ Sector Heatmap (replaces sentiment overview bar) ═══ */}
       <SectorHeatmap sectors={sectors} />

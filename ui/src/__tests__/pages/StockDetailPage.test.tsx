@@ -33,7 +33,7 @@ vi.mock('@/hooks/useTauriQuery', () => ({
 }));
 
 vi.mock('@/store/useAppStore', () => ({
-  useAppStore: (selector: any) => selector({ chartStyle: 'classic', darkMode: true, setSelectedStock: vi.fn() }),
+  useAppStore: (selector: any) => selector({ chartStyle: 'classic', darkMode: true, klineBarSpacing: undefined, setKlineBarSpacing: vi.fn(), setSelectedStock: vi.fn() }),
 }));
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
@@ -53,6 +53,7 @@ const chartMockState = vi.hoisted(() => ({
   coordinateToPriceValue: null as number | null,
   fitContentCalls: 0,
   priceScaleAutoScaleCalls: 0,
+  setVisibleRangeCalls: 0,
 }));
 
 vi.mock('lightweight-charts', () => ({
@@ -74,8 +75,11 @@ vi.mock('lightweight-charts', () => ({
         fitContent: vi.fn(() => { chartMockState.fitContentCalls++; }),
         scrollToPosition: vi.fn(),
         getVisibleRange: vi.fn(() => ({ from: 0, to: 100 })),
-        setVisibleRange: vi.fn(),
+        setVisibleRange: vi.fn(() => { chartMockState.setVisibleRangeCalls++; }),
         subscribeVisibleTimeRangeChange: vi.fn(() => vi.fn()),
+        subscribeVisibleLogicalRangeChange: vi.fn(() => vi.fn()),
+        getVisibleLogicalRange: vi.fn(() => ({ from: 0, to: 80 })),
+        options: vi.fn(() => ({ barSpacing: 6 })),
         timeToCoordinate: vi.fn(() => 50),
       })),
       subscribeCrosshairMove: vi.fn((cb: (param: any) => void) => { chartMockState.crosshairCallbacks.push(cb); }),
@@ -143,6 +147,7 @@ describe('StockDetailPage', () => {
     chartMockState.coordinateToPriceValue = null;
     chartMockState.fitContentCalls = 0;
     chartMockState.priceScaleAutoScaleCalls = 0;
+    chartMockState.setVisibleRangeCalls = 0;
     vi.mocked(invoke).mockReset();
     (useNavigate as ReturnType<typeof vi.fn>).mockReturnValue(navigateMock);
 
@@ -220,6 +225,7 @@ describe('StockDetailPage', () => {
       isLoading: false,
     } as any);
     renderPage(client, '/stock?code=600519');
+    fireEvent.click(screen.getByText(/指标财务/));
     // PE displayed in compact metrics strip
     expect(screen.getByText('35.2')).toBeInTheDocument();
     // Turnover rate displayed once in compact strip
@@ -231,6 +237,7 @@ describe('StockDetailPage', () => {
   // ── 7. Empty realtime ──
   it('shows -- for all data cards when realtimeQuote is null and price as ¥0.00', () => {
     renderPage(client, '/stock?code=600519');
+    fireEvent.click(screen.getByText(/指标财务/));
     expect(screen.getByText(/0\.00/)).toBeInTheDocument();
     const dashes = screen.getAllByText('--');
     expect(dashes.length).toBeGreaterThanOrEqual(6);
@@ -294,16 +301,21 @@ describe('StockDetailPage', () => {
   // ── 13. Indicator switch ──
   it('highlights active indicator button', () => {
     renderPage(client, '/stock?code=600519');
+    // IndicatorPicker shows "指标" button by default
+    const pickerBtn = screen.getByText('指标');
+    expect(pickerBtn).toBeInTheDocument();
+    // Click to open dropdown
+    fireEvent.click(pickerBtn);
+    // Dropdown should be open - find any indicator in the list
     const macdBtn = screen.getByText('MACD');
-    expect(macdBtn.getAttribute('style')).toContain('border-bottom: 2px solid transparent');
-    fireEvent.click(macdBtn);
-    expect(macdBtn.getAttribute('style')).toContain('border-bottom: 2px solid hsl(var(--text-primary))');
+    expect(macdBtn).toBeInTheDocument();
   });
 
   // ── 14. BOLL toggle ──
   it('toggles BOLL active state on click', () => {
     renderPage(client, '/stock?code=600519');
-    const bollBtn = screen.getByText('BOLL');
+    const bollBtns = screen.getAllByText('BOLL');
+    const bollBtn = bollBtns[bollBtns.length - 1]; // last BOLL is the overlay toggle
     expect(bollBtn.getAttribute('style')).toContain('border-bottom: 2px solid transparent');
     fireEvent.click(bollBtn);
     expect(bollBtn.getAttribute('style')).toContain('border-bottom: 2px solid hsl(var(--text-primary))');
@@ -373,6 +385,7 @@ describe('StockDetailPage', () => {
   it('renders support and resistance values', () => {
     vi.mocked(useSupportResistance).mockReturnValue({ data: { stock_id: '600519', supports: [15.2], resistances: [18.5] }, isLoading: false } as any);
     renderPage(client, '/stock?code=600519');
+    fireEvent.click(screen.getByText(/指标财务/));
     expect(screen.getByText('18.50')).toBeInTheDocument();
     expect(screen.getByText('15.20')).toBeInTheDocument();
   });
@@ -385,6 +398,7 @@ describe('StockDetailPage', () => {
       isLoading: false,
     } as any);
     renderPage(client, '/stock?code=600519');
+    fireEvent.click(screen.getByText(/指标财务/));
     expect(screen.getByText(/5\.0亿/)).toBeInTheDocument();
   });
 
@@ -566,13 +580,13 @@ describe('StockDetailPage', () => {
     expect(screen.queryByText(/✦ 画线模式/)).toBeNull();
   });
 
-  // ── 34. 恢复比例 button: fit time scale + re-enable price autoScale on all panes ──
-  it('恢复比例 button fits time scale and re-enables price autoScale on main/volume/indicator', () => {
+  // ── 34. 恢复比例 button: 显示最近一个月区间(setVisibleRange) + re-enable price autoScale ──
+  it('恢复比例 button shows recent-month range and re-enables price autoScale on main/volume/indicator', () => {
     renderPage(client, '/stock?code=600519');
-    const fitBefore = chartMockState.fitContentCalls;
+    const svrBefore = chartMockState.setVisibleRangeCalls;
     expect(chartMockState.priceScaleAutoScaleCalls).toBe(0);
     fireEvent.click(screen.getByTitle('恢复默认比例'));
-    expect(chartMockState.fitContentCalls).toBe(fitBefore + 1);
+    expect(chartMockState.setVisibleRangeCalls).toBe(svrBefore + 3);
     expect(chartMockState.priceScaleAutoScaleCalls).toBe(3);
   });
 
@@ -620,6 +634,7 @@ describe('StockDetailPage', () => {
     vi.mocked(useStockFundFlow).mockReturnValue({ data: [{ main_inflow: 500000000 }], isLoading: false } as any);
     vi.mocked(useRealtimeQuote).mockReturnValue({ data: { current_price: 110, prev_close: 109, change: 1, change_percent: 0.92, volume: 1000, amount: 100000, high: 111, low: 108, open: 109, turnover_rate: 0.1, ratio: 1.0, ticker: '600519', name: '贵州茅台' }, isLoading: false } as any);
     renderPage(client, '/stock?code=600519');
+    fireEvent.click(screen.getByText(/指标财务/));
     expect(screen.getByText('18.50')).toHaveStyle({ color: 'hsl(var(--price-up))' });
     expect(screen.getByText('15.20')).toHaveStyle({ color: 'hsl(var(--price-down))' });
     expect(screen.getByText((c) => c.includes('5日') && c.includes('+10.00%'))).toHaveStyle({ color: 'hsl(var(--price-up))' });

@@ -5,6 +5,7 @@ import { Minus, Square, X, PictureInPicture2, Terminal } from 'lucide-react';
 import { toggleMiniWindow } from '@/lib/miniWindow';
 import { useAppStore } from '@/store/useAppStore';
 import { getConsoleErrorCount, onConsoleChange } from '@/components/ConsolePanel';
+import ThermometerButton from '@/components/ThermometerButton';
 
 export default function TitleBar() {
   const [isMaxed, setIsMaxed] = useState(false);
@@ -81,6 +82,9 @@ export default function TitleBar() {
 
       {/* Right: window controls */}
       <div className="flex h-full">
+        {/* 市场温度 */}
+        <ThermometerButton />
+
         {/* PiP toggle */}
         <button
           onClick={handleToggleMini}

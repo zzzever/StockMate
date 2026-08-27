@@ -895,10 +895,10 @@ mod tests {
     fn test_support_resistance_serde() {
         let sr = SupportResistance {
             stock_id: "600519".into(),
-            supports: vec![Decimal::new(16500, 2)],
-            resistances: vec![Decimal::new(18000, 2)],
-            nearest_support: Some(Decimal::new(16500, 2)),
-            nearest_resistance: Some(Decimal::new(18000, 2)),
+            supports: vec![1650.0],
+            resistances: vec![1800.0],
+            nearest_support: Some(1650.0),
+            nearest_resistance: Some(1800.0),
         };
         let json = serde_json::to_string(&sr).unwrap();
         let restored: SupportResistance = serde_json::from_str(&json).unwrap();

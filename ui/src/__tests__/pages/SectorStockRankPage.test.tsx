@@ -8,8 +8,6 @@ import * as hooks from '@/hooks/useTauriQuery';
 vi.mock('@/hooks/useTauriQuery', () => ({
   useHotSectors: vi.fn(),
   useWatchlist: vi.fn(),
-  useMarketOverview: vi.fn(() => ({ data: { up_count: 3000, down_count: 2000, flat_count: 500, sentiment_index: 0.5 } })),
-  useMarketTempHistory: vi.fn(() => ({ data: [] })),
 }));
 
 const testQueryClient = new QueryClient({

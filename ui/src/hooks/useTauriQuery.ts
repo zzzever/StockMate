@@ -357,9 +357,10 @@ export function useCardData(stock_id: string) {
   });
 }
 
-export function useMarketOverview() {
+export function useMarketOverview(options?: { enabled?: boolean }) {
   return useQuery<MarketOverview, Error>({
     queryKey: ['market', 'overview'],
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       console.log('[useMarketOverview] fired');
       try {

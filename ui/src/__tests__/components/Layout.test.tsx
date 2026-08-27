@@ -25,6 +25,8 @@ vi.mock('@/store/useAppStore', () => ({
 vi.mock('@/hooks/useTauriQuery', () => ({
   useRealtimePriceListener: () => {},
   useDiagnoseDataSources: () => ({ data: null, isLoading: false }),
+  useMarketOverview: () => ({ data: { up_count: 3000, down_count: 2000, flat_count: 500, sentiment_index: 0.5 } }),
+  useMarketTempHistory: () => ({ data: [] }),
 }));
 
 vi.mock('framer-motion', () => ({
@@ -32,6 +34,7 @@ vi.mock('framer-motion', () => ({
     main: ({ children, ...props }: any) => <main {...props}>{children}</main>,
     span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
     button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
   },
   AnimatePresence: ({ children }: any) => <>{children}</>,
 }));
