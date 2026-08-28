@@ -26,6 +26,7 @@ const CONDITION_TYPES = [
   { id: 'BelowMA', label: '低于均线', desc: '收盘价低于均线' },
   { id: 'RsiBelow', label: 'RSI超卖', desc: 'RSI低于阈值' },
   { id: 'TurnoverRate', label: '换手率', desc: '换手率范围' },
+  { id: 'MomentumBelow', label: '动力线低位', desc: '动力线低于阈值(默认15)' },
   { id: 'SSLangExpr', label: 'SSLang', desc: '自定义SSLang表达式' },
 ];
 
@@ -351,6 +352,8 @@ export default function ScreenerPage() {
     if (!activeStrategyId) return;
     try {
       await invoke('update_strategy', { strategyId: activeStrategyId, name: strategies.find((s: any) => s[0] === activeStrategyId)?.[1] || '', strategyJson: JSON.stringify(strategyConditions) });
+      setShowSaveSuccess(true);
+      setTimeout(() => setShowSaveSuccess(false), 1500);
     } catch (e) { console.error('Save failed:', e); }
   };
 
@@ -434,6 +437,11 @@ export default function ScreenerPage() {
             placeholder="例: close(i) < 20 AND down(i,3)"
             className="input flex-1 text-[10px] font-mono py-1" rows={2} />
         );
+      case 'MomentumBelow':
+        return (<><span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>阈值&lt;</span>
+          <input type="number" value={cond.params?.threshold || 15} onChange={e => updateParam('threshold', +e.target.value)}
+            className="input w-16 text-right text-data-xs" step="1" min="0" max="100" />
+          <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>(0~100, 默认15=底部)</span></>);
       default:
         return <span className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{JSON.stringify(cond.params)}</span>;
     }
@@ -454,6 +462,8 @@ export default function ScreenerPage() {
           { name: '强势股', conditions: [{ type: 'NewHigh', params: { period: 20 } }, { type: 'VolumeSurge', params: { ratio: 1.5 } }, { type: 'AboveMA', params: { period: 5 } }] },
           { name: '缩量企稳', conditions: [{ type: 'ShrinkDrop', params: { days: 5, maxVolRatio: 0.5 } }, { type: 'LowPosition', params: { days: 60, ratio: 0.3 } }] },
           { name: '历史相对低价 + 缩量下跌', conditions: [{ type: 'LowPrice', params: { maxPrice: 20 } }, { type: 'ShrinkDrop', params: { days: 3, maxVolRatio: 0.6 } }, { type: 'LowPosition', params: { days: 20, ratio: 0.3 } }] },
+          { name: '动力线底部', conditions: [{ type: 'MomentumBelow', params: { threshold: 15 } }] },
+          { name: '动力线低位+缩量', conditions: [{ type: 'MomentumBelow', params: { threshold: 15 } }, { type: 'ShrinkDrop', params: { days: 3, maxVolRatio: 0.7 } }] },
         ];
         const created = [];
         for (const p of presets) {
@@ -472,6 +482,10 @@ export default function ScreenerPage() {
           const savedId = saved ? JSON.parse(saved).id : null;
           if (savedId && list.some((s: any) => s[0] === savedId)) {
             setActiveStrategyId(savedId);
+            try {
+              const found = list.find((s: any) => s[0] === savedId);
+              if (found) setStrategyConditions(JSON.parse(found[2]));
+            } catch {}
           } else {
             setActiveStrategyId(list[0][0]);
             try { setStrategyConditions(JSON.parse(list[0][2])); } catch {}
@@ -527,12 +541,13 @@ export default function ScreenerPage() {
           case 'BelowMA': return { BelowMA: c.params?.period ?? 20 };
           case 'RsiBelow': return { RsiBelow: [c.params?.period ?? 14, c.params?.threshold ?? 30] };
           case 'TurnoverRate': return { TurnoverRate: { min: c.params?.min ?? 0, max: c.params?.max ?? 10 } };
+          case 'MomentumBelow': return { MomentumBelow: c.params?.threshold ?? 15 };
           case 'SSLangExpr': return { SSLangExpr: c.params?.expression || '' };
           default: return null;
         }
       }).filter(Boolean);
       // Strip invalid conditions
-      const validTypes = ['LowPrice','ShrinkDrop','LowVolume','ConsecutiveDrop','BelowMA','RsiBelow','LowPosition','AboveMA','VolumeSurge','PriceChange','TurnoverRate','MACDCross','KDJOverSold','ConsecutiveUp','NewHigh','SSLangExpr'];
+      const validTypes = ['LowPrice','ShrinkDrop','LowVolume','ConsecutiveDrop','BelowMA','RsiBelow','LowPosition','AboveMA','VolumeSurge','PriceChange','TurnoverRate','MACDCross','KDJOverSold','ConsecutiveUp','NewHigh','SSLangExpr','MomentumBelow'];
       while (conditions.some(c => c && !Object.keys(c).some(k => validTypes.includes(k)))) {
         const idx = conditions.findIndex(c => c && !Object.keys(c).some(k => validTypes.includes(k)));
         if (idx >= 0) { console.warn('Removing invalid condition:', conditions[idx]); conditions.splice(idx, 1); } else break;
@@ -611,6 +626,11 @@ export default function ScreenerPage() {
               </select>
               <div className="flex items-center gap-1 flex-wrap">
                 <button onClick={handleAddStrategy} className="btn-secondary text-[9px] px-1.5 py-1 shrink-0">+新建</button>
+                {activeStrategyId !== null && !lockedStrategies.has(activeStrategyId) && (
+                  <button onClick={handleSaveStrategy} className="btn-secondary text-[9px] px-1.5 py-1 shrink-0 flex items-center gap-0.5" title="保存当前策略">
+                    <Save size={10} /> 保存
+                  </button>
+                )}
                 <button onClick={handleCopyStrategy} className="btn-secondary text-[9px] px-1.5 py-1 shrink-0" title="复制">📋</button>
                 <button onClick={exportStrategy} className="btn-secondary text-[9px] px-1.5 py-1 shrink-0" title="导出">↓</button>
                 <button onClick={importStrategy} className="btn-secondary text-[9px] px-1.5 py-1 shrink-0" title="导入">↑</button>
@@ -657,6 +677,7 @@ export default function ScreenerPage() {
                     ct?.id === 'BelowMA' ? `MA${cond.params?.period || 20}` :
                     ct?.id === 'RsiBelow' ? `${cond.params?.period || 14}<${cond.params?.threshold || 30}` :
                     ct?.id === 'TurnoverRate' ? `${cond.params?.min ?? 0}%~${cond.params?.max ?? 10}%` :
+                    ct?.id === 'MomentumBelow' ? `< ${cond.params?.threshold || 15}` :
                     ct?.id === 'SSLangExpr' ? (cond.params?.expression || '').substring(0, 20) :
                     '';
                   return (

@@ -1,0 +1,190 @@
+{
+  "version": "1.0.0",
+  "description": "StockMate 策略模板配置文件",
+  "lastUpdated": "2024-01-15",
+  "templates": {
+    "categories": [
+      {
+        "id": "beginner",
+        "name": "新手入门模板",
+        "description": "保守、简单、易理解，适合长期持有蓝筹股",
+        "riskLevel": "low",
+        "targetUsers": "初学者，风险厌恶型投资者",
+        "indicators": ["MA", "Volume"],
+        "timeframe": "中长期",
+        "templateCount": 4
+      },
+      {
+        "id": "trend",
+        "name": "趋势跟踪模板",
+        "description": "中线为主，顺势而为，适合趋势明显的市场",
+        "riskLevel": "medium",
+        "targetUsers": "有一定经验的投资者",
+        "indicators": ["MACD", "MA", "Volume"],
+        "timeframe": "中线",
+        "templateCount": 5
+      },
+      {
+        "id": "shortterm",
+        "name": "短线交易模板",
+        "description": "日内/波段，快进快出，适合波动较大的股票",
+        "riskLevel": "high",
+        "targetUsers": "短线交易者，风险承受能力较强",
+        "indicators": ["KDJ", "RSI", "ATR", "Volume"],
+        "timeframe": "短线",
+        "templateCount": 6
+      },
+      {
+        "id": "value",
+        "name": "价值投资模板",
+        "description": "长线持有，价值发现，适合优质蓝筹股",
+        "riskLevel": "medium",
+        "targetUsers": "长期投资者，价值投资者",
+        "indicators": ["Bollinger", "MA", "Volume"],
+        "timeframe": "长线",
+        "templateCount": 4
+      }
+    ],
+    "riskParameters": {
+      "beginner": {
+        "maxPositionPerStock": 0.3,
+        "maxTotalPosition": 0.7,
+        "stopLossPercent": 0.08,
+        "takeProfitPercent": 0.15,
+        "maxDrawdown": 0.10,
+        "minHoldDays": 5,
+        "rebalanceDays": 30
+      },
+      "trend": {
+        "maxPositionPerStock": 0.4,
+        "maxTotalPosition": 0.8,
+        "trailingStopPercent": 0.05,
+        "takeProfitPercent": 0.25,
+        "maxDrawdown": 0.15,
+        "minHoldDays": 10,
+        "rebalanceDays": 15
+      },
+      "shortterm": {
+        "maxPositionPerStock": 0.2,
+        "maxTotalPosition": 0.6,
+        "stopLossPercent": 0.05,
+        "takeProfitPercent": 0.08,
+        "maxDrawdown": 0.08,
+        "atrStopMultiplier": 2,
+        "minHoldDays": 1,
+        "maxHoldDays": 5,
+        "rebalanceDays": 1
+      },
+      "value": {
+        "maxPositionPerStock": 0.5,
+        "maxTotalPosition": 0.9,
+        "stopLossPercent": 0.15,
+        "takeProfitPercent": 0.50,
+        "maxDrawdown": 0.20,
+        "minHoldDays": 60,
+        "rebalanceDays": 90
+      }
+    }
+  },
+  "combinations": [
+    {
+      "id": "combo_trend_confirm",
+      "name": "趋势确认组合",
+      "description": "使用MACD+均线+成交量三重确认趋势",
+      "indicators": ["MACD", "MA", "Volume"],
+      "timeframe": "daily",
+      "riskLevel": "medium"
+    },
+    {
+      "id": "combo_oversold_overbought",
+      "name": "超买超卖组合",
+      "description": "使用KDJ+RSI+布林带判断超买超卖",
+      "indicators": ["KDJ", "RSI", "Bollinger"],
+      "timeframe": "daily",
+      "riskLevel": "medium"
+    },
+    {
+      "id": "combo_divergence",
+      "name": "背离反转组合",
+      "description": "使用MACD背离+RSI背离判断反转",
+      "indicators": ["MACD", "RSI"],
+      "timeframe": "daily",
+      "riskLevel": "high"
+    },
+    {
+      "id": "combo_multi_timeframe",
+      "name": "多周期确认组合",
+      "description": "使用周线+日线多周期确认",
+      "indicators": ["MACD", "Volume"],
+      "timeframe": "multi",
+      "riskLevel": "medium"
+    }
+  ],
+  "riskManagement": {
+    "conservative": {
+      "maxDrawdown": 0.10,
+      "maxLossPerTrade": 0.03,
+      "maxPositionPerStock": 0.2,
+      "maxTotalPosition": 0.6,
+      "stopLossPercent": 0.05,
+      "takeProfitPercent": 0.10,
+      "trailingStopPercent": 0.03
+    },
+    "moderate": {
+      "maxDrawdown": 0.15,
+      "maxLossPerTrade": 0.05,
+      "maxPositionPerStock": 0.3,
+      "maxTotalPosition": 0.7,
+      "stopLossPercent": 0.08,
+      "takeProfitPercent": 0.15,
+      "trailingStopPercent": 0.05
+    },
+    "aggressive": {
+      "maxDrawdown": 0.20,
+      "maxLossPerTrade": 0.08,
+      "maxPositionPerStock": 0.4,
+      "maxTotalPosition": 0.8,
+      "stopLossPercent": 0.10,
+      "takeProfitPercent": 0.25,
+      "trailingStopPercent": 0.08
+    }
+  },
+  "optimization": {
+    "overfittingDetection": {
+      "trainTestSplit": 0.7,
+      "minSampleSize": 30,
+      "maxParameters": 5,
+      "winRateThreshold": 0.5
+    },
+    "performanceMetrics": {
+      "minWinRate": 0.5,
+      "minProfitFactor": 1.5,
+      "minSharpeRatio": 0.5,
+      "maxDrawdown": 0.20
+    },
+    "stopLossOptimization": {
+      "range": [0.03, 0.05, 0.08, 0.10, 0.12, 0.15],
+      "evaluationPeriod": 20
+    }
+  },
+  "recommendations": {
+    "beginner": {
+      "preferredIndicators": ["MA", "Volume"],
+      "maxComplexity": "low",
+      "suggestedTimeframe": "中长期",
+      "riskTolerance": "conservative"
+    },
+    "intermediate": {
+      "preferredIndicators": ["MACD", "MA", "RSI", "Volume"],
+      "maxComplexity": "medium",
+      "suggestedTimeframe": "中线",
+      "riskTolerance": "moderate"
+    },
+    "advanced": {
+      "preferredIndicators": ["KDJ", "RSI", "CCI", "ATR", "OBV"],
+      "maxComplexity": "high",
+      "suggestedTimeframe": "短线",
+      "riskTolerance": "aggressive"
+    }
+  }
+}

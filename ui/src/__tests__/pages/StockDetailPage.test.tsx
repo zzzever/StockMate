@@ -301,8 +301,10 @@ describe('StockDetailPage', () => {
   // ── 13. Indicator switch ──
   it('highlights active indicator button', () => {
     renderPage(client, '/stock?code=600519');
-    // IndicatorPicker shows "指标" button by default
-    const pickerBtn = screen.getByText('指标');
+    // IndicatorPicker shows the current indicator name (default: CCI)
+    // Find the button element with CCI text (the picker button, not the inline params label)
+    const allCci = screen.getAllByText('CCI');
+    const pickerBtn = allCci.find(el => el.tagName === 'BUTTON') || allCci[0];
     expect(pickerBtn).toBeInTheDocument();
     // Click to open dropdown
     fireEvent.click(pickerBtn);

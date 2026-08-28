@@ -31,9 +31,11 @@ interface IndicatorPickerProps {
   value: string;
   onChange: (id: string) => void;
   recentIds?: string[];
+  activeIds?: string[];
+  onToggleMulti?: (id: string) => void;
 }
 
-export function IndicatorPicker({ value, onChange, recentIds = [] }: IndicatorPickerProps) {
+export function IndicatorPicker({ value, onChange, recentIds = [], activeIds = [], onToggleMulti }: IndicatorPickerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -171,12 +173,20 @@ export function IndicatorPicker({ value, onChange, recentIds = [] }: IndicatorPi
                 {filtered.map(ind => {
                   const complexity = COMPLEXITY_LABEL[ind.complexity ?? 'basic'];
                   const strategies = (ind.tags ?? []).map(t => STRATEGY_LABEL[t]).filter(Boolean);
+                  const isActive = activeIds.includes(ind.id) || ind.id === value;
                   return (
                     <button
                       key={ind.id}
-                      onClick={() => { onChange(ind.id); setOpen(false); setSearch(''); }}
+                      onClick={() => { 
+                        if (onToggleMulti) {
+                          onToggleMulti(ind.id);
+                        } else {
+                          onChange(ind.id); 
+                        }
+                        setOpen(false); setSearch(''); 
+                      }}
                       className="w-full text-left px-3 py-1.5 flex items-start gap-2 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-                      style={{ background: ind.id === value ? 'hsl(var(--bg-input))' : 'transparent' }}
+                      style={{ background: isActive ? 'hsl(var(--bg-input))' : 'transparent' }}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -196,7 +206,7 @@ export function IndicatorPicker({ value, onChange, recentIds = [] }: IndicatorPi
                           {ind.description}
                         </div>
                       </div>
-                      {ind.id === value && <span className="text-[10px] mt-0.5" style={{ color: 'hsl(var(--text-primary))' }}>✓</span>}
+                      {isActive && <span className="text-[10px] mt-0.5" style={{ color: 'hsl(var(--text-primary))' }}>✓</span>}
                     </button>
                   );
                 })}

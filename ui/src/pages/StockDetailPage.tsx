@@ -151,7 +151,7 @@ const monthWindow = (data: any[]): { from: string; to: string } | null => {
   return { from, to };
 };
 
-function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, drawMode = false, drawColor = '#ef4444', indicatorParams }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; showBOLL: boolean; drawMode?: boolean; drawColor?: string; indicatorParams?: Record<string, number | string> }) {
+function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndicators = [], showBOLL, drawMode = false, drawColor = '#ef4444', indicatorParams }: { data: any[]; onCrosshairMove?: (d: { time: string; open: number; high: number; low: number; close: number; volume: number } | null) => void; ruleMarkers?: { time: string; color: string; label: string }[]; indicator: IndicatorType; activeIndicators?: string[]; showBOLL: boolean; drawMode?: boolean; drawColor?: string; indicatorParams?: Record<string, number | string> }) {
   const chartStyle = useAppStore(s => s.chartStyle);
   const darkMode = useAppStore(s => s.darkMode);
   const klineBarSpacing = useAppStore(s => s.klineBarSpacing);
@@ -452,27 +452,32 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       if (showBOLL) { c.bbUMain.setData(bollOverlayData.bbU); c.bbMMain.setData(bollOverlayData.bbM); c.bbLMain.setData(bollOverlayData.bbL); }
       else { c.bbUMain.setData([]); c.bbMMain.setData([]); c.bbLMain.setData([]); }
 
-      // ── Indicator sub-chart: dynamic series via registry ──
+      // ── Indicator sub-chart: dynamic series via registry (multi-indicator overlay) ──
       // Remove old dynamic series
       indSeriesRef.current.forEach(s => { try { c.ind.removeSeries(s); } catch {} });
       indSeriesRef.current = [];
 
-      if (IND !== 'none' && IND !== 'tdx') {
-        // Registry-based indicator
-        const bars: BarData[] = data.map((d: any) => ({
-          time: String(d.date || d.time),
-          open: Number(d.open) || 0,
-          high: Number(d.high) || 0,
-          low: Number(d.low) || 0,
-          close: Number(d.close) || 0,
-          volume: Number(d.volume) || 0,
-        }));
-        const savedParams = indicatorParams ?? (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[IND] || {}; } catch { return {}; } })();
-        const def = getAllIndicators().find(i => i.id === IND);
-        const params = { ...getDefaultParams(IND), ...savedParams };
-        const result = def?.compute(bars, params);
+      const lineStyleMap = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted };
+
+      // Compute indicators for all active indicators
+      const bars: BarData[] = data.map((d: any) => ({
+        time: String(d.date || d.time),
+        open: Number(d.open) || 0,
+        high: Number(d.high) || 0,
+        low: Number(d.low) || 0,
+        close: Number(d.close) || 0,
+        volume: Number(d.volume) || 0,
+      }));
+
+      // Overlay mode: render all activeIndicators simultaneously
+      for (const indId of activeIndicators) {
+        if (indId === 'none' || indId === 'tdx') continue;
+        const def = getAllIndicators().find(i => i.id === indId);
+        if (!def) continue;
+        const savedParams = indicatorParams ?? (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[indId] || {}; } catch { return {}; } })();
+        const params = { ...getDefaultParams(indId), ...savedParams };
+        const result = def.compute(bars, params);
         if (result?.series) {
-          const lineStyleMap = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted };
           for (const s of result.series) {
             const opts: any = {
               color: s.color,
@@ -497,13 +502,16 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
               indSeriesRef.current.push(series);
             }
           }
-          // Set markers (buy/sell arrows)
-          if (result.markers && result.markers.length > 0 && indSeriesRef.current.length > 0) {
+          // Set markers (buy/sell arrows) from first indicator only
+          if (indId === activeIndicators[0] && result.markers && result.markers.length > 0 && indSeriesRef.current.length > 0) {
             const mainSeries = indSeriesRef.current[0];
             (mainSeries as any).setMarkers?.(result.markers);
           }
         }
-      } else if (IND === 'tdx') {
+      }
+
+      // TDX custom formula (only when indicator is tdx)
+      if (IND === 'tdx') {
         // TDX custom formula — keep existing approach with dynamic series
         if (tdxRes && !tdxRes.error) {
           const lineStyleMap = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted };
@@ -550,7 +558,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, showBOLL, 
       }
       updateOverlays();
     } catch (e) { console.warn('Chart data update failed:', e); }
-  }, [data, maData, T, IND, bollOverlayData, updateOverlays, showBOLL, klineBarSpacing, visibleBars, tdxRes, indicatorParams]);
+  }, [data, maData, T, IND, bollOverlayData, updateOverlays, showBOLL, klineBarSpacing, visibleBars, tdxRes, indicatorParams, activeIndicators]);
 
   // 缩放：增减 barSpacing（全局缩放级别），三图同步
   const zoomBy = useCallback((factor: number) => {
@@ -669,10 +677,19 @@ function CrosshairTooltip({ data, allData }: { data: { time: string; open: numbe
   const idx = allData.findIndex((d: any) => (d.date || d.time) === data.time);
   const prev = idx > 0 ? Number(allData[idx - 1].close) : 0;
   const chg = prev > 0 ? ((data.close - prev) / prev * 100) : 0;
+  const chgAmt = data.close - prev;
   const up = chg >= 0;
-  return (<div className="flex items-center gap-3 text-[11px] font-mono-nums" style={{ color: 'hsl(var(--text-secondary))' }}>
-    {['O','H','L','C','V'].map((l, i) => <span key={l}>{l} <b style={{ color: 'hsl(var(--text-primary))' }}>{i === 0 ? fmtPrice(data.open) : i === 1 ? fmtPrice(data.high) : i === 2 ? fmtPrice(data.low) : i === 3 ? fmtPrice(data.close) : fmtVolume(data.volume / 100)}</b></span>)}
-    <span className="font-bold" style={{ color: up ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{up ? '+' : ''}{chg.toFixed(2)}%</span>
+  const ocChg = data.close - data.open;
+  const ocPct = data.open > 0 ? (ocChg / data.open * 100) : 0;
+  const ocUp = ocChg >= 0;
+  // 振幅 = (最高-最低)/昨收*100
+  const amplitude = prev > 0 ? ((data.high - data.low) / prev * 100) : 0;
+  return (<div className="flex items-center gap-3 text-[11px] font-mono-nums flex-wrap" style={{ color: 'hsl(var(--text-secondary))' }}>
+    <span>日期 <b style={{ color: 'hsl(var(--text-primary))' }}>{data.time}</b></span>
+    {['O','H','L','C'].map((l, i) => <span key={l}>{l} <b style={{ color: 'hsl(var(--text-primary))' }}>{i === 0 ? fmtPrice(data.open) : i === 1 ? fmtPrice(data.high) : i === 2 ? fmtPrice(data.low) : fmtPrice(data.close)}</b></span>)}
+    <span>振幅 <b style={{ color: 'hsl(var(--text-primary))' }}>{amplitude.toFixed(2)}%</b></span>
+    <span>涨跌 <b style={{ color: up ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{up ? '+' : ''}{fmtPrice(chgAmt)} ({up ? '+' : ''}{chg.toFixed(2)}%)</b></span>
+    <span>量 <b style={{ color: 'hsl(var(--text-primary))' }}>{fmtVolume(data.volume / 100)}</b></span>
   </div>);
 }
 
@@ -732,13 +749,20 @@ export default function StockDetailPage() {
   };
 
   const handleSetPeriod = (p: string) => { setPeriod(p); if (p === 'minute') setCrosshair(null); };
-  const [indicator, setIndicator] = useState<IndicatorType>('none');
+  const [indicator, setIndicator] = useState<IndicatorType>('cci');
+  const [activeIndicators, setActiveIndicators] = useState<string[]>(['cci']);
   const [indicatorParams, setIndicatorParams] = useState<Record<string, number | string>>({});
   const [recentIndicators, setRecentIndicators] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('stockmate_recent_indicators') || '[]'); } catch { return []; }
   });
   const handleIndicatorChange = useCallback((id: string) => {
     setIndicator(id);
+    // Also toggle in activeIndicators for overlay mode
+    setActiveIndicators(prev => {
+      if (id === 'none') return [];
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      return [...prev, id];
+    });
     // Load saved params for the new indicator
     if (id !== 'none' && id !== 'tdx') {
       try {
@@ -880,7 +904,7 @@ export default function StockDetailPage() {
           <div className="flex items-center gap-0.5 -ml-1.5 min-w-0 flex-1 overflow-x-auto">
             {PERIODS.map(p => (<button key={p} onClick={() => handleSetPeriod(p)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: p === period ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: p === period ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>{PERIOD_LABELS[p]}</button>))}
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
-            <IndicatorPicker value={indicator} onChange={handleIndicatorChange} recentIds={recentIndicators} />
+            <IndicatorPicker value={indicator} onChange={handleIndicatorChange} recentIds={recentIndicators} activeIds={activeIndicators} onToggleMulti={handleIndicatorChange} />
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
             <button onClick={() => setShowBOLL(!showBOLL)} className={`px-1.5 py-0.5 text-[11px] font-bold transition-colors hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0`} style={{ color: showBOLL ? 'hsl(var(--text-primary))' : 'hsl(var(--text-tertiary))', borderBottom: showBOLL ? '2px solid hsl(var(--text-primary))' : '2px solid transparent' }}>BOLL</button>
             <span className="mx-1.5 w-px h-3 bg-[hsl(var(--border-subtle))] shrink-0" />
@@ -926,7 +950,7 @@ export default function StockDetailPage() {
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
               : !historyLoading && !chartData.length
                 ? (<div className="flex-1 flex items-center justify-center"><span className="text-data-sm" style={{ color: 'var(--text-tertiary)' }}>暂无日线数据</span></div>)
-                : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} indicatorParams={indicatorParams} />)}
+                : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} activeIndicators={activeIndicators} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} indicatorParams={indicatorParams} />)}
       </div>
 
       {secondaryErrors.length > 0 && (

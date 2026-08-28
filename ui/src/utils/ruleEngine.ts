@@ -247,4 +247,32 @@ export const RULE_TEMPLATES: TradingRule[] = [
   // ── 多周期 (2) ──
   { id: 'tpl_weekly_macd_daily_vol', name: '周线MACD金叉+日线放量', kind: 'code', code: 'tf(cross(macddiff(i), macddea(i)) AND macddiff(i) > macddea(i), "week") AND volume(i) > volume_ma(5,i)*1.3', signal: 'buy', conditions: [], enabled: false, color: ruleColor(22), markerIndex: 23, createdAt: '', explanation: '周线级别MACD金叉，同时日线放量确认' },
   { id: 'tpl_monthly_up_daily_dip', name: '月线趋势向上+日线回调买入', kind: 'code', code: 'tf(sma(5,i) > sma(20,i), "month") AND close(i) < sma(20,i) AND close(i) > sma(60,i) AND rsi(14,i) < 40', signal: 'buy', conditions: [], enabled: false, color: ruleColor(23), markerIndex: 24, createdAt: '', explanation: '月线级别均线多头，日线回调至均线附近且RSI处于低位' },
+
+  // ── 新手入门 (4) ──
+  { id: 'tpl_beginner_ma_cross', name: '新手MA金叉', conditions: [{ type: 'ma_cross', params: { fastPeriod: 5, slowPeriod: 10, direction: 'above' } }], signal: 'buy', enabled: false, color: ruleColor(26), markerIndex: 27, createdAt: '' },
+  { id: 'tpl_beginner_ma_death', name: '新手MA死叉卖出', conditions: [{ type: 'ma_cross', params: { fastPeriod: 5, slowPeriod: 10, direction: 'below' } }], signal: 'sell', enabled: false, color: ruleColor(27), markerIndex: 28, createdAt: '' },
+  { id: 'tpl_beginner_volume_break', name: '新手放量突破', conditions: [{ type: 'price_breakout', params: { period: 20, direction: 'above' } }, { type: 'volume_surge', params: { period: 5, multiplier: 1.5 } }], signal: 'buy', enabled: false, color: ruleColor(28), markerIndex: 29, createdAt: '' },
+  { id: 'tpl_beginner_rsi_oversold', name: '新手RSI超卖', conditions: [{ type: 'rsi_threshold', params: { period: 14, threshold: 30, direction: 'below' } }], signal: 'buy', enabled: false, color: ruleColor(29), markerIndex: 30, createdAt: '' },
+
+  // ── 趋势跟踪 (4) ──
+  { id: 'tpl_trend_macd_golden', name: '趋势MACD金叉', conditions: [{ type: 'macd_signal', params: { fast: 12, slow: 26, signal: 9, direction: 'above' } }], signal: 'buy', enabled: false, color: ruleColor(30), markerIndex: 31, createdAt: '' },
+  { id: 'tpl_trend_dmi_adx', name: 'DMI趋势确认', kind: 'code', code: 'cross(pdi(i), mdi(i)) AND adx(i) > 25', signal: 'buy', conditions: [], enabled: false, color: ruleColor(31), markerIndex: 32, createdAt: '', explanation: '+DI上穿-DI且ADX>25确认趋势强度' },
+  { id: 'tpl_trend_sar_follow', name: 'SAR追踪止损', kind: 'code', code: 'cross(close(i), sar(i))', signal: 'buy', conditions: [], enabled: false, color: ruleColor(32), markerIndex: 33, createdAt: '', explanation: '价格上穿SAR抛物线转向' },
+  { id: 'tpl_trend_trailing_stop', name: '趋势移动止损', kind: 'code', code: 'close(i) < highest(20,i-1) - 2.5*atr(14,i)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(33), markerIndex: 34, createdAt: '', explanation: '价格跌破20日最高价减2.5倍ATR' },
+
+  // ── 短线交易 (4) ──
+  { id: 'tpl_short_kdj_rsi', name: 'KDJ+RSI超卖反弹', kind: 'code', code: 'kdj_k(9,i) < 20 AND rsi(14,i) < 30', signal: 'buy', conditions: [], enabled: false, color: ruleColor(34), markerIndex: 35, createdAt: '', explanation: 'KDJ和RSI同时超卖时买入' },
+  { id: 'tpl_short_wr_reversal', name: 'WR威廉反转', kind: 'code', code: 'crossunder(wr(10,i), 80)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(35), markerIndex: 36, createdAt: '', explanation: 'WR从超卖区向下穿越时买入' },
+  { id: 'tpl_short_atr_break', name: 'ATR波动突破', kind: 'code', code: 'close(i) > highest(20,i-1) AND atr(14,i) > atr(14,i-1)*1.5', signal: 'buy', conditions: [], enabled: false, color: ruleColor(36), markerIndex: 37, createdAt: '', explanation: '价格突破20日高点且ATR放大' },
+  { id: 'tpl_short_quick_profit', name: '短线快速止盈', kind: 'code', code: 'close(i) > entry_price * 1.08', signal: 'sell', conditions: [], enabled: false, color: ruleColor(37), markerIndex: 38, createdAt: '', explanation: '盈利8%快速止盈' },
+
+  // ── 价值投资 (3) ──
+  { id: 'tpl_value_boll_oversold', name: '布林下轨价值买入', kind: 'code', code: 'close(i) <= boll_lower(20,i)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(38), markerIndex: 39, createdAt: '', explanation: '价格触及布林带下轨，均值回归策略' },
+  { id: 'tpl_value_ma_long', name: '长期均线价值', kind: 'code', code: 'close(i) > sma(60,i) AND volume(i) < volume_ma(20,i)*0.8', signal: 'buy', conditions: [], enabled: false, color: ruleColor(39), markerIndex: 40, createdAt: '', explanation: '价格在MA60上方且成交量萎缩' },
+  { id: 'tpl_value_boll_upper', name: '布林上轨价值卖出', kind: 'code', code: 'close(i) >= boll_upper(20,i)', signal: 'sell', conditions: [], enabled: false, color: ruleColor(40), markerIndex: 41, createdAt: '', explanation: '价格触及布林带上轨，获利了结' },
+
+  // ── 底部买入策略 (3) ──
+  { id: 'tpl_bottom_cci_momentum', name: 'CCI+动力线底部买入', kind: 'code', code: 'cci(14,i) < -100 AND cross(momentum(1,i), 15) AND momentum(1,i) < 30', signal: 'buy', conditions: [], enabled: false, color: ruleColor(41), markerIndex: 42, createdAt: '', explanation: 'CCI超卖(<-100)且动力线从底部(<15)上穿，双重确认底部' },
+  { id: 'tpl_bottom_cci_recover', name: 'CCI回升+动力线确认', kind: 'code', code: 'crossunder(cci(14,i-1), -100) AND cci(14,i) > -100 AND momentum(1,i) > 30', signal: 'buy', conditions: [], enabled: false, color: ruleColor(42), markerIndex: 43, createdAt: '', explanation: 'CCI从超卖区回升且动力线>30确认趋势启动' },
+  { id: 'tpl_bottom_momentum_trend', name: '动力线趋势买', kind: 'code', code: 'cross(momentum(1,i), 30) AND cci(14,i) > -50 AND close(i) > sma(20,i)', signal: 'buy', conditions: [], enabled: false, color: ruleColor(43), markerIndex: 44, createdAt: '', explanation: '动力线上穿30趋势确认+CCI不超卖+价格在均线上方' },
 ];

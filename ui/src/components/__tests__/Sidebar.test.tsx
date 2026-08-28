@@ -41,7 +41,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('行情')).toBeInTheDocument();
     expect(screen.getByText('股票搜索')).toBeInTheDocument();
     expect(screen.getByText('策略回測')).toBeInTheDocument();
-    expect(screen.getByText('AI 分析')).toBeInTheDocument();
+    expect(screen.queryByText('AI 分析')).not.toBeInTheDocument();
     expect(screen.getByText('交易規則')).toBeInTheDocument();
     expect(screen.getByText('板塊熱點')).toBeInTheDocument();
     expect(screen.getByText('設置')).toBeInTheDocument();
@@ -80,8 +80,6 @@ describe('Sidebar', () => {
     expect(watchlistLink).toHaveAttribute('href', '/watchlist');
     const backtestLink = screen.getByText('策略回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
-    const predictLink = screen.getByText('AI 分析').closest('a');
-    expect(predictLink).toHaveAttribute('href', '/predict');
     const rulesLink = screen.getByText('交易規則').closest('a');
     expect(rulesLink).toHaveAttribute('href', '/rules');
     const sectorLink = screen.getByText('板塊熱點').closest('a');
@@ -99,8 +97,6 @@ describe('Sidebar', () => {
     );
     const backtestLink = screen.getByText('策略回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest?code=600519.SH');
-    const predictLink = screen.getByText('AI 分析').closest('a');
-    expect(predictLink).toHaveAttribute('href', '/predict?code=600519.SH');
     const rulesLink = screen.getByText('交易規則').closest('a');
     expect(rulesLink).toHaveAttribute('href', '/rules?code=600519.SH');
     mockStore.selectedStock = null;

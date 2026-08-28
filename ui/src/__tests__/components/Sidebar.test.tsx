@@ -40,7 +40,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('行情')).toBeInTheDocument();
     expect(screen.getByText('股票搜索')).toBeInTheDocument();
     expect(screen.getByText('策略回測')).toBeInTheDocument();
-    expect(screen.getByText('AI 分析')).toBeInTheDocument();
+    expect(screen.queryByText('AI 分析')).not.toBeInTheDocument();
     expect(screen.getByText('交易規則')).toBeInTheDocument();
   });
 
@@ -67,8 +67,6 @@ describe('Sidebar', () => {
     expect(searchLink).toHaveAttribute('href', '/search');
     const backtestLink = screen.getByText('策略回測').closest('a');
     expect(backtestLink).toHaveAttribute('href', '/backtest');
-    const predictLink = screen.getByText('AI 分析').closest('a');
-    expect(predictLink).toHaveAttribute('href', '/predict');
     const settingsLink = screen.getByText('設置').closest('a');
     expect(settingsLink).toHaveAttribute('href', '/settings');
   });

@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ConsolePanel } from '@/components/ConsolePanel';
 import MiniPage from '@/pages/MiniPage';
 import { PageSkeleton } from '@/components/PageLoader';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 // Lazy-loaded page chunks — each produces a separate JS bundle
 // Large pages get their own chunk; smaller commonly-used pages are grouped.
@@ -53,6 +54,7 @@ function CrossWindowNav() {
 }
 
 function AppRoutes() {
+  useKeyboardShortcuts();
   return (
     <Layout>
       <ErrorBoundary>

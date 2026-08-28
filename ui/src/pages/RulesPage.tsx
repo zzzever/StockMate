@@ -370,12 +370,17 @@ function RuleList({ onViewCode, onEditRule, bars, statStockName }: {
 
 // ── Template category groups ──
 const TEMPLATE_GROUPS = [
-  { name: '均线系统', icon: '📈', ids: ['tpl_ma_golden', 'tpl_ma_death', 'tpl_ma_bullish', 'tpl_ma_bearish', 'tpl_ma_squeeze'] },
-  { name: 'MACD', icon: '📊', ids: ['tpl_macd_golden', 'tpl_macd_zero_cross', 'tpl_macd_bull_div', 'tpl_macd_bear_div'] },
+  { name: '新手入门', icon: '🌱', ids: ['tpl_beginner_ma_cross', 'tpl_beginner_ma_death', 'tpl_beginner_volume_break', 'tpl_beginner_rsi_oversold'] },
+  { name: '趋势跟踪', icon: '📈', ids: ['tpl_trend_macd_golden', 'tpl_trend_dmi_adx', 'tpl_trend_sar_follow', 'tpl_trend_trailing_stop'] },
+  { name: '短线交易', icon: '⚡', ids: ['tpl_short_kdj_rsi', 'tpl_short_wr_reversal', 'tpl_short_atr_break', 'tpl_short_quick_profit'] },
+  { name: '价值投资', icon: '💎', ids: ['tpl_value_boll_oversold', 'tpl_value_ma_long', 'tpl_value_boll_upper'] },
+  { name: '底部买入', icon: '🎯', ids: ['tpl_bottom_cci_momentum', 'tpl_bottom_cci_recover', 'tpl_bottom_momentum_trend'] },
+  { name: '均线系统', icon: '📊', ids: ['tpl_ma_golden', 'tpl_ma_death', 'tpl_ma_bullish', 'tpl_ma_bearish', 'tpl_ma_squeeze'] },
+  { name: 'MACD', icon: '📉', ids: ['tpl_macd_golden', 'tpl_macd_zero_cross', 'tpl_macd_bull_div', 'tpl_macd_bear_div'] },
   { name: 'RSI', icon: '🎯', ids: ['tpl_rsi_oversold', 'tpl_rsi_overbought', 'tpl_rsi_divergence'] },
   { name: '布林带', icon: '📉', ids: ['tpl_bb_rebound', 'tpl_bb_resistance', 'tpl_bb_squeeze'] },
   { name: 'K线形态', icon: '🕯️', ids: ['tpl_morning_star', 'tpl_evening_star', 'tpl_three_soldiers'] },
-  { name: '量价关系', icon: '💰', ids: ['tpl_breakout', 'tpl_volume_pullback', 'tpl_volume_climax'] },
+  { name: '量价关系', icon: '💰', ids: ['tpl_breakout', 'tpl_volume_pullback', 'tpl_volume_climax', 'tpl_green_fat', 'tpl_red_fat'] },
   { name: '多周期', icon: '🔄', ids: ['tpl_weekly_macd_daily_vol', 'tpl_monthly_up_daily_dip'] },
 ];
 
@@ -386,7 +391,7 @@ export default function RulesPage() {
   const [viewingCodeRule, setViewingCodeRule] = useState<TradingRule | null>(null);
   const [editingRule, setEditingRule] = useState<TradingRule | null>(null);
   const [showNewCodeRule, setShowNewCodeRule] = useState(false);
-  const [activeGroup, setActiveGroup] = useState<string>('均线系统');
+  const [activeGroup, setActiveGroup] = useState<string>('新手入门');
   const selectedStock = useAppStore(s => s.selectedStock);
   const { data: history } = useStockHistory(selectedStock?.code || '', 250, 'day');
   const bars = useMemo(() => history ?? [], [history]);

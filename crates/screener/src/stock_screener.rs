@@ -47,6 +47,8 @@ pub enum ScreenCondition {
     ConsecutiveUp(u32),
     /// 收盘价创N日新高
     NewHigh(u32),
+    /// 动力线低于阈值（默认15）
+    MomentumBelow(f64),
     /// 条件组，包含逻辑运算符和子条件列表
     ConditionGroup {
         logic: String, // "AND" 或 "OR"
@@ -218,6 +220,34 @@ pub fn screen_stock(quotes: &[Quote], conditions: &[ScreenCondition]) -> Vec<Str
                 let max_prev = closes[n-1-*period as usize..n-1].iter().fold(f64::MIN, |a, &b| a.max(b));
                 if last_close > max_prev {
                     matches.push(format!("{}日新高", period));
+                }
+            }
+            ScreenCondition::MomentumBelow(threshold) => {
+                // 动力线 = EMA(100×(C−LLV(L,20))/(HHV(H,20)−LLV(L,20)), 4)
+                if n < 20 { continue; }
+                let highs: Vec<f64> = quotes.iter().map(|q| q.high.to_f64().unwrap_or(0.0)).collect();
+                let lows: Vec<f64> = quotes.iter().map(|q| q.low.to_f64().unwrap_or(0.0)).collect();
+                // 计算最近20日的最高和最低
+                let period = 20;
+                let mut momentum_values: Vec<f64> = Vec::new();
+                for i in (period - 1)..n {
+                    let slice_highs = &highs[i + 1 - period..=i];
+                    let slice_lows = &lows[i + 1 - period..=i];
+                    let hh = slice_highs.iter().fold(f64::MIN, |a, &b| a.max(b));
+                    let ll = slice_lows.iter().fold(f64::MAX, |a, &b| a.min(b));
+                    let width = (hh - ll).max(0.01);
+                    let raw = ((closes[i] - ll) / width * 100.0).max(0.0).min(100.0);
+                    momentum_values.push(raw);
+                }
+                // EMA4
+                if momentum_values.len() < 4 { continue; }
+                let k = 2.0 / 5.0; // 2/(4+1)
+                let mut ema_val = momentum_values[0];
+                for i in 1..momentum_values.len() {
+                    ema_val = momentum_values[i] * k + ema_val * (1.0 - k);
+                }
+                if ema_val < *threshold {
+                    matches.push(format!("动力线={:.1}<{:.0}", ema_val, threshold));
                 }
             }
             ScreenCondition::ConditionGroup { logic, conditions } => {
