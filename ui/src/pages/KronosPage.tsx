@@ -133,6 +133,7 @@ export default function KronosPage() {
   const [searchText, setSearchText] = useState('');
   const [selectedStock, setSelectedStock] = useState<{ id: string; name: string; ticker: string } | null>(null);
   const [forecast, setForecast] = useState<KronosForecast | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<number | null>(null);
   const [history, setHistory] = useState<KronosHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -288,9 +289,16 @@ export default function KronosPage() {
                 const dirColor = r.signal === 'up' ? 'hsl(var(--price-up))' : r.signal === 'down' ? 'hsl(var(--price-down))' : 'hsl(var(--risk-warning))';
                 const dirLabel = r.signal === 'up' ? '涨' : r.signal === 'down' ? '跌' : '震荡';
                 return (
-                  <div key={h.id} onClick={() => setForecast(r)}
-                    className="px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--bg-hover)] text-data-xs"
-                    style={{ border: '1px solid var(--border-subtle)' }}>
+                  <div key={h.id} onClick={() => { setForecast(r); setSelectedHistoryId(h.id); }}
+                    className="px-2 py-1.5 rounded cursor-pointer text-data-xs transition-colors"
+                    style={{
+                      border: '1px solid',
+                      borderColor: selectedHistoryId === h.id ? 'hsl(var(--swiss-accent))' : 'var(--border-subtle)',
+                      background: selectedHistoryId === h.id ? 'hsl(var(--swiss-accent) / 0.08)' : 'transparent',
+                    }}
+                    onMouseEnter={e => { if (selectedHistoryId !== h.id) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
+                    onMouseLeave={e => { if (selectedHistoryId !== h.id) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  >
                     <div className="flex items-center justify-between">
                       <span className="font-mono" style={{ color: 'var(--text-tertiary)' }}>{h.created_at?.slice(0, 10)}</span>
                       <span className="font-bold" style={{ color: dirColor }}>{dirLabel}</span>
@@ -407,17 +415,20 @@ export default function KronosPage() {
               <div className="glass-card-flat p-2">
                 <div className="text-data-xs font-bold mb-1" style={{ color: 'var(--text-secondary)' }}>特征重要性</div>
                 <div className="grid grid-cols-4 gap-2">
-                  {Object.entries(forecast.features).map(([name, weight]) => (
-                    <div key={name} className="text-center">
-                      <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{name}</div>
-                      <div className="h-1.5 mt-1 rounded-full" style={{ background: 'var(--bg-input)' }}>
-                        <div className="h-full rounded-full" style={{
-                          width: `${(weight * 100).toFixed(0)}%`,
-                          background: weight > 0.3 ? 'hsl(var(--swiss-accent))' : 'var(--text-tertiary)'
-                        }} />
+                  {Object.entries(forecast.features).map(([name, weight]) => {
+                    const featureHints: Record<string, string> = { 'momentum': '价格动量', 'volume': '成交量', 'volatility': '波动率', 'ma_trend': '均线趋势' };
+                    return (
+                      <div key={name} className="text-center" title={`${featureHints[name] || name}: ${(weight * 100).toFixed(0)}%`}>
+                        <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{name}</div>
+                        <div className="h-1.5 mt-1 rounded-full" style={{ background: 'var(--bg-input)' }}>
+                          <div className="h-full rounded-full" style={{
+                            width: `${(weight * 100).toFixed(0)}%`,
+                            background: weight > 0.3 ? 'hsl(var(--swiss-accent))' : 'var(--text-tertiary)'
+                          }} />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

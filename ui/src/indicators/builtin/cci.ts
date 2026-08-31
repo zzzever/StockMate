@@ -18,6 +18,16 @@ const cci: SubIndicator = {
   category: 'oscillator',
   complexity: 'intermediate',
   tags: ['trend-following', 'breakout'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'TP = (HIGH + LOW + CLOSE) / 3\nCCI = (TP - MA(TP,N)) / (0.015 × MD(TP,N))',
+    references: [
+      'Donald Lambert (1980). "Techniques of Commodity Channel Index"',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 14, min: 5, max: 100, step: 1 },
     { key: 'overbought', label: '超买线', type: 'number', default: 100, min: 50, max: 300, step: 10 },

@@ -15,6 +15,16 @@ const obv: SubIndicator = {
   category: 'volume',
   complexity: 'basic',
   tags: ['trend-following'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'IF C>REF(C,1) THEN OBV=OBV(1)+VOL\nIF C<REF(C,1) THEN OBV=OBV(1)-VOL\nIF C=REF(C,1) THEN OBV=OBV(1)',
+    references: [
+      'Granville, J.A. (1963). "Granville\'s New Strategy of Daily Stock Market Timing"',
+    ],
+  },
   params: [
     { key: 'ma', label: 'OBV均线', type: 'number', default: 20, min: 5, max: 60, step: 1 },
   ],

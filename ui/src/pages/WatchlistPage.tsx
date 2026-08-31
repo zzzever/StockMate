@@ -333,11 +333,11 @@ export default function WatchlistPage() {
       )}
 
       {/* Group Tabs */}
-      <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
+      <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1 scrollbar-thin">
         {groups.map(group => (
           <div
             key={group.id}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer select-none ${
               activeGroup === group.id ? 'ring-1' : 'hover:bg-white/5'
             }`}
             style={{
@@ -351,13 +351,14 @@ export default function WatchlistPage() {
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, group.id)}
           >
-            <div className="w-2 h-2 rounded-full" style={{ background: group.color }} />
-            {group.name}
+            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: group.color }} />
+            <span className="truncate">{group.name}</span>
             {group.id !== 'all' && (
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }}
-                className="ml-1 p-0.5 rounded hover:bg-white/10 opacity-0 group-hover:opacity-100"
+                className="ml-0.5 p-0.5 rounded hover:bg-white/10 opacity-60 hover:opacity-100 transition-opacity"
                 style={{ color: 'hsl(var(--text-tertiary))' }}
+                aria-label={`删除分组 ${group.name}`}
               >
                 <X size={10} />
               </button>
@@ -366,8 +367,9 @@ export default function WatchlistPage() {
         ))}
         <button
           onClick={handleAddGroup}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap hover:bg-white/5"
+          className="flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium whitespace-nowrap hover:bg-white/5 transition-colors"
           style={{ color: 'hsl(var(--text-tertiary))' }}
+          aria-label="新建分组"
         >
           <Plus size={12} />
         </button>
@@ -383,14 +385,21 @@ export default function WatchlistPage() {
 
       {/* Empty state */}
       {!isLoading && !error && mergedWatchlist && mergedWatchlist.length === 0 && (
-        <div className="flex flex-col items-center justify-center flex-1 gap-4" style={{ color: 'hsl(var(--text-secondary))' }}>
-          <div className="flex h-20 w-20 items-center justify-center rounded-full" style={{ background: 'hsl(var(--bg-card))' }}>
-            <Star size={36} className="opacity-40" />
+        <div className="flex flex-col items-center justify-center flex-1 gap-5" style={{ color: 'hsl(var(--text-secondary))' }}>
+          <div className="relative">
+            <div className="flex h-24 w-24 items-center justify-center rounded-full" style={{ background: 'hsl(var(--bg-card))' }}>
+              <Star size={40} className="opacity-30" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 h-8 w-8 flex items-center justify-center rounded-full" style={{ background: 'hsl(var(--swiss-accent))', color: 'white' }}>
+              <Plus size={16} />
+            </div>
           </div>
-          <p className="text-base font-bold" style={{ color: 'hsl(var(--text-primary))' }}>还没有自选股</p>
-          <p className="text-xs" style={{ color: 'hsl(var(--text-tertiary))' }}>搜索股票代码或名称，添加到自选列表</p>
-          <button onClick={() => navigate('/search')} className="btn-primary">
-            <Search size={16} /> 去搜索
+          <div className="text-center">
+            <p className="text-base font-bold" style={{ color: 'hsl(var(--text-primary))' }}>还没有自选股</p>
+            <p className="text-xs mt-1.5 max-w-[240px]" style={{ color: 'hsl(var(--text-tertiary))' }}>搜索并添加你关注的股票，实时追踪行情变化</p>
+          </div>
+          <button onClick={() => navigate('/search')} className="btn-primary gap-2">
+            <Search size={16} /> 搜索股票
           </button>
         </div>
       )}
@@ -398,7 +407,7 @@ export default function WatchlistPage() {
       {/* Watchlist items */}
       {!isLoading && filteredWatchlist.length > 0 && (
         <div className="flex-1 overflow-y-auto">
-          {filteredWatchlist.map((item) => {
+          {filteredWatchlist.map((item, idx) => {
             const up = item.change > 0;
             const down = item.change < 0;
             return (
@@ -410,8 +419,8 @@ export default function WatchlistPage() {
                 onDragStart={() => handleDragStart(item.stock_code)}
                 onClick={() => handleNavigate(item.stock_id)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleNavigate(item.stock_id); }}
-                className="flex items-center gap-4 py-3 px-1 border-b hover-surface cursor-pointer transition-colors"
-                style={{ borderColor: 'var(--border-subtle)' }}
+                className="stagger-child flex items-center gap-4 py-3 px-2 border-b hover-surface cursor-pointer transition-all"
+                style={{ borderColor: 'var(--border-subtle)', animationDelay: `${Math.min(idx * 25, 300)}ms` }}
               >
                 {/* Drag handle */}
                 <div className="shrink-0 opacity-30 hover:opacity-60" style={{ color: 'hsl(var(--text-tertiary))' }}>

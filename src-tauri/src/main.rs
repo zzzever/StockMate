@@ -347,6 +347,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_tauri_commands::commands_v2::validate_sslang,
             api_tauri_commands::commands_v2::parse_sslang_rules,
             api_tauri_commands::commands_v2::backtest_strategy,
+            api_tauri_commands::commands_v2::indicator_backtest,
             api_tauri_commands::commands_v2::screen_stocks,
             api_tauri_commands::commands_v2::predict_with_lnn,
             api_tauri_commands::commands_v2::predict_with_kronos,

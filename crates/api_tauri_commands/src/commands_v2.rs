@@ -591,6 +591,51 @@ pub async fn backtest_strategy(
     })
 }
 
+/// Indicator-level backtest: runs backtest with a pre-computed signal vector from indicator markers.
+/// Signals: +1 = buy, -1 = sell, 0 = hold.
+#[tauri::command]
+pub async fn indicator_backtest(
+    stock_id: String,
+    signals: Vec<i8>,
+    days: u32,
+    period: String,
+    state: State<'_, AppState>,
+) -> Result<backtest::BacktestResult, domain::ApiError> {
+    validate_stock_id(&stock_id)?;
+    validate_days(days)?;
+    validate_period(&period)?;
+
+    if signals.is_empty() {
+        return Err(domain::ApiError {
+            code: 400,
+            message: "signals cannot be empty".into(),
+            details: None,
+        });
+    }
+
+    tracing::info!(
+        "[CMD] indicator_backtest: stock_id={} days={} period={} signal_count={}",
+        stock_id, days, period, signals.len()
+    );
+
+    let history = state.data_service.get_stock_history(&stock_id, days, &period).await?;
+
+    if history.is_empty() {
+        return Err(domain::ApiError {
+            code: 404,
+            message: format!("未找到股票 {} 的历史数据", stock_id),
+            details: None,
+        });
+    }
+
+    let config = backtest::BacktestConfig::default();
+    backtest::run_indicator_backtest(&history, &signals, &config).map_err(|e| domain::ApiError {
+        code: 500,
+        message: e,
+        details: None,
+    })
+}
+
 #[tauri::command]
 pub async fn predict_with_lnn(
     state: State<'_, AppState>,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Filter, Search, RefreshCw, ArrowLeft, Save, BarChart3 } from 'lucide-react';
+import { Filter, Search, RefreshCw, ArrowLeft, Save, BarChart3, X } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import MiniTrend from '../components/MiniTrend';
 import CompareModal from '../components/CompareModal';
@@ -767,42 +767,26 @@ export default function ScreenerPage() {
           {results.length === 0 && !running && (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center" style={{ color: 'var(--text-tertiary)' }}>
-                <Filter size={48} className="mx-auto mb-2" style={{ opacity: 0.3, animation: 'bounce 2s infinite' }} />
-                <p className="text-data-sm">选择策略并运行选股</p>
-                <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>系统将从全市场 A 股中筛选符合条件的标的（已过滤 ETF）</p>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
-                    <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
-                  </div>
+                <div className="inline-flex h-20 w-20 items-center justify-center rounded-full mb-4" style={{ background: 'hsl(var(--bg-card))' }}>
+                  <Filter size={36} style={{ opacity: 0.3 }} />
                 </div>
-              )}
+                <p className="text-data-sm font-medium" style={{ color: 'var(--text-secondary)' }}>选择策略并运行选股</p>
+                <p className="text-data-xs mt-1.5 max-w-[280px]" style={{ color: 'var(--text-tertiary)' }}>系统将从全市场约5000只A股中筛选符合条件的标的</p>
+                <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>已自动过滤 ETF</p>
+              </div>
             </div>
           )}
 
           {running && (
-            <div className="flex items-center justify-center flex-1">
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center" style={{ color: 'var(--text-tertiary)' }}>
-                <RefreshCw size={32} className="mx-auto mb-3 animate-spin opacity-50" />
-                <p className="text-data-sm">正在扫描全市场 A 股（约 5000 只）...</p>
+                <div className="relative inline-flex h-20 w-20 items-center justify-center rounded-full mb-4" style={{ background: 'hsl(var(--bg-card))' }}>
+                  <RefreshCw size={28} className="animate-spin opacity-50" />
+                  <div className="absolute inset-0 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'hsl(var(--swiss-accent) / 0.3)', borderTopColor: 'transparent' }} />
+                </div>
+                <p className="text-data-sm font-medium" style={{ color: 'var(--text-secondary)' }}>正在扫描全市场...</p>
                 <p className="text-data-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>已匹配 {results.length} 只</p>
               </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between shrink-0 pt-1 pb-1 text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  <span>共 {filteredResults.length} 只 . 第 {page + 1}/{totalPages} 页</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
-                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">上一页</button>
-                    <button onClick={() => setPage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1}
-                      className="text-[11px] px-2.5 py-1.5 rounded hover:bg-[var(--bg-hover)] disabled:opacity-30">下一页</button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -851,18 +835,21 @@ export default function ScreenerPage() {
                   className="input w-full pl-8 py-1 text-data-xs" />
                 {searchText && (
                   <button onClick={() => setSearchText('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] px-1 rounded hover:bg-[var(--bg-hover)]"
-                    style={{ color: 'var(--text-tertiary)' }}>x</button>
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded hover:bg-[var(--bg-hover)] transition-colors"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    aria-label="清除搜索">
+                    <X size={12} />
+                  </button>
                 )}
               </div>
               {/* Card view */}
               {viewMode === 'card' && (
                 <div className="flex-1 overflow-auto">
                   <div className="grid grid-cols-2 gap-2">
-                    {pageResults.map(r => (
+                    {pageResults.map((r, idx) => (
                       <div key={r.id} onClick={() => navigate(`/stock?code=${r.id}&name=${encodeURIComponent(r.name)}`)}
-                        className="glass-card-flat p-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
-                        style={selectedIds.has(r.id) ? { borderColor: 'hsl(var(--swiss-accent))', borderWidth: '1.5px' } : undefined}>
+                        className="stagger-child glass-card-flat p-3 cursor-pointer hover:bg-[var(--bg-hover)] transition-colors"
+                        style={{ ...(selectedIds.has(r.id) ? { borderColor: 'hsl(var(--swiss-accent))', borderWidth: '1.5px' } : undefined), animationDelay: `${Math.min(idx * 30, 400)}ms` }}>
                         <div className="flex items-center justify-between mb-1">
                           <div className="flex items-center gap-2">
                             <input type="checkbox" checked={selectedIds.has(r.id)} onChange={() => toggleSelect(r.id)}

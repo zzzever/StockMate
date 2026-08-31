@@ -36,6 +36,16 @@ const dmi: SubIndicator = {
   category: 'trend',
   complexity: 'advanced',
   tags: ['trend-following'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: '+DI = SMA(+DM,N)/SMA(TR,N)×100\n-DI = SMA(-DM,N)/SMA(TR,N)×100\nDX = ABS(+DI-(-DI))/(+DI+(-DI))×100\nADX = SMA(DX,M)',
+    references: [
+      'Wilder, J.W. (1978). "New Concepts in Technical Trading Systems"',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 14, min: 5, max: 50, step: 1 },
     { key: 'adxPeriod', label: 'ADX周期', type: 'number', default: 6, min: 3, max: 30, step: 1 },

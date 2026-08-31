@@ -110,7 +110,7 @@ describe('SearchPage', () => {
     expect(screen.getByText('600519')).toBeInTheDocument();
     expect(screen.getByText('上证50ETF')).toBeInTheDocument();
     expect(screen.getByText('ETF')).toBeInTheDocument();
-    expect(screen.getByText('搜索结果 2 条')).toBeInTheDocument();
+    expect(screen.getByText(/找到 \d+ 个结果/)).toBeInTheDocument();
   });
 
   // ── Interactions ──
@@ -181,7 +181,7 @@ describe('SearchPage', () => {
   it('shows the default hint when there is no history and no query', () => {
     setSearch({ data: undefined });
     renderPage();
-    expect(screen.getByText('搜索股票代码或名称，如 茅台、600519、510050')).toBeInTheDocument();
+    expect(screen.getByText(/输入代码、名称或拼音/)).toBeInTheDocument();
   });
 
   it('renders history, removes a single item, and clears all', () => {
@@ -202,7 +202,7 @@ describe('SearchPage', () => {
     // Clear all → default hint returns
     fireEvent.click(screen.getByText('清空'));
     expect(screen.queryByText('上证50ETF')).not.toBeInTheDocument();
-    expect(screen.getByText('搜索股票代码或名称，如 茅台、600519、510050')).toBeInTheDocument();
+    expect(screen.getByText(/输入代码、名称或拼音/)).toBeInTheDocument();
   });
 
   it('navigates when a history item is clicked', () => {

@@ -8,6 +8,16 @@ const kdj: SubIndicator = {
   category: 'oscillator',
   complexity: 'basic',
   tags: ['reversal', 'momentum'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'RSV = (CLOSE - LLV(LOW,N)) / (HHV(HIGH,N) - LLV(LOW,N)) × 100\nK = SMA(RSV, M1)\nD = SMA(K, M2)\nJ = 3K - 2D',
+    references: [
+      'George Lane. "Stochastic Oscillator" (1950s)',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 9, min: 2, max: 50, step: 1 },
     { key: 'kSmooth', label: 'K平滑', type: 'number', default: 3, min: 1, max: 10, step: 1 },

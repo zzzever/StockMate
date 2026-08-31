@@ -26,6 +26,27 @@ const KronosPage = lazy(() => import('@/pages/KronosPage'));
 const AiPredictPage = lazy(() => import('@/pages/AiPredictPage'));
 const ScreenerPage = lazy(() => import('@/pages/ScreenerPage'));
 const WikiPage = lazy(() => import('@/pages/WikiPage'));
+const IndicatorEditorPage = lazy(() => import('@/pages/IndicatorEditorPage'));
+const MarketplacePage = lazy(() => import('@/pages/MarketplacePage'));
+const CommunityPage = lazy(() => import('@/pages/CommunityPage'));
+const LeaderboardPage = lazy(() => import('@/pages/LeaderboardPage'));
+const StrategyGroupPage = lazy(() => import('@/pages/StrategyGroupPage'));
+const ApiPage = lazy(() => import('@/pages/ApiPage'));
+const SignalAlertPage = lazy(() => import('@/pages/SignalAlertPage'));
+const AIScreenerPage = lazy(() => import('@/pages/AIScreenerPage'));
+const AccountsPage = lazy(() => import('@/pages/AccountsPage'));
+const CopyTradingPage = lazy(() => import('@/pages/CopyTradingPage'));
+const ReportPage = lazy(() => import('@/pages/ReportPage'));
+const RealTimeDashboard = lazy(() => import('@/pages/RealTimeDashboard'));
+const PortfolioAnalytics = lazy(() => import('@/pages/PortfolioAnalytics'));
+const MonteCarloPage = lazy(() => import('@/pages/MonteCarloPage'));
+const FinancialCalendar = lazy(() => import('@/pages/FinancialCalendar'));
+const NotificationCenter = lazy(() => import('@/pages/NotificationCenter'));
+const FactorAnalysisPage = lazy(() => import('@/pages/FactorAnalysisPage'));
+const RiskParityPage = lazy(() => import('@/pages/RiskParityPage'));
+const SocialTradingPage = lazy(() => import('@/pages/SocialTradingPage'));
+const CreatorPage = lazy(() => import('@/pages/CreatorPage'));
+const PluginSystemPage = lazy(() => import('@/pages/PluginSystemPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,6 +98,27 @@ function AppRoutes() {
             <Route path="/kronos" element={<KronosPage />} />
             <Route path="/screener" element={<ScreenerPage />} />
             <Route path="/wiki" element={<WikiPage />} />
+            <Route path="/indicator-editor" element={<IndicatorEditorPage />} />
+            <Route path="/marketplace" element={<MarketplacePage />} />
+            <Route path="/community" element={<CommunityPage />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/strategy-group" element={<StrategyGroupPage />} />
+            <Route path="/api" element={<ApiPage />} />
+            <Route path="/signal-alert" element={<SignalAlertPage />} />
+            <Route path="/ai-screener" element={<AIScreenerPage />} />
+            <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/copy-trading" element={<CopyTradingPage />} />
+            <Route path="/report" element={<ReportPage />} />
+            <Route path="/real-time" element={<RealTimeDashboard />} />
+            <Route path="/portfolio" element={<PortfolioAnalytics />} />
+            <Route path="/monte-carlo" element={<MonteCarloPage />} />
+            <Route path="/calendar" element={<FinancialCalendar />} />
+            <Route path="/notifications" element={<NotificationCenter />} />
+            <Route path="/factor-analysis" element={<FactorAnalysisPage />} />
+            <Route path="/risk-parity" element={<RiskParityPage />} />
+            <Route path="/social-trading" element={<SocialTradingPage />} />
+            <Route path="/creator" element={<CreatorPage />} />
+            <Route path="/pluginSystem" element={<PluginSystemPage />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

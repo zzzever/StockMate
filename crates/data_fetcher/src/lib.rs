@@ -64,6 +64,7 @@ struct DataServiceInner {
     finance_cache: Cache<String, Value>,
     history_cache: Cache<String, Value>,
     fundflow_cache: Cache<String, Value>,
+    #[allow(dead_code)] // kept: reserved for future overview-level caching
     overview_cache: Cache<String, Value>,
     intraday_cache: Cache<String, Value>,
     /// Per-ticker HTTP realtime quote cache (short TTL to reduce redundant API calls).

@@ -21,6 +21,16 @@ const brar: SubIndicator = {
   category: 'oscillator',
   complexity: 'advanced',
   tags: ['reversal'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'AR = SUM(HIGH-OPEN,N)/SUM(OPEN-LOW,N)×100\nBR = SUM(MAX(0,HIGH-REF(C,1)),N)/SUM(MAX(0,REF(C,1)-LOW),N)×100',
+    references: [
+      'AR/BR 指标源自日本技术分析',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 26, min: 5, max: 60, step: 1 },
     { key: 'arHigh', label: 'AR高位', type: 'number', default: 180, min: 100, max: 300, step: 10 },

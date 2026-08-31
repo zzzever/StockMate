@@ -298,7 +298,7 @@ describe('ScreenerPage', () => {
     expect(screen.getByText('贵州茅台')).toBeInTheDocument();
     expect(screen.queryByText('平安银行')).not.toBeInTheDocument();
     expect(screen.queryByText('宁德时代')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('x'));
+    fireEvent.click(screen.getByLabelText('清除搜索'));
     expect(screen.getByText('平安银行')).toBeInTheDocument();
     expect(screen.getByText('宁德时代')).toBeInTheDocument();
   });

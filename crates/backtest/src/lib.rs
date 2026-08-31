@@ -53,7 +53,11 @@ impl Default for BacktestConfig {
     }
 }
 
-/// 向量化回测（简化版）：基于信号序列（+1 买入, -1 卖出, 0 持仓）生成交易
+/// Indicator-level backtest: run backtest with a pre-computed signal vector from indicator markers.
+/// Signals: +1 = buy, -1 = sell, 0 = hold.
+pub fn run_indicator_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -> Result<BacktestResult, String> {
+    run_backtest(quotes, signals, config)
+}
 pub fn run_backtest(quotes: &[Quote], signals: &[i8], config: &BacktestConfig) -> Result<BacktestResult, String> {
     if quotes.is_empty() || signals.is_empty() {
         return Ok(BacktestResult {

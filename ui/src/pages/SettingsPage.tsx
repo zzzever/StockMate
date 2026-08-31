@@ -85,7 +85,8 @@ export default function SettingsPage() {
       )}
 
       {configError && (
-        <div className="p-4  border   rounded-lg  ">
+        <div className="flex items-center gap-2 p-3 rounded-lg text-xs" style={{ color: 'hsl(var(--risk-danger))', background: 'hsl(var(--risk-danger) / 0.1)', border: '1px solid hsl(var(--risk-danger) / 0.2)' }}>
+          <AlertCircle size={14} />
           加载配置失败: {configError.message}
         </div>
       )}
@@ -144,7 +145,7 @@ export default function SettingsPage() {
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm outline-none"
-                style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)', outline: '2px solid hsl(var(--swiss-accent))', outlineOffset: '2px' }}
+                style={{ background: 'var(--bg-input)', borderColor: 'var(--border-default)', color: 'var(--text-primary)' }}
               >
                 <option value="deepseek-v4-pro" className="bg-zinc-900">deepseek-v4-pro</option>
                 <option value="deepseek-v4-flash" className="bg-zinc-900">deepseek-v4-flash</option>
@@ -203,17 +204,18 @@ export default function SettingsPage() {
             <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>数据源配置</h2>
             <DataSourceStatus compact />
           </div>
-          <div className="space-y-2 text-xs font-bold">
+          <div className="space-y-1.5">
             {[
               ['A股实时行情', '腾讯财经 (qt.gtimg.cn)'],
               ['K线历史 & 分时', '腾讯财经 (ifzq.gtimg.cn)'],
               ['板块指数', '东方财富 (push2.eastmoney.com)'],
               ['中文名搜索', '新浪财经 (suggest3.sinajs.cn)'],
             ].map(([label, src]) => (
-              <div key={label} className="flex items-center justify-between border px-3 py-2" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
-                <span style={{ color: 'hsl(var(--text-secondary))' }}>{label}</span>
-                <span className="flex items-center gap-1.5" style={{ color: 'hsl(var(--ink))' }}>
-                  <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: 'hsl(var(--price-up))' }} /> {src}
+              <div key={label} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'hsl(var(--bg-hover) / 0.4)' }}>
+                <span className="text-xs font-medium" style={{ color: 'hsl(var(--text-secondary))' }}>{label}</span>
+                <span className="flex items-center gap-1.5 text-xs" style={{ color: 'hsl(var(--text-primary))' }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'hsl(var(--price-up))' }} />
+                  {src}
                 </span>
               </div>
             ))}
@@ -317,17 +319,30 @@ function CacheClearButton() {
   return (
     <>
       <button onClick={() => setShowConfirm(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5  text-red-700 font-black text-xs hover: transition-colors">
-        <Trash2 size={12} /> {cleared ? '已清除 ✓' : '清理缓存'}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-all hover:brightness-110"
+        style={{ color: cleared ? 'hsl(var(--price-up))' : 'hsl(var(--risk-danger))', background: cleared ? 'hsl(var(--price-up) / 0.15)' : 'hsl(var(--risk-danger) / 0.1)', border: '1px solid', borderColor: cleared ? 'hsl(var(--price-up) / 0.3)' : 'hsl(var(--risk-danger) / 0.2)' }}>
+        {cleared ? <><CheckCircle size={12} /> 已清除</> : <><Trash2 size={12} /> 清理缓存</>}
       </button>
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowConfirm(false)}>
-          <div className="glass-card-flat p-6 max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-black mb-2" style={{ color: 'hsl(var(--ink))' }}>确认清理缓存？</h3>
-            <p className="text-sm mb-4" style={{ color: 'hsl(var(--text-secondary))' }}>将删除所有本地缓存的行情数据，下次加载时重新获取。</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowConfirm(false)} className="px-4 py-1.5 border-2 text-sm font-bold" style={{ borderColor: 'hsl(var(--border-strong))', color: 'hsl(var(--ink))' }}>取消</button>
-              <button onClick={handleClear} className="px-4 py-1.5  bg-red-700 text-white text-sm font-bold">确认清理</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirm(false)}>
+          <div className="glass-card p-6 max-w-sm mx-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'hsl(var(--risk-danger) / 0.15)' }}>
+                <Trash2 size={18} style={{ color: 'hsl(var(--risk-danger))' }} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold" style={{ color: 'hsl(var(--text-primary))' }}>确认清理缓存</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'hsl(var(--text-secondary))' }}>此操作不可撤销</p>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'hsl(var(--text-secondary))' }}>
+              将删除所有本地缓存的行情数据，下次加载时重新获取。自选股和设置不受影响。
+            </p>
+            <div className="flex gap-3 justify-end pt-1">
+              <button onClick={() => setShowConfirm(false)} className="btn-secondary text-xs">取消</button>
+              <button onClick={handleClear} className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold rounded-lg transition-all hover:brightness-110" style={{ background: 'hsl(var(--risk-danger))', color: '#fff' }}>
+                <Trash2 size={12} /> 确认清理
+              </button>
             </div>
           </div>
         </div>

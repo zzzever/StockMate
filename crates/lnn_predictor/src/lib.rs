@@ -53,7 +53,7 @@ pub fn predict(
     let ma5 = sma(&closes, 5);
     let ma10 = sma(&closes, 10);
     let ma20 = sma(&closes, 20);
-    let ma60 = sma(&closes, 60.min(closes.len()));
+    let _ma60 = sma(&closes, 60.min(closes.len()));
 
     let trend_strength = if ma10 > 0.0 {
         ((ma5 - ma20) / ma20) * 100.0

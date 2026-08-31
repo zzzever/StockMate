@@ -504,17 +504,20 @@ export default function AiPredictPage() {
                   <div className="glass-card-flat p-2">
                     <div className="text-data-xs font-bold mb-1" style={{ color: 'var(--text-secondary)' }}>特征重要性</div>
                     <div className="grid grid-cols-4 gap-2">
-                      {Object.entries(kronosForecast.features || {}).map(([name, weight]) => (
-                        <div key={name} className="text-center">
-                          <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{name}</div>
-                          <div className="h-1.5 mt-1 rounded-full" style={{ background: 'var(--bg-input)' }}>
-                            <div className="h-full rounded-full" style={{
-                              width: `${(weight * 100).toFixed(0)}%`,
-                              background: weight > 0.3 ? 'hsl(var(--swiss-accent))' : 'var(--text-tertiary)'
-                            }} />
+                      {Object.entries(kronosForecast.features || {}).map(([name, weight]) => {
+                        const featureHints: Record<string, string> = { 'momentum': '价格动量', 'volume': '成交量', 'volatility': '波动率', 'ma_trend': '均线趋势' };
+                        return (
+                          <div key={name} className="text-center" title={`${featureHints[name] || name}: ${(weight * 100).toFixed(0)}%`}>
+                            <div className="text-data-xs" style={{ color: 'var(--text-tertiary)' }}>{name}</div>
+                            <div className="h-1.5 mt-1 rounded-full" style={{ background: 'var(--bg-input)' }}>
+                              <div className="h-full rounded-full" style={{
+                                width: `${(weight * 100).toFixed(0)}%`,
+                                background: weight > 0.3 ? 'hsl(var(--swiss-accent))' : 'var(--text-tertiary)'
+                              }} />
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

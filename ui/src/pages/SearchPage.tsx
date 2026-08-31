@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2, Star } from 'lucide-react';
+import { Search, TrendingUp, ChevronRight, X, BarChart3, Landmark, Clock, Trash2, Star, RefreshCw } from 'lucide-react';
 import { useSearchStocks, useWatchlistAdd } from '@/hooks/useTauriQuery';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Stock } from '@/types';
@@ -67,6 +67,7 @@ export default function SearchPage() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [showResults, setShowResults] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const addWatchlistMutation = useWatchlistAdd();
 
   // Debounce input
@@ -76,6 +77,11 @@ export default function SearchPage() {
   }, [query]);
 
   const { data: results, isLoading, error } = useSearchStocks(debouncedQuery);
+
+  // Reset selected index when results change
+  useEffect(() => {
+    setSelectedIndex(-1);
+  }, [results]);
 
   // Auto-focus on mount — mount-only side effect, intentionally runs once.
   useEffect(() => {
@@ -114,11 +120,23 @@ export default function SearchPage() {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && results && results.length > 0) {
-        handleSelect(results[0]);
+      if (!results || results.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedIndex >= 0 && selectedIndex < results.length) {
+          handleSelect(results[selectedIndex]);
+        } else if (results.length > 0) {
+          handleSelect(results[0]);
+        }
       }
     },
-    [results, handleSelect],
+    [results, selectedIndex, handleSelect],
   );
 
   const handleAddToWatchlist = useCallback(
@@ -143,14 +161,14 @@ export default function SearchPage() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center h-full pt-16 px-4">
+    <div className="flex flex-col items-center h-full pt-10 px-4">
       {/* Title */}
-      <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gradient">
+      <div className="mb-6 text-center">
+        <h1 className="text-3xl font-bold text-gradient">
           股票检索
         </h1>
-        <p className="text-sm mt-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
-          台湾加权 · 上证综指 · 日经平均
+        <p className="text-xs mt-1.5" style={{ color: 'hsl(var(--text-tertiary))' }}>
+          输入代码或名称快速查找
         </p>
       </div>
 
@@ -219,16 +237,23 @@ export default function SearchPage() {
               className="space-y-1"
             >
               <p className="text-xs font-medium px-2 mb-2" style={{ color: 'hsl(var(--text-tertiary))' }}>
-                搜索结果 {results.length} 条
+                找到 {results.length} 个结果
               </p>
-              {results.map((stock) => {
+              {results.map((stock, idx) => {
                 const badge = getTypeBadge(stock.stock_type);
                 const BadgeIcon = badge.icon;
+                const isSelected = idx === selectedIndex;
                 return (
                   <button
+                    key={stock.id}
                     onClick={() => handleSelect(stock)}
-                    className="hover-surface w-full flex items-center gap-4 p-3 text-left group"
-                    style={{ borderRadius: 'var(--radius-lg)' }}
+                    className="stagger-child hover-surface w-full flex items-center gap-4 p-3 text-left group transition-colors"
+                    style={{
+                      borderRadius: 'var(--radius-lg)',
+                      background: isSelected ? 'hsl(var(--swiss-accent-ghost))' : undefined,
+                      outline: isSelected ? '1px solid hsl(var(--swiss-accent) / 0.3)' : undefined,
+                      animationDelay: `${Math.min(idx * 40, 300)}ms`,
+                    }}
                   >
                     {/* Type icon */}
                     <div
@@ -271,12 +296,17 @@ export default function SearchPage() {
 
                     <button
                       onClick={(e) => handleAddToWatchlist(e, stock)}
-                      className="hover-surface flex h-8 w-8 shrink-0 items-center justify-center"
+                      disabled={addWatchlistMutation.isPending}
+                      className="hover-surface flex h-8 w-8 shrink-0 items-center justify-center transition-opacity disabled:opacity-40"
                       style={{ color: 'hsl(var(--text-tertiary))', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}
                       title="加入自选"
                       aria-label={`加入自选 ${stock.name}`}
                     >
-                      <Star size={14} />
+                      {addWatchlistMutation.isPending ? (
+                        <RefreshCw size={14} className="animate-spin" />
+                      ) : (
+                        <Star size={14} />
+                      )}
                     </button>
 
                     <ChevronRight size={18} className="shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} />
@@ -342,9 +372,11 @@ export default function SearchPage() {
             })}
             {history.length === 0 && (
               <div className="text-center py-8">
-                <p className="text-sm" style={{ color: 'hsl(var(--text-secondary))' }}>
-                  搜索股票代码或名称，如 茅台、600519、510050
-                </p>
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full mb-3" style={{ background: 'hsl(var(--bg-card))' }}>
+                  <Search size={20} style={{ color: 'hsl(var(--text-tertiary))' }} />
+                </div>
+                <p className="text-sm font-medium" style={{ color: 'hsl(var(--text-primary))' }}>搜索股票或ETF</p>
+                <p className="text-xs mt-1" style={{ color: 'hsl(var(--text-tertiary))' }}>输入代码、名称或拼音，如 600519、茅台</p>
               </div>
             )}
           </div>

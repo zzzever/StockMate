@@ -67,8 +67,10 @@ export default function MiniPage() {
             onClick={handleClose}
             aria-label="关闭小窗"
             title="关闭"
-            className="flex h-6 w-6 items-center justify-center rounded-md hover:bg-red-700 hover:text-white transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded-md transition-colors"
             style={{ color: 'hsl(var(--text-tertiary))' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'hsl(var(--risk-danger) / 0.2)'; e.currentTarget.style.color = 'hsl(var(--risk-danger))'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'hsl(var(--text-tertiary))'; }}
           >
             <X size={13} />
           </button>
@@ -86,12 +88,14 @@ export default function MiniPage() {
           <button onClick={() => refetch()} className="text-[11px] font-bold underline underline-offset-2 hover:opacity-70 transition-opacity" style={{ color: 'hsl(var(--text-secondary))' }}>重试</button>
         </div>
       ) : merged && merged.length === 0 ? (
-        <div className="flex flex-col items-center justify-center flex-1 gap-2 px-6 text-center">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full" style={{ background: 'hsl(var(--bg-card))' }}>
-            <Star size={18} className="opacity-40" style={{ color: 'hsl(var(--text-tertiary))' }} />
+        <div className="flex flex-col items-center justify-center flex-1 gap-3 px-6 text-center">
+          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'hsl(var(--swiss-accent-ghost))' }}>
+            <Star size={20} style={{ color: 'hsl(var(--swiss-accent))' }} />
           </div>
-          <p className="text-xs font-bold" style={{ color: 'hsl(var(--text-primary))' }}>暂无自选股</p>
-          <p className="text-[11px] leading-relaxed" style={{ color: 'hsl(var(--text-tertiary))' }}>请在主窗口添加自选股后查看</p>
+          <div>
+            <p className="text-xs font-bold" style={{ color: 'hsl(var(--text-primary))' }}>暂无自选股</p>
+            <p className="text-[11px] leading-relaxed mt-1" style={{ color: 'hsl(var(--text-tertiary))' }}>请在主窗口添加自选股后查看</p>
+          </div>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto mini-scroll">
@@ -106,13 +110,13 @@ export default function MiniPage() {
                 tabIndex={0}
                 onClick={() => handleRowClick(item.stock_id)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleRowClick(item.stock_id); } }}
-                className="flex items-center px-3 py-[5px] cursor-pointer border-b transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04] focus-visible:outline-none focus-visible:bg-black/[0.05] dark:focus-visible:bg-white/[0.06]"
+                className="flex items-center px-3 py-2 cursor-pointer border-b transition-all hover:bg-white/[0.06] focus-visible:outline-none focus-visible:bg-white/[0.08]"
                 style={{ borderColor: 'hsl(var(--border-subtle))' }}
               >
                 {/* Left: name + code */}
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-bold truncate leading-tight" style={{ color: 'hsl(var(--text-primary))' }}>{item.stock_name}</div>
-                  <div className="text-[10px] font-mono-nums leading-[14px] mt-px" style={{ color: 'hsl(var(--text-tertiary))' }}>{item.stock_code}</div>
+                  <div className="text-xs font-bold truncate leading-tight" style={{ color: 'hsl(var(--text-primary))' }} title={item.stock_name}>{item.stock_name}</div>
+                  <div className="text-[10px] font-mono-nums leading-[14px] mt-0.5" style={{ color: 'hsl(var(--text-tertiary))' }}>{item.stock_code}</div>
                 </div>
                 {/* Right: price + change pill */}
                 <div className="shrink-0 ml-3 flex flex-col items-end gap-1">

@@ -103,7 +103,7 @@ async fn spawn_worker(guard: &mut KronosWorker) -> Result<(), String> {
 
 /// 丢弃 worker 持有的进程与管道，并强杀残留子进程。
 async fn reset_worker(guard: &mut KronosWorker) {
-    let mut child = guard.child.take();
+    let child = guard.child.take();
     guard.stdin.take();
     guard.stdout = None;
     guard.stderr = None;

@@ -17,12 +17,17 @@ export default function Layout({ children }: LayoutProps) {
 
   useEffect(() => {
     const path = location.pathname.replace('/', '') || 'search';
-    const pageMap: Record<string, Page> = {
+    const     pageMap: Record<string, Page> = {
       search: 'search', sector: 'sector', stock: 'stockDetail',
       backtest: 'backtest', predict: 'predict', rules: 'rules',
       settings: 'settings', lnn: 'aiPredict', 'indicator-lab': 'indicatorLab', screener: 'screener',
       kronos: 'aiPredict', 'ai-predict': 'aiPredict',
-      watchlist: 'search', quote: 'quote',
+      watchlist: 'search', quote: 'quote', marketplace: 'marketplace',
+      community: 'community', leaderboard: 'leaderboard', 'strategy-group': 'strategyGroup', api: 'api',
+      'signal-alert': 'signalAlert', 'ai-screener': 'aiScreener', accounts: 'accounts',
+      'copy-trading': 'copyTrading', report: 'report',
+      'real-time': 'realTime', portfolio: 'portfolio', 'monte-carlo': 'monteCarlo', calendar: 'calendar', notifications: 'notifications',
+      'factor-analysis': 'factorAnalysis', 'risk-parity': 'riskParity', 'social-trading': 'socialTrading', creator: 'creator', 'plugin-system': 'pluginSystem',
     };
     if (pageMap[path]) setPage(pageMap[path]);
   }, [location, setPage]);

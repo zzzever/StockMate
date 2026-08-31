@@ -16,6 +16,16 @@ const wr: SubIndicator = {
   category: 'oscillator',
   complexity: 'basic',
   tags: ['reversal'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'WR = (HHV(HIGH,N) - CLOSE) / (HHV(HIGH,N) - LLV(LOW,N)) × 100',
+    references: [
+      'Williams, L. (1966). "I\'ve Been Making Money in Commodities"',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 10, min: 5, max: 50, step: 1 },
     { key: 'period2', label: '周期2', type: 'number', default: 6, min: 3, max: 30, step: 1 },

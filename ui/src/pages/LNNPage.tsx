@@ -148,6 +148,9 @@ export default function LNNPage() {
         <button onClick={() => navigate(-1)} className="btn-ghost p-1"><ArrowLeft size={18} /></button>
         <BrainCircuit size={18} className="text-[hsl(var(--swiss-accent))]" />
         <h1 className="text-heading-sm font-bold">LNN 股价预测</h1>
+        <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+          液态神经网络 · 短期趋势 · 支撑/阻力位
+        </p>
       </div>
 
       <div className="flex-1 flex gap-2 overflow-hidden">

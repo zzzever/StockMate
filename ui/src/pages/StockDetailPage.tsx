@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { createChart, type IChartApi, type ISeriesApi, type MouseEventParams, type Time, LineStyle } from 'lightweight-charts';
-import { Star, RefreshCw } from 'lucide-react';
+import { Star, RefreshCw, BarChart3 } from 'lucide-react';
 import { useStockList, useStockDetail, useStockHistory, useStockFinance, useRealtimeQuote, useStockFundFlow, useIntraday, useWatchlistCheck, useWatchlistAdd, useWatchlistRemove, useSupportResistance } from '@/hooks/useTauriQuery';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '@/store/useAppStore';
@@ -21,6 +21,7 @@ import { TdxEditor } from '@/components/TdxEditor';
 import { IndicatorPicker } from '@/components/IndicatorPicker';
 import { InlineParamsPanel } from '@/indicators/InlineParamsPanel';
 import { IndicatorHelpDialog } from '@/components/IndicatorHelpDialog';
+import { captureIndicatorScreenshot } from '@/indicators/screenshot';
 
 function safeNumber(v: unknown): number { return Number.isFinite(Number(v)) ? Number(v) : 0; }
 
@@ -175,6 +176,9 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
   const dataRef = useRef(data); dataRef.current = data;
   const prevLenRef = useRef(0);
   const ruleMarkersRef = useRef(ruleMarkers); ruleMarkersRef.current = ruleMarkers;
+  // Cached values for crosshair sync across all three charts
+  const crosshairValuesRef = useRef<{ time: string; vol: number; ind: number | null } | null>(null);
+
   // 最新指标值，用于副图右上角"当前指标值"标签
   const indicatorLatest = useMemo(() => {
     if (indicator === 'none' || indicator === 'tdx') return null;
@@ -224,6 +228,16 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
     setOverlays(positions);
   }, []);
 
+  // Throttled overlay update — prevents jitter from rapid crosshair events
+  const updateOverlaysThrottledRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const triggerOverlayUpdate = useCallback(() => {
+    if (updateOverlaysThrottledRef.current) return;
+    updateOverlaysThrottledRef.current = setTimeout(() => {
+      updateOverlaysThrottledRef.current = null;
+      updateOverlays();
+    }, 80);
+  }, [updateOverlays]);
+
   useEffect(() => { updateOverlays(); }, [ruleMarkers, data, updateOverlays]);
 
   useEffect(() => {
@@ -231,10 +245,9 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
     const mc = createChart(mainRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor, attributionLogo: false }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, timeVisible: true, fixLeftEdge: true, fixRightEdge: true, barSpacing: 6 }, autoSize: true });
     const vc = createChart(volRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, visible: false, fixLeftEdge: true, fixRightEdge: true }, handleScroll: false, handleScale: false, autoSize: true });
     const ic = createChart(indRef.current, { layout: { background: { color: 'transparent' }, textColor: T.textColor }, grid: { vertLines: { color: T.gridVertColor }, horzLines: { color: T.gridHorzColor } }, crosshair: { mode: 1, vertLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 }, horzLine: { visible: true, labelVisible: false, width: 1, color: T.crosshairColor, style: 2 } }, rightPriceScale: { borderColor: T.borderColor, autoScale: true, minimumWidth: 80 }, timeScale: { borderColor: T.borderColor, visible: false, fixLeftEdge: true, fixRightEdge: true }, handleScroll: false, handleScale: false, autoSize: true });
-    // 副图分区：动力线/参考线用右轴占上部，红绿柱用左轴占下部，避免 K 线放大时图线互相重叠
+    // 副图分区：统一使用右轴，通过 priceScaleId 分离不同指标系列
     ic.applyOptions({ leftPriceScale: { visible: false } });
-    try { ic.priceScale('right').applyOptions({ scaleMargins: { top: 0.02, bottom: 0.38 } }); } catch {}
-    try { ic.priceScale('left').applyOptions({ scaleMargins: { top: 0.4, bottom: 0.02 } }); } catch {}
+    try { ic.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 } }); } catch {}
 
     const candle = mc.addCandlestickSeries({ upColor: T.upColor, downColor: T.downColor, borderUpColor: T.borderUpColor, borderDownColor: T.borderDownColor, wickUpColor: T.wickUpColor, wickDownColor: T.wickDownColor, });
     const ma5 = mc.addLineSeries({ color: T.ma5Color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
@@ -303,7 +316,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
         console.warn(`[SimpleKLine] Failed to sync ${label} chart time range:`, e);
       }
     };
-    mc.timeScale().subscribeVisibleTimeRangeChange(() => { if (volumeLoadedRef.current) syncSub(vc, 'volume'); if (indicatorActiveRef.current) syncSub(ic, 'indicator'); updateOverlays(); });
+    mc.timeScale().subscribeVisibleTimeRangeChange(() => { if (volumeLoadedRef.current) syncSub(vc, 'volume'); if (indicatorActiveRef.current) syncSub(ic, 'indicator'); triggerOverlayUpdate(); });
     // 缩放状态同步：记录当前可见根数（指示用），并把 barSpacing（全局缩放级别）节流写回 store 以便记忆
     mc.timeScale().subscribeVisibleLogicalRangeChange(() => {
       try { const lr = mc.timeScale().getVisibleLogicalRange(); if (lr) setVisibleBars(Math.max(1, Math.round(lr.to - lr.from))); } catch {}
@@ -356,12 +369,6 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
     indRef.current.addEventListener('pointerup', forwardPointerToMain);
 
     // --- Crosshair sync: bidirectional ---
-    // setCrosshairPosition throws "Value is null" when the target series has no data
-    // (e.g. macdHist while indicator === 'none') or the time isn't in that pane. It's a
-    // purely cosmetic sync, so swallow those cases instead of letting them bubble up.
-    const safeSetCrosshair = (chart: IChartApi, series: ISeriesApi<any>, time: Time) => {
-      try { chart.setCrosshairPosition(0, time, series); } catch (e) { /* target series has no data at this time — expected when indicator is 'none' */ }
-    };
     mc.subscribeCrosshairMove((param: MouseEventParams) => {
       if (!param.time || param.point === undefined) {
         onCrosshairMoveRef.current?.(null);
@@ -372,15 +379,22 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
       const items = dataRef.current; const timeStr = String(param.time);
       const item = items.find((i: any) => String(i.date || i.time) === timeStr);
       if (item) { onCrosshairMoveRef.current?.({ time: timeStr, open: item.open, high: item.high, low: item.low, close: item.close, volume: item.volume }); }
-      // Forward crosshair position to sub-charts. The indicator pane is empty when
-      // indicator === 'none' — forwarding then would throw "Value is null", so guard it.
-      safeSetCrosshair(vc, vol, param.time as Time);
-      if (indicatorActiveRef.current && indSeriesRef.current.length > 0) {
-        safeSetCrosshair(ic, indSeriesRef.current[0], param.time as Time);
-      }
+      // Sync vertical crosshair to volume chart using data volume value
+      try {
+        const volVal = item ? Number(item.volume) || 0 : 0;
+        vc.setCrosshairPosition(volVal, param.time as Time, vol);
+      } catch {}
+      // Sync vertical crosshair to indicator chart using cached indicator value
+      try {
+        if (indSeriesRef.current.length > 0) {
+          const cv = crosshairValuesRef.current;
+          const indVal = cv?.ind ?? 0;
+          ic.setCrosshairPosition(indVal, param.time as Time, indSeriesRef.current[0]);
+        }
+      } catch {}
     });
-    vc.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; safeSetCrosshair(mc, candle, param.time as Time); });
-    ic.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time) return; safeSetCrosshair(mc, candle, param.time as Time); });
+    vc.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time || !param.sourceEvent) return; try { const cd = param.seriesData.get(candle); const cp = cd && 'close' in cd ? (cd as any).close : 0; mc.setCrosshairPosition(cp, param.time as Time, candle); } catch {} });
+    ic.subscribeCrosshairMove((param: MouseEventParams) => { if (!param.time || !param.sourceEvent) return; try { const cd = param.seriesData.get(candle); const cp = cd && 'close' in cd ? (cd as any).close : 0; mc.setCrosshairPosition(cp, param.time as Time, candle); } catch {} });
 
     charts.current = { mc, vc, candle, vol, ind: ic, bbUMain, bbMMain, bbLMain, ma5, ma10, ma20, ma60, drawLines: [] };
     [mainRef, volRef, indRef].forEach(r => { try { const a = r.current?.querySelector('a'); if (a) (a as HTMLElement).style.display = 'none'; } catch (e) { console.warn('[SimpleKLine] hide attribution error:', e); } });
@@ -443,6 +457,12 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
   useEffect(() => {
     const c = charts.current; if (!c || !Array.isArray(data) || data.length === 0) return;
     try {
+      // ── CRITICAL: Clean up old indicator series FIRST, before any new data/setData calls ──
+      // This prevents overlap when switching indicators — old series must be removed
+      // before the chart receives new data that would trigger a render with stale series.
+      indSeriesRef.current.forEach(s => { try { c.ind.removeSeries(s); } catch {} });
+      indSeriesRef.current = [];
+
       const candleData = data.map((d: any) => ({ time: d.date || d.time, open: Number(d.open), high: Number(d.high), low: Number(d.low), close: Number(d.close) }));
       const volData = data.map((d: any) => ({ time: d.date || d.time, value: Number(d.volume), color: Number(d.close) >= Number(d.open) ? T.volumeUpColor : T.volumeDownColor }));
       c.candle.setData(candleData); c.vol.setData(volData); volumeLoadedRef.current = true;
@@ -453,9 +473,6 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
       else { c.bbUMain.setData([]); c.bbMMain.setData([]); c.bbLMain.setData([]); }
 
       // ── Indicator sub-chart: dynamic series via registry (multi-indicator overlay) ──
-      // Remove old dynamic series
-      indSeriesRef.current.forEach(s => { try { c.ind.removeSeries(s); } catch {} });
-      indSeriesRef.current = [];
 
       const lineStyleMap = { solid: LineStyle.Solid, dashed: LineStyle.Dashed, dotted: LineStyle.Dotted };
 
@@ -469,8 +486,11 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
         volume: Number(d.volume) || 0,
       }));
 
-      // Overlay mode: render all activeIndicators simultaneously
-      for (const indId of activeIndicators) {
+      // Single indicator: use full chart height with small padding
+      // (multi-indicator overlay removed — single-select only)
+      const INDICATOR_SCALE_IDS = ['right'];
+      for (let aiIdx = 0; aiIdx < activeIndicators.length; aiIdx++) {
+        const indId = activeIndicators[aiIdx];
         if (indId === 'none' || indId === 'tdx') continue;
         const def = getAllIndicators().find(i => i.id === indId);
         if (!def) continue;
@@ -478,6 +498,20 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
         const params = { ...getDefaultParams(indId), ...savedParams };
         const result = def.compute(bars, params);
         if (result?.series) {
+          const scaleId = INDICATOR_SCALE_IDS[aiIdx % INDICATOR_SCALE_IDS.length];
+          // Cache last indicator value for crosshair sync across charts
+          if (result.series.length > 0) {
+            const data = result.series[0].data;
+            const lastVal = data[data.length - 1] ?? 0;
+            const lastTime = bars[bars.length - 1]?.time;
+            if (lastTime) crosshairValuesRef.current = { time: lastTime, vol: Number(bars[bars.length - 1]?.volume) || 0, ind: lastVal };
+          }
+          // Single indicator uses full chart height (top/bottom 5% padding)
+          try {
+            c.ind.priceScale(scaleId).applyOptions({
+              scaleMargins: { top: 0.05, bottom: 0.05 },
+            });
+          } catch {}
           for (const s of result.series) {
             const opts: any = {
               color: s.color,
@@ -485,6 +519,7 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
               priceLineVisible: false,
               lastValueVisible: false,
               crosshairMarkerVisible: false,
+              priceScaleId: scaleId,
             };
             if (s.lineStyle) opts.lineStyle = lineStyleMap[s.lineStyle] ?? LineStyle.Solid;
             if (s.priceScaleId) opts.priceScaleId = s.priceScaleId;
@@ -519,12 +554,12 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
           const sticks = tdxRes.outputs.filter(o => o.type === 'stick').slice(0, 1);
           const tdxColors = ['#38bdf8', '#f59e0b', '#a78bfa', '#34d399'];
           for (let i = 0; i < lines.length; i++) {
-            const series = c.ind.addLineSeries({ color: lines[i].color || tdxColors[i], lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
+            const series = c.ind.addLineSeries({ color: lines[i].color || tdxColors[i], lineWidth: 1, priceLineVisible: false, lastValueVisible: false, priceScaleId: i === 0 ? 'right' : `tdx_${i}` });
             series.setData(ml(lines[i].series));
             indSeriesRef.current.push(series);
           }
           if (sticks[0]) {
-            const series = c.ind.addHistogramSeries({ priceScaleId: 'left', priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'custom', formatter: () => '' } });
+            const series = c.ind.addHistogramSeries({ priceScaleId: 'tdx_stick', priceLineVisible: false, lastValueVisible: false, priceFormat: { type: 'custom', formatter: () => '' } });
             series.setData(sticks[0].series.map((v, i) => ({ time: (data[i] as any).date || (data[i] as any).time, value: v ?? undefined, color: sticks[0].color })));
             indSeriesRef.current.push(series);
           }
@@ -574,10 +609,10 @@ function SimpleKLine({ data, onCrosshairMove, ruleMarkers, indicator, activeIndi
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden kline-fullscreen-target" style={{ position: 'relative', background: 'var(--bg-root)' }}>
       <div ref={mainRef} className="min-h-0" style={{ flex: '74 0 0' }} />
-      <div className="absolute top-1 right-1 z-10 flex items-center gap-1 text-[10px] font-bold select-none">
-        <button onClick={() => zoomBy(1 / 1.5)} aria-label="缩小" title="缩小" className="h-5 px-1.5 flex items-center justify-center rounded hover:opacity-70 cursor-pointer" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>−</button>
-        <span className="px-1.5 py-0.5 rounded font-mono-nums" style={{ color: 'hsl(var(--text-tertiary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }} title="当前可见K线数">{visibleBars}根</span>
-        <button onClick={() => zoomBy(1.5)} aria-label="放大" title="放大" className="h-5 px-1.5 flex items-center justify-center rounded hover:opacity-70 cursor-pointer" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))' }}>+</button>
+      <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1 text-[11px] font-bold select-none">
+        <button onClick={() => zoomBy(1 / 1.5)} aria-label="缩小" title="缩小" className="h-6 w-6 flex items-center justify-center rounded hover:opacity-80 cursor-pointer transition-opacity" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card) / 0.9)', border: '1px solid hsl(var(--border-subtle))', backdropFilter: 'blur(4px)' }}>−</button>
+        <span className="px-1.5 py-0.5 rounded font-mono-nums text-[10px]" style={{ color: 'hsl(var(--text-tertiary))', background: 'hsl(var(--bg-card) / 0.9)', border: '1px solid hsl(var(--border-subtle))', backdropFilter: 'blur(4px)' }} title="当前可见K线数">{visibleBars}根</span>
+        <button onClick={() => zoomBy(1.5)} aria-label="放大" title="放大" className="h-6 w-6 flex items-center justify-center rounded hover:opacity-80 cursor-pointer transition-opacity" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card) / 0.9)', border: '1px solid hsl(var(--border-subtle))', backdropFilter: 'blur(4px)' }}>+</button>
       </div>
       <div ref={overlayRef} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 10 }}>
         {overlays.map((o, i) => (<span key={i} className="absolute text-[9px] font-bold leading-none" style={{ left: o.x - 6, top: o.y, color: o.color, textShadow: '0 0 2px hsl(var(--bg-card)), 0 0 2px hsl(var(--bg-card))' }}>{o.label}</span>))}
@@ -684,7 +719,7 @@ function CrosshairTooltip({ data, allData }: { data: { time: string; open: numbe
   const ocUp = ocChg >= 0;
   // 振幅 = (最高-最低)/昨收*100
   const amplitude = prev > 0 ? ((data.high - data.low) / prev * 100) : 0;
-  return (<div className="flex items-center gap-3 text-[11px] font-mono-nums flex-wrap" style={{ color: 'hsl(var(--text-secondary))' }}>
+  return (<div className="flex items-center gap-3 text-[11px] font-mono-nums whitespace-nowrap px-1.5 py-0.5 rounded" style={{ color: 'hsl(var(--text-secondary))', background: 'hsl(var(--bg-card) / 0.85)', backdropFilter: 'blur(4px)' }}>
     <span>日期 <b style={{ color: 'hsl(var(--text-primary))' }}>{data.time}</b></span>
     {['O','H','L','C'].map((l, i) => <span key={l}>{l} <b style={{ color: 'hsl(var(--text-primary))' }}>{i === 0 ? fmtPrice(data.open) : i === 1 ? fmtPrice(data.high) : i === 2 ? fmtPrice(data.low) : fmtPrice(data.close)}</b></span>)}
     <span>振幅 <b style={{ color: 'hsl(var(--text-primary))' }}>{amplitude.toFixed(2)}%</b></span>
@@ -755,14 +790,25 @@ export default function StockDetailPage() {
   const [recentIndicators, setRecentIndicators] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('stockmate_recent_indicators') || '[]'); } catch { return []; }
   });
+
+  const chartAreaRef = useRef<HTMLDivElement>(null);
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!chartAreaRef.current || activeIndicators.length === 0) return;
+    if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+    captureTimerRef.current = setTimeout(() => {
+      if (chartAreaRef.current) {
+        captureIndicatorScreenshot(chartAreaRef.current, activeIndicators.join('+'));
+      }
+    }, 1200);
+    return () => { if (captureTimerRef.current) clearTimeout(captureTimerRef.current); };
+  }, [activeIndicators, indicatorParams]);
+
   const handleIndicatorChange = useCallback((id: string) => {
     setIndicator(id);
-    // Also toggle in activeIndicators for overlay mode
-    setActiveIndicators(prev => {
-      if (id === 'none') return [];
-      if (prev.includes(id)) return prev.filter(x => x !== id);
-      return [...prev, id];
-    });
+    // Replace: only show the selected indicator (single-select, no overlap)
+    setActiveIndicators(id === 'none' ? [] : [id]);
     // Load saved params for the new indicator
     if (id !== 'none' && id !== 'tdx') {
       try {
@@ -885,7 +931,9 @@ export default function StockDetailPage() {
         </div>
       </div>
       <IndexBar />
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
+      <div ref={chartAreaRef} className="flex-1 min-h-0 flex flex-col overflow-hidden relative" style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
+        {/* Crosshair data — floats at top-left of K-line chart area */}
+        {crosshair && <div className="absolute top-0.5 left-1 z-20 pointer-events-none"><CrosshairTooltip data={crosshair} allData={chartData} /></div>}
         {/* Inline params panel for indicator */}
         {indicator !== 'none' && indicator !== 'tdx' && (() => {
           const def = getAllIndicators().find(i => i.id === indicator);
@@ -921,7 +969,7 @@ export default function StockDetailPage() {
             <button onClick={() => { (window as any).__klineFitContent?.(); }}
               className="px-1.5 py-0.5 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="恢复默认比例">↺</button>
           </div>
-          <div className="flex items-center gap-3 shrink-0"><CrosshairTooltip data={crosshair} allData={chartData} /><button onClick={() => { if (period === 'minute') { refetchIntraday(); } else { refetchHistory(); } queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime', effectiveCode] }); }} className="text-[11px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={(period === 'minute' ? intradayFetching : historyFetching) ? 'animate-spin' : ''} /></button><button onClick={toggleFullscreen} className="px-1.5 py-0.5 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0" style={{ color: document.fullscreenElement ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))' }} title="全屏">⛶</button></div>
+          <div className="flex items-center gap-2 shrink-0"><button onClick={() => { if (period === 'minute') { refetchIntraday(); } else { refetchHistory(); } queryClient.invalidateQueries({ queryKey: ['stocks', 'realtime', effectiveCode] }); }} className="text-[11px] font-bold shrink-0" style={{ color: 'hsl(var(--text-tertiary))' }} title="刷新"><RefreshCw size={12} className={(period === 'minute' ? intradayFetching : historyFetching) ? 'animate-spin' : ''} /></button><button onClick={toggleFullscreen} className="px-1.5 py-0.5 text-[11px] font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded shrink-0" style={{ color: document.fullscreenElement ? 'hsl(var(--price-up))' : 'hsl(var(--text-tertiary))' }} title="全屏">⛶</button></div>
         </div>
         {/* MA values bar */}
         {drawMode && (
@@ -940,16 +988,16 @@ export default function StockDetailPage() {
         )}
         {period === 'minute'
           ? (intradayLoading
-              ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
+              ? (<div className="flex-1 flex flex-col items-center justify-center gap-2"><RefreshCw className="animate-spin" size={20} style={{ color: 'hsl(var(--text-tertiary))' }} /><span className="text-[11px]" style={{ color: 'hsl(var(--text-tertiary))' }}>加载分时数据...</span></div>)
               : intradayError && !(intradayData && intradayData.length)
                 ? (<div className="flex-1 flex items-center justify-center"><InlineError message="分时数据加载失败" onRetry={() => refetchIntraday()} /></div>)
                 : (<IntradayChart data={(intradayData || []) as Quote[]} prevClose={prevClose} loading={intradayLoading} chartStyle={chartStyle} className="flex-1" />))
           : historyLoading && !chartData.length
-            ? (<div className="flex-1 flex items-center justify-center"><RefreshCw className="animate-spin" size={18} style={{ color: 'hsl(var(--text-tertiary))' }} /></div>)
+            ? (<div className="flex-1 flex flex-col items-center justify-center gap-2"><RefreshCw className="animate-spin" size={20} style={{ color: 'hsl(var(--text-tertiary))' }} /><span className="text-[11px]" style={{ color: 'hsl(var(--text-tertiary))' }}>加载K线数据...</span></div>)
             : historyError && !chartData.length
               ? (<div className="flex-1 flex items-center justify-center"><InlineError message="K线数据加载失败" onRetry={() => refetchHistory()} /></div>)
               : !historyLoading && !chartData.length
-                ? (<div className="flex-1 flex items-center justify-center"><span className="text-data-sm" style={{ color: 'var(--text-tertiary)' }}>暂无日线数据</span></div>)
+                ? (<div className="flex-1 flex flex-col items-center justify-center gap-2" style={{ color: 'var(--text-tertiary)' }}><BarChart3 size={32} className="opacity-30" /><span className="text-data-sm">暂无日线数据</span><span className="text-[10px]">请选择其他周期或检查股票代码</span></div>)
                 : (<SimpleKLine data={chartData} onCrosshairMove={setCrosshair} ruleMarkers={ruleMarkerOverlays} indicator={indicator} activeIndicators={activeIndicators} showBOLL={showBOLL} drawMode={drawMode} drawColor={drawColor} indicatorParams={indicatorParams} />)}
       </div>
 
@@ -972,7 +1020,10 @@ export default function StockDetailPage() {
           </div>
         ) : (
           <div className="flex items-center justify-center py-0.5 border-t" style={{ borderColor: 'hsl(var(--border-subtle))' }}>
-            <button onClick={() => setShowMetrics(true)} className="px-1.5 py-0.5 text-[10px] font-bold hover:opacity-60" style={{ color: 'hsl(var(--text-tertiary))' }}>💰 指标财务 ▲ 展开</button>
+            <button onClick={() => setShowMetrics(true)} className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold hover:opacity-70 transition-opacity" style={{ color: 'hsl(var(--text-tertiary))' }}>
+              <span>指标财务</span>
+              <span>▲</span>
+            </button>
           </div>
         )}
       </div>

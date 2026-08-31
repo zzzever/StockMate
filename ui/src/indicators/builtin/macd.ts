@@ -16,6 +16,16 @@ const macd: SubIndicator = {
   category: 'trend',
   complexity: 'basic',
   tags: ['momentum', 'trend-following'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'DIF = EMA(CLOSE, FAST) - EMA(CLOSE, SLOW)\nDEA = EMA(DIF, SIGNAL)\nMACD = (DIF - DEA) × 2',
+    references: [
+      'Appel, G. (1979). "Technical Analysis: Power Tools for Active Investors"',
+    ],
+  },
   params: [
     { key: 'fast', label: '快线', type: 'number', default: 12, min: 2, max: 50, step: 1 },
     { key: 'slow', label: '慢线', type: 'number', default: 26, min: 5, max: 100, step: 1 },

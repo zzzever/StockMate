@@ -8,12 +8,26 @@ function safeToFixed(v: unknown, digits: number): string {
  const n = Number(v);
  return Number.isFinite(n) ? n.toFixed(digits) : '--';
 }
+
+function scoreIndicator(res: BacktestResult): number {
+  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+  const sharpeScore = clamp((res.sharpe_ratio / 3) * 100, 0, 100);
+  const pf = res.profit_factor ?? 0;
+  const pfScore = clamp(pf <= 1 ? pf * 40 : 40 + (pf - 1) * 30, 0, 100);
+  const wrScore = clamp(res.win_rate * 1.4, 0, 100);
+  const exp = res.expectancy ?? 0;
+  const expScore = clamp(exp < 0 ? 0 : 30 + exp * 5, 0, 100);
+  const ddScore = clamp(100 + res.max_drawdown * 2, 0, 100);
+  const tcScore = clamp(res.trade_count * 2, 0, 100);
+  return Math.round(sharpeScore * 0.25 + pfScore * 0.20 + wrScore * 0.15 + expScore * 0.15 + ddScore * 0.15 + tcScore * 0.10);
+}
 import {
  ArrowLeft, TrendingUp, Activity, Gauge, CircleDashed, GitBranch, Code,
  Play, BarChart3,
  Hash, Zap, RotateCcw, RefreshCw, X
 } from 'lucide-react';
 import { useStockList, useStockHistory } from '@/hooks/useTauriQuery';
+import { getAllIndicators, computeIndicator, getDefaultParams } from '@/indicators';
 import type { Quote, TradingRule } from '@/types';
 import { RULE_TEMPLATES } from '@/utils/ruleEngine';
 
@@ -105,6 +119,8 @@ const STRATEGIES: StrategyDef[] = [
  { id: 'rsi', name: 'RSI策略', description: 'RSI < 30 买入，> 70 卖出', code: 'rsi(14,i) < 30', icon: Gauge },
  { id: 'bollinger', name: '布林带', description: '触及下轨买入，触及上轨卖出', code: 'close(i) <= boll_lower(20,i)', icon: CircleDashed },
  { id: 'dual_ma', name: '双均线', description: 'MA10/MA30 趋势跟踪', code: 'cross(sma(10,i), sma(30,i))', icon: GitBranch },
+ { id: 'indicator', name: '指标回测', description: '选择任意指标回测其信号', code: '自定义指标', icon: Zap },
+ { id: 'indicator_compare', name: '指标对比', description: '多指标同屏回测对比', code: '多指标对比', icon: BarChart3 },
  { id: 'sslang_rule', name: 'SSLang 规则', description: '使用交易规则页编写的自定义规则', code: '自定义 SSLang', icon: Code },
 ];
 
@@ -817,6 +833,9 @@ const backtestDays = useMemo(() => {
  const [params, setParams] = useState<StrategyParams>(DEFAULT_PARAMS.ma_cross);
  const [running, setRunning] = useState(false);
  const [result, setResult] = useState<BacktestResult | null>(null);
+  const [indicatorId, setIndicatorId] = useState<string>('macd');
+  const [compareIndicators, setCompareIndicators] = useState<string[]>(['macd', 'rsi', 'ma5']);
+  const [compareResults, setCompareResults] = useState<Record<string, BacktestResult> | null>(null);
 const [availableRules, setAvailableRules] = useState<TradingRule[]>([]);
 const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
 const [selectedSellRuleId, setSelectedSellRuleId] = useState<string | null>(null);
@@ -943,6 +962,101 @@ useEffect(() => {
             setRunning(false);
             setError(e?.message || '回测执行失败');
           });
+          return;
+        }
+        if (selectedStrategy === 'indicator_compare') {
+          if (compareIndicators.length === 0) { setError('请至少选择一个指标'); setRunning(false); return; }
+          const bars = filteredQuotes.map((q: any) => ({
+            time: String(q.date || q.time), open: Number(q.open) || 0,
+            high: Number(q.high) || 0, low: Number(q.low) || 0,
+            close: Number(q.close) || 0, volume: Number(q.volume) || 0,
+          }));
+          const runOne = async (indId: string): Promise<[string, BacktestResult | null]> => {
+            try {
+              const savedParams = (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[indId] || {}; } catch { return {}; } })();
+              const defParams = getDefaultParams(indId);
+              const indParams = { ...defParams, ...savedParams };
+              const indResult = computeIndicator(indId, bars, indParams);
+              const rawSignals = (indResult.markers || []).map(m => m.shape === 'arrowUp' ? 'buy' : 'sell');
+              const signals: number[] = rawSignals.map((s: any) => s === 'buy' ? 1 : s === 'sell' ? -1 : 0);
+              const r: any = await invoke('indicator_backtest', { stockId, signals, days: backtestDays, period: 'day' });
+              const ts = (r.trades || []).flatMap((t: any, i: number) => [
+                { index: i * 2, date: t.entry_date || t.exit_date, type: 'buy' as const, price: Number(t.entry_price || 0), shares: 100, profit: 0 },
+                { index: i * 2 + 1, date: t.exit_date || t.entry_date, type: 'sell' as const, price: Number(t.exit_price || t.entry_price || 0), shares: 100, profit: t.pnl_pct ?? (t.pnl != null ? Number(t.pnl) * 100 : null) },
+              ]);
+              const sellT = ts.filter((t: any) => t.type === 'sell');
+              const wins = sellT.filter((t: any) => t.profit > 0);
+              const losses = sellT.filter((t: any) => t.profit <= 0);
+              const totProfit = wins.reduce((s: number, t: any) => s + t.profit, 0);
+              const totLoss = Math.abs(losses.reduce((s: number, t: any) => s + t.profit, 0));
+              let maxWS = 0, maxLS = 0, cW = 0, cL = 0;
+              for (const t of sellT) { if (t.profit > 0) { cW++; cL = 0; maxWS = Math.max(maxWS, cW); } else if (t.profit <= 0) { cL++; cW = 0; maxLS = Math.max(maxLS, cL); } }
+              return [indId, {
+                total_return: r.total_return || 0, annual_return: r.annual_return ?? 0,
+                max_drawdown: r.max_drawdown || 0, sharpe_ratio: r.sharpe_ratio || 0,
+                win_rate: (r.win_rate || 0) * 100, trade_count: r.trades?.length || 0,
+                profit_trades: r.trades?.filter((t: any) => t.pnl > 0).length || 0,
+                loss_trades: r.trades?.filter((t: any) => t.pnl <= 0).length || 0,
+                trades: ts, monthly_returns: r.monthly_returns || [],
+                equity_curve: (r.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: Number(val) })),
+                signal_count: signals.filter((s: any) => s !== 0).length,
+                max_consecutive_wins: maxWS || null, max_consecutive_losses: maxLS || null,
+                profit_factor: totLoss > 0 ? totProfit / totLoss : totProfit > 0 ? Infinity : 0,
+                payoff_ratio: sellT.length > 0 && losses.length > 0 && wins.length > 0 ? (totProfit / wins.length) / (totLoss / losses.length) : 0,
+                expectancy: sellT.length > 0 ? (totProfit - totLoss) / sellT.length : null,
+              }];
+            } catch (e: any) { return [indId, null]; }
+          };
+          Promise.all(compareIndicators.map((id: string) => runOne(id)))
+            .then(pairs => {
+              const map: Record<string, BacktestResult> = {};
+              for (const [id, res] of pairs) { if (res) map[id] = res; }
+              setCompareResults(map); setRunning(false);
+            }).catch((e: any) => { setRunning(false); setError(e?.message || '指标对比执行失败'); });
+          return;
+        }
+        if (selectedStrategy === 'indicator') {
+          if (!indicatorId) { setError('请选择一个指标'); setRunning(false); return; }
+          const bars = filteredQuotes.map((q: any) => ({
+            time: String(q.date || q.time), open: Number(q.open) || 0,
+            high: Number(q.high) || 0, low: Number(q.low) || 0,
+            close: Number(q.close) || 0, volume: Number(q.volume) || 0,
+          }));
+          const savedParams = (() => { try { return JSON.parse(localStorage.getItem('stockmate_indicator_params') || '{}')[indicatorId] || {}; } catch { return {}; } })();
+          const defParams = getDefaultParams(indicatorId);
+          const indParams = { ...defParams, ...savedParams };
+          const indResult = computeIndicator(indicatorId, bars, indParams);
+          const rawSignals = (indResult.markers || []).map(m => m.shape === 'arrowUp' ? 'buy' : 'sell');
+          const signals: number[] = rawSignals.map((s: any) => s === 'buy' ? 1 : s === 'sell' ? -1 : 0);
+          invoke('indicator_backtest', { stockId, signals, days: backtestDays, period: 'day' }).then((r: any) => {
+            const eqMap = new Map<string, number>((r.equity_curve || []).map(([date, val]: [string, number]) => [date, Number(val)]));
+            const ts = (r.trades || []).flatMap((t: any, i: number) => [
+              { index: i * 2, date: t.entry_date || t.exit_date, type: 'buy' as const, price: Number(t.entry_price || 0), shares: 100, profit: 0, capital: eqMap.get(t.entry_date || t.exit_date) },
+              { index: i * 2 + 1, date: t.exit_date || t.entry_date, type: 'sell' as const, price: Number(t.exit_price || t.entry_price || 0), shares: 100, profit: t.pnl_pct ?? (t.pnl != null ? Number(t.pnl) * 100 : null), capital: eqMap.get(t.exit_date || t.entry_date) },
+            ]);
+            const sellT = ts.filter((t: any) => t.type === 'sell');
+            const wins = sellT.filter((t: any) => t.profit > 0);
+            const losses = sellT.filter((t: any) => t.profit <= 0);
+            const totProfit = wins.reduce((s: number, t: any) => s + t.profit, 0);
+            const totLoss = Math.abs(losses.reduce((s: number, t: any) => s + t.profit, 0));
+            let maxWS = 0, maxLS = 0, cW = 0, cL = 0;
+            for (const t of sellT) { if (t.profit > 0) { cW++; cL = 0; maxWS = Math.max(maxWS, cW); } else if (t.profit <= 0) { cL++; cW = 0; maxLS = Math.max(maxLS, cL); } }
+            setResult({
+              total_return: r.total_return || 0, annual_return: r.annual_return ?? 0,
+              max_drawdown: r.max_drawdown || 0, sharpe_ratio: r.sharpe_ratio || 0,
+              win_rate: (r.win_rate || 0) * 100, trade_count: r.trades?.length || 0,
+              profit_trades: r.trades?.filter((t: any) => t.pnl > 0).length || 0,
+              loss_trades: r.trades?.filter((t: any) => t.pnl <= 0).length || 0,
+              trades: ts, monthly_returns: r.monthly_returns || [],
+              equity_curve: (r.equity_curve || []).map(([date, val]: [string, number]) => ({ date, value: Number(val) })),
+              signal_count: signals.filter((s: any) => s !== 0).length,
+              max_consecutive_wins: maxWS || null, max_consecutive_losses: maxLS || null,
+              profit_factor: totLoss > 0 ? totProfit / totLoss : totProfit > 0 ? Infinity : 0,
+              payoff_ratio: (() => { const aw = wins.length > 0 ? totProfit / wins.length : 0; const al = losses.length > 0 ? totLoss / losses.length : 0; return al > 0 ? aw / al : aw > 0 ? Infinity : 0; })(),
+              expectancy: sellT.length > 0 ? (totProfit - totLoss) / sellT.length : null,
+            });
+            setRunning(false);
+          }).catch((e: any) => { setRunning(false); setError(e?.message || '指标回测执行失败'); });
           return;
         }
         const res = runMockBacktest(filteredQuotes, selectedStrategy, params, stopLoss, takeProfit, maxHolding);
@@ -1086,6 +1200,52 @@ useEffect(() => {
  </div>
  </div>
 
+ {/* 指标选择器（仅指标回测模式） */}
+ {selectedStrategy === 'indicator' && (
+ <div className="mb-4 p-3 rounded-lg border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-secondary)' }}>
+ <div className="flex items-center justify-between mb-2">
+ <div className="flex items-center gap-2">
+ <Zap size={14} className="text-amber-400" />
+ <h2 className="text-sm font-bold ">选择指标</h2>
+ </div>
+ <select value={indicatorId} onChange={(e) => setIndicatorId(e.target.value)} className="select select-bordered select-sm font-mono-nums">
+ {getAllIndicators().map((ind) => (
+ <option key={ind.id} value={ind.id}>{ind.label} ({ind.id})</option>
+ ))}
+ </select>
+ </div>
+ <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+ 指标信号将作为买卖信号输入回测引擎。箭头向上为买入，向下为卖出。
+ </div>
+ </div>
+ )}
+
+ {/* 多指标选择器（仅指标对比模式） */}
+ {selectedStrategy === 'indicator_compare' && (
+ <div className="mb-4 p-3 rounded-lg border" style={{ borderColor: 'var(--border-subtle)', background: 'var(--bg-secondary)' }}>
+ <div className="flex items-center justify-between mb-2">
+ <div className="flex items-center gap-2">
+ <BarChart3 size={14} className="text-cyan-400" />
+ <h2 className="text-sm font-bold ">选择对比指标</h2>
+ </div>
+ <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>已选 {compareIndicators.length} 个</span>
+ </div>
+ <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+ {getAllIndicators().map((ind) => {
+   const selected = compareIndicators.includes(ind.id);
+   return (
+   <button key={ind.id} onClick={() => { setCompareIndicators(prev => selected ? prev.filter(id => id !== ind.id) : [...prev, ind.id]); }}
+     className={`text-left p-2 rounded-lg border transition-all text-xs ${selected ? 'bg-cyan-500/10 border-cyan-500/50' : ' dark:border-white/10 hover:bg-white/[0.07]'}`}>
+     <div className="font-medium truncate">{ind.label}</div>
+     <div className="text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>{ind.id}</div>
+   </button>
+   );
+ })}
+ </div>
+ <div className="text-xs mt-2" style={{ color: 'var(--text-secondary)' }}>选择多个指标，对比它们在同一股票上的回测表现。支持最多 8 个指标同时对比。</div>
+ </div>
+ )}
+
  <div
  key={selectedStrategy}
  >
@@ -1223,7 +1383,7 @@ useEffect(() => {
  <div className="flex items-center gap-3">
  <button
  onClick={handleRun}
- disabled={running || !quotes || quotes.length === 0}
+ disabled={running || !quotes || quotes.length === 0 || (selectedStrategy === 'indicator_compare' && compareIndicators.length === 0)}
  className="flex-1 flex items-center justify-center gap-2 btn-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
  >
  {running ? <RotateCcw size={16} className="animate-spin" /> : <Play size={16} />}
@@ -1237,7 +1397,7 @@ useEffect(() => {
  </div>
 
  {/* 回测结果面板 */}
- {running && !result && (
+ {running && !result && !compareResults && (
  <div
  className="glass-card p-8 flex flex-col items-center justify-center gap-3"
  >
@@ -1264,9 +1424,15 @@ useEffect(() => {
          background: result.win_rate > 50 ? 'hsl(var(--price-up-bg))' : 'hsl(var(--price-down-bg))',
          color: result.win_rate > 50 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))',
        }}>可信度 {result.win_rate?.toFixed(0) || 0}%</span>
-       <span className="ml-auto text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
-         共 {result.trade_count || 0} 笔 · 数据 {result.equity_curve?.[0]?.date ?? '?'} ~ {result.equity_curve?.[result.equity_curve.length-1]?.date ?? '?'}
-       </span>
+        <span className="ml-2 text-[11px] px-2 py-0.5 rounded font-bold" style={{
+          background: scoreIndicator(result) >= 70 ? 'hsl(var(--price-up-bg))' : scoreIndicator(result) >= 40 ? 'rgba(245,158,11,0.1)' : 'hsl(var(--price-down-bg))',
+          color: scoreIndicator(result) >= 70 ? 'hsl(var(--price-up))' : scoreIndicator(result) >= 40 ? '#f59e0b' : 'hsl(var(--price-down))',
+        }}>
+          综合评分 {scoreIndicator(result)}
+        </span>
+        <span className="ml-auto text-data-xs" style={{ color: 'var(--text-tertiary)' }}>
+          共 {result.trade_count || 0} 笔 · 数据 {result.equity_curve?.[0]?.date ?? '?'} ~ {result.equity_curve?.[result.equity_curve.length-1]?.date ?? '?'}
+        </span>
      </div>
    </div>
 
@@ -1286,10 +1452,78 @@ useEffect(() => {
      <EquityCurveChart result={result} initialCapital={params.initialCapital} quotes={quotes} />
    </div>
 
-   {/* 4. 交易记录 */}
-   <TradeTable trades={result.trades} />
+    {/* 4. 交易记录 */}
+    <TradeTable trades={result.trades} />
 
-   {/* 5. 策略对比 */}
+    {/* 5. 策略对比 */}
+  </div>
+ )}
+
+ {/* 指标对比结果面板 */}
+ {compareResults && Object.keys(compareResults).length > 0 && (
+ <div className="space-y-3">
+   <div className="glass-card p-3">
+     <div className="flex items-center">
+       <span className="text-lg mr-2">📊</span>
+       <span className="text-heading-sm font-extrabold" style={{ color: 'hsl(var(--swiss-accent))' }}>指标对比结果</span>
+       <span className="ml-auto text-data-xs" style={{ color: 'var(--text-tertiary)' }}>对比 {Object.keys(compareResults).length} 个指标 · 同一股票同一区间</span>
+     </div>
+   </div>
+   <div className="glass-card p-3">
+     <div className="text-data-sm font-bold mb-2">收益曲线对比</div>
+     <CompareEquityChart compareResults={compareResults} initialCapital={params.initialCapital} />
+   </div>
+   <div className="glass-card p-3">
+     <div className="flex items-center justify-between mb-3">
+       <div className="text-data-sm font-bold">指标评分对比</div>
+       <div className="text-[10px] px-2 py-0.5 rounded" style={{ color: 'var(--text-tertiary)', background: 'var(--bg-secondary)' }}>
+         评分 = 夏普25% + 盈亏比20% + 胜率15% + 期望值15% + 回撤15% + 交易量10%
+       </div>
+     </div>
+     <div className="overflow-x-auto">
+       <table className="w-full text-xs">
+         <thead>
+           <tr style={{ color: 'var(--text-secondary)' }}>
+             <th className="text-left py-2 px-2 font-medium">排名</th>
+             <th className="text-left py-2 px-2 font-medium">指标</th>
+             <th className="text-center py-2 px-2 font-medium">综合评分</th>
+             <th className="text-right py-2 px-2 font-medium">总收益</th>
+             <th className="text-right py-2 px-2 font-medium">年化</th>
+             <th className="text-right py-2 px-2 font-medium">夏普</th>
+             <th className="text-right py-2 px-2 font-medium">回撤</th>
+             <th className="text-right py-2 px-2 font-medium">胜率</th>
+             <th className="text-right py-2 px-2 font-medium">交易</th>
+             <th className="text-right py-2 px-2 font-medium">盈亏比</th>
+           </tr>
+         </thead>
+         <tbody>
+           {Object.entries(compareResults)
+             .map(([id, res]) => [id, res, scoreIndicator(res)] as const)
+             .sort((a, b) => b[2] - a[2])
+             .map(([id, res, score], idx) => {
+               const indDef = getAllIndicators().find((i) => i.id === id);
+               const isTop = idx === 0;
+               const scoreColor = score >= 70 ? 'hsl(var(--price-up))' : score >= 40 ? '#f59e0b' : 'hsl(var(--price-down))';
+               const scoreBg = score >= 70 ? 'hsl(var(--price-up-bg))' : score >= 40 ? 'rgba(245,158,11,0.1)' : 'hsl(var(--price-down-bg))';
+               return (
+                 <tr key={id} className={isTop ? 'bg-cyan-500/5 border-t' : 'border-t'} style={{ borderColor: 'var(--border-subtle)' }}>
+                   <td className="py-2 px-2">{isTop ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-bold">TOP</span> : <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>#{idx + 1}</span>}</td>
+                   <td className="py-2 px-2 font-medium">{indDef?.label || id}</td>
+                   <td className="py-2 px-2 text-center"><span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded" style={{ color: scoreColor, background: scoreBg }}>{score}<span className="text-[9px] font-normal opacity-60">/100</span></span></td>
+                   <td className="py-2 px-2 text-right font-mono-nums" style={{ color: res.total_return >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{res.total_return > 0 ? '+' : ''}{safeToFixed(res.total_return, 2)}%</td>
+                   <td className="py-2 px-2 text-right font-mono-nums" style={{ color: res.annual_return >= 0 ? 'hsl(var(--price-up))' : 'hsl(var(--price-down))' }}>{res.annual_return > 0 ? '+' : ''}{safeToFixed(res.annual_return, 2)}%</td>
+                   <td className="py-2 px-2 text-right font-mono-nums">{safeToFixed(res.sharpe_ratio, 2)}</td>
+                   <td className="py-2 px-2 text-right font-mono-nums" style={{ color: 'hsl(var(--price-down))' }}>{safeToFixed(res.max_drawdown, 2)}%</td>
+                   <td className="py-2 px-2 text-right font-mono-nums">{safeToFixed(res.win_rate, 1)}%</td>
+                   <td className="py-2 px-2 text-right font-mono-nums">{res.trade_count}</td>
+                   <td className="py-2 px-2 text-right font-mono-nums">{res.profit_factor != null ? safeToFixed(res.profit_factor, 2) : '--'}</td>
+                 </tr>
+               );
+             })}
+         </tbody>
+       </table>
+     </div>
+   </div>
  </div>
  )}
 
@@ -1299,6 +1533,67 @@ useEffect(() => {
 }
 
 // 需要一个 Settings 图标（lucide-react 没有 SettingsIcon，用自定义）
+
+const COMPARE_COLORS = ['#c1272d', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+function CompareEquityChart({ compareResults, initialCapital }: { compareResults: Record<string, BacktestResult>; initialCapital: number }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    if (!containerRef.current) return;
+    try {
+      const chart = createChart(containerRef.current, {
+        layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#9ca3af', attributionLogo: false },
+        grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.05)' } },
+        crosshair: { mode: CrosshairMode.Normal, vertLine: { width: 1, color: 'rgba(255,255,255,0.1)' } },
+        rightPriceScale: { borderColor: 'rgba(255,255,255,0.05)', scaleMargins: { top: 0.05, bottom: 0.05 } },
+        timeScale: { borderColor: 'rgba(255,255,255,0.05)', timeVisible: false, fixLeftEdge: true, fixRightEdge: true, barSpacing: 6 },
+        autoSize: true,
+      });
+      chartRef.current = chart;
+    } catch (e) { console.error('CompareEquityChart creation failed:', e); }
+    return () => { isMounted.current = false; try { chartRef.current?.remove(); } catch (_) {} chartRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted.current || !chartRef.current) return;
+    const chart = chartRef.current;
+    for (const [, s] of seriesRefs.current) { try { chart.removeSeries(s); } catch (_) {} }
+    seriesRefs.current.clear();
+    const entries = Object.entries(compareResults);
+    if (entries.length === 0) return;
+    entries.forEach(([id, res], idx) => {
+      if (!res.equity_curve || res.equity_curve.length === 0) return;
+      const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+      const lineSeries = chart.addLineSeries({ color, lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
+      seriesRefs.current.set(id, lineSeries);
+      const eqNum = res.equity_curve.map(p => ({ time: p.date as any, value: Number(p.value) }));
+      const firstVal = eqNum.length > 0 ? eqNum[0].value : initialCapital;
+      const base = firstVal > 0 ? firstVal : 1;
+      lineSeries.setData(eqNum.map(p => ({ time: p.time, value: Number(((p.value - base) / base * 100).toFixed(2)) })));
+    });
+    chart.timeScale().fitContent();
+  }, [compareResults, initialCapital]);
+
+  const entries = Object.entries(compareResults);
+  return (
+    <div>
+      <div className="flex flex-wrap gap-3 mb-2">
+        {entries.map(([id], idx) => {
+          const indDef = getAllIndicators().find((i) => i.id === id);
+          const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
+          return (<div key={id} className="flex items-center gap-1.5 text-xs"><span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} /><span>{indDef?.label || id}</span></div>);
+        })}
+      </div>
+      <div ref={containerRef} className="h-64" />
+    </div>
+  );
+}
+
 function SettingsIcon({ size, className }: { size: number; className?: string }) {
  return (
  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>

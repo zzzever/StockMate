@@ -8,6 +8,16 @@ const rsi: SubIndicator = {
   category: 'oscillator',
   complexity: 'basic',
   tags: ['reversal', 'momentum'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'RS = EMA(MAX(CLOSE-REF(C,1),0), N) / EMA(ABS(CLOSE-REF(C,1)), N)\nRSI = 100 - 100/(1+RS)',
+    references: [
+      'Wilder, J.W. (1978). "New Concepts in Technical Trading Systems"',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 14, min: 2, max: 50, step: 1 },
     { key: 'overbought', label: '超买线', type: 'number', default: 70, min: 50, max: 95, step: 5 },

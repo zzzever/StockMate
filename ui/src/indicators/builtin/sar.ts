@@ -22,6 +22,16 @@ const sar: SubIndicator = {
   category: 'trend',
   complexity: 'advanced',
   tags: ['trend-following'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'SAR(i) = SAR(i-1) + AF × (EP - SAR(i-1))\nAF 初始=STEP, 每创新高/低+=STEP, 上限MAX\nEP: 多头=最高价, 空头=最低价',
+    references: [
+      'Wilder, J.W. (1978). "New Concepts in Technical Trading Systems"',
+    ],
+  },
   params: [
     { key: 'step', label: '步长', type: 'number', default: 0.02, min: 0.01, max: 0.1, step: 0.01 },
     { key: 'max', label: '上限', type: 'number', default: 0.2, min: 0.1, max: 0.5, step: 0.05 },

@@ -96,16 +96,16 @@ export default function WikiPage() {
       </div>
 
       {/* Category tabs */}
-      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+      <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto pb-1 -mx-1 px-1">
         <button onClick={() => setSearchParams({})}
-          className="px-3 py-1.5 text-data-sm rounded-full transition-colors"
-          style={{ background: !activeCategory ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-input)', color: !activeCategory ? 'hsl(var(--swiss-accent))' : 'var(--text-secondary)' }}>
+          className="px-3 py-1.5 text-data-sm rounded-full transition-all whitespace-nowrap"
+          style={{ background: !activeCategory ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-input)', color: !activeCategory ? 'hsl(var(--swiss-accent))' : 'var(--text-secondary)', border: '1px solid', borderColor: !activeCategory ? 'hsl(var(--swiss-accent) / 0.3)' : 'transparent' }}>
           全部
         </button>
         {WIKI_CATEGORIES.map(cat => (
           <button key={cat} onClick={() => setSearchParams({ cat })}
-            className="px-3 py-1.5 text-data-sm rounded-full transition-colors"
-            style={{ background: activeCategory === cat ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-input)', color: activeCategory === cat ? 'hsl(var(--swiss-accent))' : 'var(--text-secondary)' }}>
+            className="px-3 py-1.5 text-data-sm rounded-full transition-all whitespace-nowrap"
+            style={{ background: activeCategory === cat ? 'hsl(var(--swiss-accent-ghost))' : 'var(--bg-input)', color: activeCategory === cat ? 'hsl(var(--swiss-accent))' : 'var(--text-secondary)', border: '1px solid', borderColor: activeCategory === cat ? 'hsl(var(--swiss-accent) / 0.3)' : 'transparent' }}>
             {CATEGORY_ICONS[cat]} {cat}
           </button>
         ))}
@@ -117,8 +117,12 @@ export default function WikiPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {searchResults.map(entry => <WikiCard key={entry.id} entry={entry} />)}
             {searchResults.length === 0 && (
-              <div className="col-span-full py-16 text-center text-data-sm" style={{ color: 'var(--text-tertiary)' }}>
-                未找到相关内容，试试其他关键词
+              <div className="col-span-full py-16 flex flex-col items-center gap-3" style={{ color: 'var(--text-tertiary)' }}>
+                <Search size={28} className="opacity-40" />
+                <div className="text-center">
+                  <p className="text-sm font-bold" style={{ color: 'hsl(var(--text-secondary))' }}>未找到相关内容</p>
+                  <p className="text-xs mt-0.5">试试其他关键词，如「均线」「MACD」</p>
+                </div>
               </div>
             )}
           </div>
@@ -163,14 +167,17 @@ function WikiCard({ entry, highlight }: { entry: WikiEntry; highlight?: boolean 
     <Link to={`/wiki?id=${entry.id}`}
       className={`block p-4 rounded-xl border transition-all duration-200 hover:border-[hsl(var(--swiss-accent))] ${highlight ? 'glass-jp' : 'glass-card'}`}
       style={{ borderColor: highlight ? 'hsl(var(--swiss-accent) / 0.3)' : 'var(--border-subtle)' }}>
-      <div className="flex items-center gap-2 mb-1">
+      <div className="flex items-center gap-2 mb-2">
         <span className="text-lg">{CATEGORY_ICONS[entry.category] || '📚'}</span>
         <span className="text-data-sm font-bold" style={{ color: 'var(--text-primary)' }}>{entry.title}</span>
-        <ChevronRight size={12} className="ml-auto" style={{ color: 'var(--text-tertiary)' }} />
+        <ChevronRight size={12} className="ml-auto shrink-0" style={{ color: 'var(--text-tertiary)' }} />
       </div>
-      <p className="text-data-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+      <p className="text-data-xs leading-relaxed mb-2" style={{ color: 'var(--text-secondary)' }}>
         {entry.short}
       </p>
+      <span className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold rounded-full" style={{ background: 'var(--bg-input)', color: 'var(--text-tertiary)' }}>
+        {entry.category}
+      </span>
     </Link>
   );
 }

@@ -35,6 +35,7 @@ export interface ParamDef {
   max?: number;
   step?: number;
   options?: { label: string; value: number | string }[];
+  description?: string;
 }
 
 export interface MarkerPoint {
@@ -55,6 +56,17 @@ export type IndicatorCategory = 'trend' | 'oscillator' | 'volume' | 'volatility'
 export type IndicatorComplexity = 'basic' | 'intermediate' | 'advanced';
 export type IndicatorStrategy = 'reversal' | 'momentum' | 'trend-following' | 'mean-reversion' | 'breakout';
 
+export interface IndicatorMeta {
+  author: string;
+  version: string;
+  license: string;
+  source: 'builtin' | 'user' | 'marketplace';
+  formula?: string;
+  references?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SubIndicator {
   id: string;
   label: string;
@@ -62,8 +74,32 @@ export interface SubIndicator {
   category: IndicatorCategory;
   complexity?: IndicatorComplexity;
   tags?: IndicatorStrategy[];
+  meta?: IndicatorMeta;
   params: ParamDef[];
   compute(bars: BarData[], params: Record<string, number | string>): ComputeResult;
   legends?(bars: BarData[], params: Record<string, number | string>): LegendItem[];
   currentValue?(bars: BarData[], params: Record<string, number | string>): string | null;
+}
+
+export interface SminFile {
+  version: string;
+  meta: {
+    id: string;
+    label: string;
+    description: string;
+    category: IndicatorCategory;
+    complexity?: IndicatorComplexity;
+    tags?: IndicatorStrategy[];
+    author: string;
+    version: string;
+    license: string;
+    source: 'builtin' | 'user' | 'marketplace';
+    formula?: string;
+    references?: string[];
+    createdAt?: string;
+    updatedAt?: string;
+  };
+  params: ParamDef[];
+  code: string;
+  engine: 'sslang' | 'tdx' | 'custom';
 }

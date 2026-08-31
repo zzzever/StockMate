@@ -101,6 +101,16 @@ const momentum: SubIndicator = {
   category: 'oscillator',
   complexity: 'intermediate',
   tags: ['momentum'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'RAW = 100×(CLOSE-LLV(LOW,20))/(HHV(HIGH,20)-LLV(LOW,20))\n动力线 = EMA(RAW, 4)',
+    references: [
+      '自研指标，基于价格位置归一化+EMA平滑',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 20, min: 5, max: 60, step: 1 },
     { key: 'emaPeriod', label: 'EMA平滑', type: 'number', default: 4, min: 1, max: 20, step: 1 },

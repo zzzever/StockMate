@@ -14,6 +14,16 @@ const atr: SubIndicator = {
   category: 'volatility',
   complexity: 'intermediate',
   tags: ['breakout'],
+  meta: {
+    author: 'StockMate',
+    version: '1.0.0',
+    license: 'MIT',
+    source: 'builtin',
+    formula: 'TR = MAX(ABS(H-L), ABS(H-REF(C,1)), ABS(L-REF(C,1)))\nATR = EMA(TR, N)',
+    references: [
+      'Wilder, J.W. (1978). "New Concepts in Technical Trading Systems"',
+    ],
+  },
   params: [
     { key: 'period', label: '周期', type: 'number', default: 14, min: 5, max: 50, step: 1 },
     { key: 'mul', label: '止损倍数', type: 'number', default: 2.5, min: 1.0, max: 5.0, step: 0.5 },
